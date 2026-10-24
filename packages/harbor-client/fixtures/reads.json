@@ -431,6 +431,46 @@
     "asOfBasis": "mock venue registry and 24-hour volume snapshot",
     "caveat": ["devnet-only", "off-ledger"]
   },
+  "analytics.marketSnapshot": {
+    "ok": true,
+    "data": {
+      "network": "testnet",
+      "pair": {
+        "base": { "kind": "native", "currency": "XRP", "issuer": null },
+        "quote": { "kind": "issued", "currency": "524C555344000000000000000000000000000000", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" }
+      },
+      "source": { "operation": "analytics.marketSnapshot", "providers": ["illustrative:book_offers", "illustrative:amm_info"], "request_count": 3, "bounded": true },
+      "observed_at": "2026-10-18T00:00:00.000Z",
+      "ledger_index": 9345210,
+      "ledger_indexes": { "bids": 9345210, "asks": 9345210, "amm": 9345210 },
+      "freshness": { "status": "live-observation", "basis": "validated-ledger", "age_seconds": null, "note": "Illustrative mock envelope for offline contract tests; the UI must label it demo-fixture." },
+      "units": { "base_size": "XRP display units", "quote_size": "RLUSD display units", "price": "RLUSD per XRP", "spread_bps": "basis points" },
+      "book": {
+        "bids": [{ "price": "0.499", "base_size": "1250", "quote_size": "623.75", "offer_count": 3, "cumulative_base_size": "1250" }],
+        "asks": [{ "price": "0.501", "base_size": "1100", "quote_size": "551.1", "offer_count": 2, "cumulative_base_size": "1100" }],
+        "limited": false,
+        "max_levels": 50,
+        "availability": { "bids": "available", "asks": "available" },
+        "invalid_offer_count": 0
+      },
+      "metrics": { "best_bid": "0.499", "best_ask": "0.501", "mid": "0.5", "spread": "0.002", "spread_bps": "40" },
+      "executable_liquidity": [
+        {
+          "base_amount": "100",
+          "sell_base": { "direction": "sell-base", "requested_base": "100", "filled_base": "100", "quote_amount": "49.9", "average_price": "0.499", "price_impact_bps": "-20", "benchmark": "book-mid", "available": true, "limited_by_depth": false, "levels_consumed": 1 },
+          "buy_base": { "direction": "buy-base", "requested_base": "100", "filled_base": "100", "quote_amount": "50.1", "average_price": "0.501", "price_impact_bps": "20", "benchmark": "book-mid", "available": true, "limited_by_depth": false, "levels_consumed": 1 }
+        }
+      ],
+      "amm": { "account": "rPn7kHwycXzS5XNj167CnKwC2t82yAAdNW", "base_reserve": "412500", "quote_reserve": "206250", "implied_price": "0.5", "trading_fee_bps": "30", "units": { "base_reserve": "XRP display units", "quote_reserve": "RLUSD display units", "implied_price": "RLUSD per XRP", "trading_fee_bps": "basis points" } },
+      "availability": { "amm": "available" },
+      "history": { "points": [{ "observed_at": "2026-10-18T00:00:00.000Z", "ledger_index": 9345210, "price": "0.5" }], "started_at": "2026-10-18T00:00:00.000Z", "ended_at": "2026-10-18T00:00:00.000Z", "max_samples": 1, "complete": false, "reason": "One illustrative observation; no historical candles are implied." },
+      "recent_trades": { "support": "unsupported", "rows": [], "reason": "The fixture does not fabricate a recent-trades feed." },
+      "partial": true,
+      "partial_reasons": ["Illustrative demo fixture for offline tests only."]
+    },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "illustrative demo fixture for offline contract tests; never a live claim"
+  },
   "onboarding.readiness": {
     "ok": true,
     "data": {

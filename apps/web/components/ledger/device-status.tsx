@@ -3,35 +3,40 @@
 import type { LedgerDeviceState, PilotWallet } from "@pilot/wallet";
 import * as React from "react";
 
+import { ledgerFlowName, ledgerSignedCopy, type LedgerTransportProvenance } from "./provenance";
 import { useLedgerDevice } from "./use-ledger-device";
 
 export function ledgerDeviceStatusText(
   state: LedgerDeviceState,
   signed = false,
+  transport?: LedgerTransportProvenance,
 ): string {
-  if (signed) return "Signed on Ledger ✓";
+  if (signed) return `${ledgerSignedCopy(transport)} ✓`;
+  const flow = ledgerFlowName(transport);
   switch (state.interaction) {
     case "unlock-device":
-      return "Unlock your Ledger";
+      return transport === "webhid" ? "Unlock your Ledger device" : `Unlock ${flow}`;
     case "confirm-open-app":
-      return "Open the XRP app";
+      return `Open the XRP app in ${flow}`;
     case "verify-address":
-      return "Check the address on your Ledger";
+      return `Check the address in ${flow}`;
     case "sign-transaction":
-      return "Review and sign on your Ledger";
+      return `Review and sign in ${flow}`;
     case "none":
-      return state.busy ? "Ledger is working" : "Ledger ready";
+      return state.busy ? `${flow} is working` : `${flow} ready`;
   }
 }
 
 export function DeviceStatus({
   state,
   signed = false,
+  transport,
 }: {
   state: LedgerDeviceState;
   signed?: boolean;
+  transport?: LedgerTransportProvenance;
 }) {
-  const text = ledgerDeviceStatusText(state, signed);
+  const text = ledgerDeviceStatusText(state, signed, transport);
   return (
     <p
       role="status"
@@ -46,10 +51,12 @@ export function DeviceStatus({
 export function LedgerDeviceStatus({
   wallet,
   signed = false,
+  transport,
 }: {
   wallet: Pick<PilotWallet, "onDeviceState"> | undefined;
   signed?: boolean;
+  transport?: LedgerTransportProvenance;
 }) {
   const device = useLedgerDevice(wallet);
-  return <DeviceStatus state={device.state} signed={signed || device.signed} />;
+  return <DeviceStatus state={device.state} signed={signed || device.signed} transport={transport} />;
 }

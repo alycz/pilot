@@ -13,6 +13,57 @@ const ENV = {
   PILOT_PUBLIC_ORIGIN: "https://pilot.example",
 };
 
+const RLUSD = {
+  currency: "524C555344000000000000000000000000000000",
+  issuer: "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV",
+} as const;
+
+function declarativeDraft() {
+  return {
+    kind: "declarative_strategy_v1",
+    semantics_version: "harbor.declarative-strategy/1",
+    issued_asset: RLUSD,
+    plan: {
+      plan_version: "1",
+      trigger: { kind: "interval", interval_seconds: 3600 },
+      rules: [{
+        rule_id: "hourly-dca",
+        all: [{ kind: "always" }],
+        action: { kind: "fixed_swap", direction: "buy_xrp", order_value: "5" },
+      }],
+      fallback: { kind: "hold" },
+    },
+    limits: {
+      max_order_value: "5", max_daily_value: "10", max_cumulative_value: "50",
+      min_order_value: "1", max_fee_drops: "20", max_daily_fee_drops: "100",
+      max_cumulative_fee_drops: "500", max_daily_trades: 2, max_total_trades: 10,
+      cumulative_scope: "owner_network_asset_lifetime",
+      max_slippage_bps: 100, max_price_impact_bps: 100,
+      min_xrp_reserve_drops: "12000000", fee_buffer_drops: "1000000",
+      max_xrp_exposure_drops: "100000000", max_issued_exposure: "100",
+      min_liquidity_value: "25", cooldown_seconds: 300,
+      max_quote_age_seconds: 30, max_ledger_gap: 2,
+    },
+    execution_mode: "offer_create_fok",
+    not_before: "2026-10-23T00:00:00.000Z",
+    expires_at: "2026-10-30T00:00:00.000Z",
+  };
+}
+
+function capabilities() {
+  return {
+    network: "testnet",
+    assets: [{ currency: "XRP" }, RLUSD],
+    trigger_kinds: ["interval"],
+    condition_kinds: ["always", "price_threshold", "xrp_allocation_outside"],
+    action_kinds: ["fixed_swap", "target_allocation"],
+    execution_mode: "offer_create_fok",
+    max_rules: 8,
+    max_conditions_per_rule: 8,
+    max_actions_per_evaluation: 1,
+  };
+}
+
 afterEach(() => vi.unstubAllEnvs());
 
 function walletRequest(
@@ -95,6 +146,65 @@ describe("strategy API allowlist", () => {
       owner: ACCOUNT,
       network: "testnet",
     });
+  });
+
+  it("server-binds declarative validation scope without creating authority", async () => {
+    const normalized = { ...declarativeDraft(), account: ACCOUNT, network: "testnet" };
+    const invoke = vi.fn(async () => ({
+      ok: true,
+      data: {
+        valid: true,
+        semantics_version: "harbor.declarative-strategy/1",
+        capabilities: capabilities(),
+        errors: [],
+        plan_digest: "A".repeat(64),
+        normalized_proposal: normalized,
+      },
+      asOf: "2026-10-23T00:00:00.000Z",
+      asOfBasis: "offline fixture",
+    }));
+    const handle = createStrategyRouteHandler({ env: ENV, invoke: invoke as never });
+    const response = await handle(walletRequest(declarativeDraft()), "validate");
+
+    expect(response.status).toBe(200);
+    expect(invoke).toHaveBeenCalledWith("strategy.validate", normalized);
+    expect(invoke).not.toHaveBeenCalledWith("strategy.create", expect.anything());
+  });
+
+  it("server-binds paper observation scope and rejects nested account injection", async () => {
+    const observation = {
+      xrp_balance_drops: "50000000", issued_balance: "50", bid: "0.5", ask: "0.51",
+      executable_liquidity_value: "500", fee_drops: "12", reserve_base_drops: "10000000",
+      reserve_increment_drops: "2000000", owner_count: 1, daily_value_used: "0",
+      cumulative_value_used: "0", daily_fee_drops_used: "0", cumulative_fee_drops_used: "0",
+      daily_trades_used: 0, total_trades_used: 0, ledger_index: 100, quote_ledger_index: 100,
+      observed_at: "2026-10-23T00:00:00.000Z", global_kill: false,
+      unresolved_execution: false, grant_active: true, policy_active: true,
+    };
+    const preview = {
+      boundary: "paper_only", ledger_acceptance: "not_tested",
+      semantics_version: "harbor.declarative-strategy/1", plan_digest: "A".repeat(64),
+      outcome: "order", action: "buy_xrp", matched_rule_id: "hourly-dca",
+      proposed_value: "5", price_basis: "ask", price_value: "0.51", hold_codes: [],
+      explanation: "Fixture-only first-match preview.", evaluated_at: "2026-10-23T00:00:00.000Z",
+      observed_at: "2026-10-23T00:00:00.000Z", quote_ledger_index: 100,
+    };
+    const invoke = vi.fn(async () => ({ ok: true, data: preview, asOf: preview.observed_at, asOfBasis: "fixture" }));
+    const handle = createStrategyRouteHandler({ env: ENV, invoke: invoke as never });
+    const body = { proposal: declarativeDraft(), observation, at: "2026-10-23T00:00:00.000Z" };
+    const response = await handle(walletRequest(body), "simulate");
+    expect(response.status).toBe(200);
+    expect(invoke).toHaveBeenCalledWith("strategy.simulate", {
+      proposal: { ...declarativeDraft(), account: ACCOUNT, network: "testnet" },
+      observation: { ...observation, account: ACCOUNT, network: "testnet", issued_asset: RLUSD },
+      at: body.at,
+    });
+
+    const injected = await handle(walletRequest({
+      ...body, observation: { ...observation, account: Wallet.generate().classicAddress },
+    }), "simulate");
+    expect(injected.status).toBe(400);
+    expect(invoke).toHaveBeenCalledTimes(1);
   });
 
   it("rejects browser-supplied owner scope before any Harbor call", async () => {

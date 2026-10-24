@@ -4,6 +4,7 @@ import {
 	Ap4mReceiptSchema,
 	IntentValidationSchema,
 	MerchantSchema,
+	type Ap4mPublicEvidence,
 	type Ap4mReceipt,
 	type Merchant,
 } from '../contracts';
@@ -150,6 +151,8 @@ export interface Ap4mResponseContext {
 export interface ValidatedAp4mResponse {
 	receipt: Ap4mReceipt;
 	data: Ap4mTypedData;
+	/** Present only for newly finalized exact-rail purchases. */
+	evidence?: Ap4mPublicEvidence;
 }
 
 export class Ap4mResponseError extends Error {

@@ -333,14 +333,23 @@ export function createWatchdogPayerAuthority(
 	network: string | undefined,
 ): WatchdogPayerAuthority {
 	return {
-		async isPayer(account, selectedNetwork) {
-			return (await db
+		async activationFloor(account, selectedNetwork) {
+			const row = await db
 				.prepare(
-					`SELECT 1 AS present FROM x402_payers
+					`SELECT funded_ledger_index, created_at FROM x402_payers
 					  WHERE network = ? AND payer = ? LIMIT 1`,
 				)
 				.bind(selectedNetwork, account)
-				.first<{ present: number }>())?.present === 1;
+				.first<{ funded_ledger_index: number | null; created_at: string }>();
+			if (!row || !Number.isFinite(Date.parse(row.created_at))) return undefined;
+			if (
+				row.funded_ledger_index !== null &&
+				(!Number.isSafeInteger(row.funded_ledger_index) || row.funded_ledger_index < 0)
+			) return undefined;
+			return {
+				ledgerIndex: row.funded_ledger_index,
+				activatedAt: row.created_at,
+			};
 		},
 		async ownsTransaction(hash) {
 			return (await db

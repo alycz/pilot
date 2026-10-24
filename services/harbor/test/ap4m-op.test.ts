@@ -4,6 +4,7 @@ import { DEFAULT_POLICY } from '../src/contracts';
 import { Ap4mPurchaseError, handleAp4mPurchase, type Ap4mPurchaseServices } from '../src/ops/ap4m';
 import { getCatalogMerchant } from '../src/ops/merchants';
 import { xrplCurrencyCodeForAp4m, type ValidatedAp4mX402Challenge } from '../src/exec/ap4m-x402';
+import { viDigest } from '../src/exec/mandate-vi';
 import fixture from './fixtures/ap4m-mh4-mm2-v1.json';
 
 const NOW = new Date('2026-10-21T12:00:00.000Z');
@@ -243,7 +244,12 @@ function setup(options: { status?: 'ACTIVE' | 'REVOKED'; ambiguous?: boolean; so
 	});
 	const services: Ap4mPurchaseServices = { store: store as any,
 		sequenceAuthority: () => sequenceAuthority as any, getMerchant: () => merchant,
-		getMandate: async (_ctx, id) => mandate(status, id), getPolicy: async () => ({ ...DEFAULT_POLICY,
+		getMandate: async (_ctx, id) => {
+			const stored = mandate(status, id);
+			stored.mandate.l1_digest = await viDigest(fixture.vi.l1);
+			stored.mandate.l2_digest = await viDigest(fixture.vi.l2);
+			return stored;
+		}, getPolicy: async () => ({ ...DEFAULT_POLICY,
 			ap4m_enabled: true, issuer_allowlist: ['RLUSD'] }), getDailySpentUsd: async () => '0',
 		getBaseDailySpentUsd: async () => 0, getPayer: async () => payer.classicAddress,
 		getRecoveryKek: async () => KEK, prepareExecution: async ({ payer: expectedPayer }) => ({
@@ -272,6 +278,9 @@ describe('ap4m.purchase operation', () => {
 	it('binds discounted amount and replays delivered result after revoke/registry removal without effects', async () => {
 		const test = setup(); const first = await handleAp4mPurchase(ctx(test.services), args);
 		expect(first.receipt.amount.value).toBe('0.75');
+		expect(first.evidence?.artifacts.map((artifact) => artifact.kind))
+			.toEqual(['l1', 'l2', 'l3a', 'l3b', 'payment']);
+		expect(first.evidence?.artifacts[4].digest).toBe(first.receipt.proof.tx_hash);
 		expect(test.store.context).toMatchObject({ challengeState: STATE, payer: test.payer.classicAddress });
 		expect(test.store.context.vi.l2).not.toBe(fixture.vi.l2);
 		test.setStatus('REVOKED'); test.removeMerchant();

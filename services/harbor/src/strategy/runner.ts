@@ -1,9 +1,17 @@
-import { StrategyDecisionSchema, type Strategy, type StrategyDecision } from "../contracts";
+import {
+  StrategyDecisionSchema,
+  type Strategy,
+  type StrategyDecision,
+  type StrategyHoldCode,
+  type StrategyPlanObservation,
+} from "../contracts";
 import { decideRebalance, decimalToMicrounitsCeil, type StrategyObservation } from "./engine";
+import { evaluateDeclarativeStrategy } from "./plan/interpreter";
 import {
   StrategySchedulerStore,
   StrategyStore,
   stableStrategyId,
+  type DeclarativeStrategyUsage,
   type DueStrategy,
   type StrategyLease,
   type UnresolvedStrategyExecution,
@@ -16,8 +24,17 @@ export type StrategyBuild = {
   feeDrops: string;
 };
 
+export type StrategyValidatedReceipt = {
+  txHash: string;
+  network: "testnet";
+  ledgerIndex: number;
+  validated: true;
+  engineResult: "tesSUCCESS";
+  result: "success";
+};
+
 export type StrategyExecuteResult =
-  | { status: "executed"; harborExecutionId?: string; txHash: string }
+  | ({ status: "executed"; harborExecutionId?: string } & StrategyValidatedReceipt)
   | { status: "needs_approval"; harborExecutionId?: string }
   | { status: "pending_reconciliation"; harborExecutionId?: string; txHash?: string }
   | { status: "failed"; detail: string };
@@ -63,6 +80,42 @@ function compareUnsignedIntegers(left: string, right: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+function validatedReceiptEvidence(value: unknown): value is {
+  tx_hash: string;
+  network: "testnet";
+  ledger_index: number;
+  validated: true;
+  engine_result: "tesSUCCESS";
+  result: "success";
+} {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const evidence = value as Record<string, unknown>;
+  return typeof evidence.tx_hash === "string" && /^[A-F0-9]{64}$/.test(evidence.tx_hash) &&
+    evidence.network === "testnet" && Number.isSafeInteger(evidence.ledger_index) &&
+    Number(evidence.ledger_index) > 0 && evidence.validated === true &&
+    evidence.engine_result === "tesSUCCESS" && evidence.result === "success";
+}
+
+function isValidatedReceipt(value: unknown): value is StrategyValidatedReceipt {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const receipt = value as Record<string, unknown>;
+  return typeof receipt.txHash === "string" && /^[A-F0-9]{64}$/.test(receipt.txHash) &&
+    receipt.network === "testnet" && Number.isSafeInteger(receipt.ledgerIndex) &&
+    Number(receipt.ledgerIndex) > 0 && receipt.validated === true &&
+    receipt.engineResult === "tesSUCCESS" && receipt.result === "success";
+}
+
+function receiptEvidence(receipt: StrategyValidatedReceipt): Record<string, unknown> {
+  return {
+    tx_hash: receipt.txHash,
+    network: receipt.network,
+    ledger_index: receipt.ledgerIndex,
+    validated: receipt.validated,
+    engine_result: receipt.engineResult,
+    result: receipt.result,
+  };
+}
+
 async function readWithRetry<T>(attempts: number, fn: () => Promise<T>): Promise<T> {
   let last: unknown;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -76,7 +129,7 @@ async function readWithRetry<T>(attempts: number, fn: () => Promise<T>): Promise
 }
 
 function holdDecision(strategy: Strategy, due: DueStrategy, triggerId: string, decisionId: string,
-  now: Date, code: "service_unavailable" | "lease_lost" | "daily_limit" | "simulation_failed", explanation: string): StrategyDecision {
+  now: Date, code: StrategyHoldCode, explanation: string): StrategyDecision {
   return StrategyDecisionSchema.parse({
     decision_id: decisionId,
     trigger_id: triggerId,
@@ -85,9 +138,101 @@ function holdDecision(strategy: Strategy, due: DueStrategy, triggerId: string, d
     mandate_version: due.mandateVersion,
     action: "hold",
     hold_codes: [code],
+    ...(strategy.mandate.kind === "declarative_strategy_v1"
+      ? {
+          semantics_version: strategy.mandate.semantics_version,
+          plan_digest: strategy.mandate.digest,
+        }
+      : {}),
     explanation,
     created_at: now.toISOString(),
   });
+}
+
+function planObservation(
+  observation: StrategyObservation,
+  usage: DeclarativeStrategyUsage,
+): StrategyPlanObservation {
+  return {
+    account: observation.account,
+    network: observation.network,
+    issued_asset: {
+      currency: observation.issuedCurrency as StrategyPlanObservation["issued_asset"]["currency"],
+      issuer: observation.issuedIssuer as StrategyPlanObservation["issued_asset"]["issuer"],
+    },
+    xrp_balance_drops: observation.xrpBalanceDrops,
+    issued_balance: observation.issuedBalance,
+    bid: observation.bid,
+    ask: observation.ask,
+    executable_liquidity_value: observation.executableLiquidityValue,
+    fee_drops: observation.feeDrops,
+    reserve_base_drops: observation.reserveBaseDrops,
+    reserve_increment_drops: observation.reserveIncrementDrops,
+    owner_count: observation.ownerCount,
+    daily_value_used: usage.daily_value,
+    cumulative_value_used: usage.cumulative_value,
+    daily_fee_drops_used: usage.daily_fee_drops,
+    cumulative_fee_drops_used: usage.cumulative_fee_drops,
+    daily_trades_used: usage.daily_trades,
+    total_trades_used: usage.total_trades,
+    ledger_index: observation.ledgerIndex,
+    quote_ledger_index: observation.quoteLedgerIndex,
+    observed_at: observation.observedAt,
+    ...(observation.lastTradeAt
+      ? { last_trade_at: observation.lastTradeAt }
+      : {}),
+    global_kill: observation.globalKill === true,
+    unresolved_execution: observation.unresolvedExecution === true,
+    grant_active: observation.grantActive === true,
+    policy_active: observation.policyActive === true,
+  };
+}
+
+async function decideStrategy(
+  strategy: Strategy,
+  observation: StrategyObservation,
+  usage: DeclarativeStrategyUsage | undefined,
+  triggerId: string,
+  decisionId: string,
+  now: Date,
+): Promise<StrategyDecision> {
+  if (strategy.mandate.kind === "xrp_issued_rebalancer_v1") {
+    return decideRebalance({
+      mandate: strategy.mandate,
+      observation,
+      triggerId,
+      decisionId,
+      now,
+    });
+  }
+  if (!usage) throw new Error("declarative usage snapshot is required");
+  if (
+    strategy.mandate.limits.max_mandate_occurrences !== undefined &&
+    usage.mandate_occurrences >=
+      strategy.mandate.limits.max_mandate_occurrences
+  ) {
+    return StrategyDecisionSchema.parse({
+      decision_id: decisionId,
+      trigger_id: triggerId,
+      strategy_id: strategy.strategy_id,
+      mandate_digest: strategy.mandate.digest,
+      mandate_version: strategy.mandate.version,
+      action: "hold",
+      hold_codes: ["trade_count_limit"],
+      semantics_version: strategy.mandate.semantics_version,
+      plan_digest: strategy.mandate.digest,
+      explanation:
+        "The owner-approved mandate executed-action occurrence count is exhausted.",
+      created_at: now.toISOString(),
+    });
+  }
+  return (await evaluateDeclarativeStrategy({
+    authority: strategy.mandate,
+    observation: planObservation(observation, usage),
+    triggerId,
+    decisionId,
+    now,
+  })).decision;
 }
 
 async function revalidateBeforeSubmission(store: StrategyStore, scheduler: StrategySchedulerStore,
@@ -130,7 +275,8 @@ async function runClaimed(due: DueStrategy, lease: StrategyLease, options: Strat
     }
     if (recoveredExecution?.submissionState === "prepared") {
       await store.abandonPreSubmission(recoveredExecution.id, now,
-        { reason: "restart recovered durable pre-dispatch state; Harbor execute was never called" });
+        { reason: "restart recovered durable pre-dispatch state; Harbor execute was never called",
+          occurrence_release_reason: "pre_submit" });
       await scheduler.finishTrigger(due.principal, lease, triggerId, recoveredDecision.decisionId, "failed", now, "failed");
       await scheduler.advanceSchedule(due, lease, strategy.mandate.schedule.interval_seconds, now);
       summary.failed += 1;
@@ -152,6 +298,9 @@ async function runClaimed(due: DueStrategy, lease: StrategyLease, options: Strat
     } catch {
       reconciled = { status: "pending" };
     }
+    if (reconciled.status === "validated" && !validatedReceiptEvidence(reconciled.evidence)) {
+      reconciled = { status: "pending" };
+    }
     if (reconciled.status === "pending") {
       const decision = holdDecision(strategy, due, triggerId, decisionId, now, "service_unavailable",
         "A prior transaction remains unresolved; no new order was built or submitted.");
@@ -170,7 +319,10 @@ async function runClaimed(due: DueStrategy, lease: StrategyLease, options: Strat
       summary.blocked += 1;
       return;
     }
-    await store.resolveExecution(unresolved.id, reconciled.status, reconciled.evidence, now);
+    const reconciliationEvidence = reconciled.status === "not_included"
+      ? { ...reconciled.evidence, occurrence_release_reason: "not_included" }
+      : reconciled.evidence;
+    await store.resolveExecution(unresolved.id, reconciled.status, reconciliationEvidence, now);
     await store.appendAudit({ strategyId: due.strategyId, executionId: unresolved.id, actor: "reconciler", kind: "reconciled",
       detail: { status: reconciled.status, ...reconciled.evidence }, at: now });
     if (reconciled.status === "validated") await store.markTradeComplete(due.strategyId, now);
@@ -196,13 +348,24 @@ async function runClaimed(due: DueStrategy, lease: StrategyLease, options: Strat
     return;
   }
   const globalKill = await store.getGlobalKill(strategy.mandate.account, strategy.mandate.network);
+  const usage = strategy.mandate.kind === "declarative_strategy_v1"
+    ? await store.getDeclarativeUsage(strategy, now)
+    : undefined;
   observation = { ...observation, globalKill: globalKill.enabled,
-    pendingDailyValue: await store.getPendingDailyValue(strategy.strategy_id, now), unresolvedExecution: false };
+    pendingDailyValue: usage?.daily_value ??
+      await store.getPendingDailyValue(strategy.strategy_id, now), unresolvedExecution: false };
   const observedLease = await scheduler.renew(lease, options.clock?.() ?? new Date());
   if (!observedLease) return;
   lease = observedLease;
   const decisionNow = options.clock?.() ?? new Date();
-  let decision = decideRebalance({ mandate: strategy.mandate, observation, triggerId, decisionId, now: decisionNow });
+  let decision = await decideStrategy(
+    strategy,
+    observation,
+    usage,
+    triggerId,
+    decisionId,
+    decisionNow,
+  );
   if (!(await scheduler.persistDecision(due.principal, lease, strategy.mandate, decision, now,
     { ...observation, globalKill: globalKill.enabled }))) return;
   if (decision.action === "hold") {
@@ -220,15 +383,48 @@ async function runClaimed(due: DueStrategy, lease: StrategyLease, options: Strat
   const executionId = await stableStrategyId("execution", decisionId);
   const idempotencyKey = `strategy:${strategy.strategy_id}:${decision.decision_id}`;
   await store.beginExecution(decision, executionId, idempotencyKey, now);
-  if (!(await store.reserveDecision(strategy, decision, executionId, now))) {
-    await store.markExecution(executionId, "failed", now);
-    await store.markBudgetHold(decisionId, "A concurrent reservation consumed the remaining daily mandate budget.", now);
-    decision = holdDecision(strategy, due, triggerId, decisionId, now, "daily_limit",
-      "A concurrent reservation consumed the remaining daily mandate budget.");
+  if (!(await store.reserveDecision(
+    strategy,
+    decision,
+    executionId,
+    now,
+    observation.feeDrops,
+  ))) {
+    await store.abandonPreSubmission(executionId, now, {
+      phase: "reservation_race",
+      occurrence_release_reason: "pre_submit",
+    });
+    let code: StrategyHoldCode = "daily_limit";
+    let explanation = "A concurrent reservation consumed the remaining daily mandate budget.";
+    if (strategy.mandate.kind === "declarative_strategy_v1") {
+      const racedUsage = await store.getDeclarativeUsage(strategy, now);
+      const racedDecision = await decideStrategy(
+        strategy,
+        observation,
+        racedUsage,
+        triggerId,
+        decisionId,
+        decisionNow,
+      );
+      if (racedDecision.action === "hold") {
+        code = racedDecision.hold_codes[0] ?? "daily_limit";
+        explanation = racedDecision.explanation;
+      }
+    }
+    await store.markBudgetHold(decisionId, explanation, now, code);
+    decision = holdDecision(
+      strategy,
+      due,
+      triggerId,
+      decisionId,
+      now,
+      code,
+      explanation,
+    );
     await scheduler.finishTrigger(due.principal, lease, triggerId, decisionId, "complete", now);
     await store.recordHold(due.strategyId, decision.explanation, now);
     await store.appendAudit({ strategyId: due.strategyId, triggerId, decisionId, executionId, actor: "runner", kind: "held",
-      detail: { hold_codes: ["daily_limit"] }, at: now });
+      detail: { hold_codes: [code] }, at: now });
     await scheduler.advanceSchedule(due, lease, strategy.mandate.schedule.interval_seconds, now);
     summary.held += 1;
     return;
@@ -242,12 +438,23 @@ async function runClaimed(due: DueStrategy, lease: StrategyLease, options: Strat
     if (compareUnsignedIntegers(build.feeDrops, strategy.mandate.limits.max_fee_drops) > 0) {
       throw new Error("autofilled fee exceeds immutable mandate");
     }
+    if (!(await store.updateReservedFee(
+      strategy,
+      decision.decision_id,
+      build.feeDrops,
+      now,
+    ))) {
+      throw new Error("autofilled fee exceeds an aggregate mandate fee budget");
+    }
     await store.attachBuild(executionId, build.buildId, build.lastLedgerSequence, now);
   } catch (error) {
     const terminalLease = await scheduler.renew(lease, options.clock?.() ?? new Date());
     if (!terminalLease) return;
     lease = terminalLease;
-    await store.markExecution(executionId, "failed", now);
+    await store.abandonPreSubmission(executionId, now, {
+      phase: "build_or_simulation",
+      occurrence_release_reason: "pre_submit",
+    });
     await scheduler.finishTrigger(due.principal, lease, triggerId, decisionId, "failed", now, "failed");
     await store.appendAudit({ strategyId: due.strategyId, triggerId, decisionId, executionId, actor: "runner", kind: "failed",
       detail: { phase: "build_or_simulation", message: error instanceof Error ? error.message : "failed" }, at: now });
@@ -257,7 +464,10 @@ async function runClaimed(due: DueStrategy, lease: StrategyLease, options: Strat
   }
   const builtLease = await scheduler.renew(lease, options.clock?.() ?? new Date());
   if (!builtLease) {
-    await store.abandonPreSubmission(executionId, now, { reason: "lease expired before submission" });
+    await store.abandonPreSubmission(executionId, now, {
+      reason: "lease expired before submission",
+      occurrence_release_reason: "pre_submit",
+    });
     summary.blocked += 1;
     return;
   }
@@ -271,25 +481,60 @@ async function runClaimed(due: DueStrategy, lease: StrategyLease, options: Strat
   }
   const freshNow = options.clock?.() ?? new Date();
   const freshKill = await store.getGlobalKill(strategy.mandate.account, strategy.mandate.network);
+  const freshUsage = strategy.mandate.kind === "declarative_strategy_v1"
+    ? await store.getDeclarativeUsage(strategy, freshNow, decision.decision_id)
+    : undefined;
   freshObservation = { ...freshObservation, globalKill: freshKill.enabled,
     pendingDailyValue: observation.pendingDailyValue, unresolvedExecution: false };
-  const freshDecision = decideRebalance({ mandate: strategy.mandate, observation: freshObservation,
-    triggerId, decisionId, now: freshNow });
+  const freshDecision = await decideStrategy(
+    strategy,
+    freshObservation,
+    freshUsage,
+    triggerId,
+    decisionId,
+    freshNow,
+  );
   const stillPermitted = freshDecision.action === decision.action && freshDecision.proposed_value !== undefined &&
     decision.proposed_value !== undefined &&
-    decimalToMicrounitsCeil(freshDecision.proposed_value) >= decimalToMicrounitsCeil(decision.proposed_value);
-  if (!stillPermitted || !(await revalidateBeforeSubmission(store, scheduler, strategy, lease, freshNow))) {
-    await store.markExecution(executionId, "failed", now);
+    decimalToMicrounitsCeil(freshDecision.proposed_value) >= decimalToMicrounitsCeil(decision.proposed_value) &&
+    (strategy.mandate.kind !== "declarative_strategy_v1" ||
+      freshDecision.matched_rule_id === decision.matched_rule_id);
+  const revalidationNow = options.clock?.() ?? new Date();
+  if (!stillPermitted || !(await revalidateBeforeSubmission(
+    store,
+    scheduler,
+    strategy,
+    lease,
+    revalidationNow,
+  ))) {
+    await store.abandonPreSubmission(executionId, now, {
+      reason: "mandate, kill switch, or lease changed before submission",
+      occurrence_release_reason: "pre_submit",
+    });
     await scheduler.finishTrigger(due.principal, lease, triggerId, decisionId, "blocked", now, "failed");
     await store.pauseForRunner(due.strategyId, "mandate, kill switch, or lease changed before submission", now);
     summary.blocked += 1;
     return;
   }
 
-  if (!(await store.markSubmittingFenced(executionId, strategy, lease, freshNow))) {
-    await store.abandonPreSubmission(executionId, freshNow,
-      { reason: "atomic generation, lease, or wallet kill fence rejected submission" });
-    await store.pauseForRunner(due.strategyId, "submission fence rejected stale or killed work", freshNow);
+  // Re-sample after asynchronous revalidation. The database fence atomically
+  // checks this exact instant against the lease, owner kill, mandate window,
+  // and owner-authorization expiry. Also fail closed if the quote aged out
+  // while those reads were in flight.
+  const fenceNow = options.clock?.() ?? new Date();
+  const quoteAgeAtFence = fenceNow.getTime() - Date.parse(freshObservation.observedAt);
+  const quoteFreshAtFence = Number.isFinite(quoteAgeAtFence) && quoteAgeAtFence >= 0 &&
+    quoteAgeAtFence <= strategy.mandate.limits.max_quote_age_seconds * 1_000;
+  if (!quoteFreshAtFence || !(await store.markSubmittingFenced(
+    executionId,
+    strategy,
+    lease,
+    fenceNow,
+  ))) {
+    await store.abandonPreSubmission(executionId, fenceNow,
+      { reason: "atomic generation, lease, or wallet kill fence rejected submission",
+        occurrence_release_reason: "pre_submit" });
+    await store.pauseForRunner(due.strategyId, "submission fence rejected stale or killed work", fenceNow);
     summary.blocked += 1;
     return;
   }
@@ -297,6 +542,11 @@ async function runClaimed(due: DueStrategy, lease: StrategyLease, options: Strat
   try {
     outcome = await adapter.execute(build, idempotencyKey);
   } catch {
+    outcome = { status: "pending_reconciliation" };
+  }
+  if (outcome.status === "executed" && !isValidatedReceipt(outcome)) {
+    // The relay may have happened. Malformed or incomplete success evidence is
+    // therefore ambiguous, never a terminal failure or validated execution.
     outcome = { status: "pending_reconciliation" };
   }
   const terminalLease = await scheduler.renew(lease, options.clock?.() ?? new Date());
@@ -308,13 +558,14 @@ async function runClaimed(due: DueStrategy, lease: StrategyLease, options: Strat
   }
   lease = terminalLease;
   if (outcome.status === "executed") {
+    const evidence = receiptEvidence(outcome);
     await store.markExecution(executionId, "submitted", now,
       { harborExecutionId: outcome.harborExecutionId, txHash: outcome.txHash });
-    await store.resolveExecution(executionId, "validated", { tx_hash: outcome.txHash }, now);
+    await store.resolveExecution(executionId, "validated", evidence, now);
     await store.markTradeComplete(due.strategyId, now);
     await scheduler.finishTrigger(due.principal, lease, triggerId, decisionId, "complete", now, "executed");
     await store.appendAudit({ strategyId: due.strategyId, triggerId, decisionId, executionId, actor: "runner", kind: "executed",
-      detail: { tx_hash: outcome.txHash }, at: now });
+      detail: evidence, at: now });
     await scheduler.advanceSchedule(due, lease, strategy.mandate.schedule.interval_seconds, now);
     summary.executed += 1;
   } else if (outcome.status === "failed") {
@@ -359,6 +610,9 @@ export async function runStrategyScheduler(options: StrategyRunnerOptions): Prom
       let result: StrategyReconcileResult;
       try { result = await options.adapterForPrincipal(item.principal).reconcile(unresolved); }
       catch { result = { status: "pending" }; }
+      if (result.status === "validated" && !validatedReceiptEvidence(result.evidence)) {
+        result = { status: "pending" };
+      }
       if (result.status === "pending") {
         summary.blocked += 1;
       } else if (result.status === "needs_approval") {
@@ -368,7 +622,10 @@ export async function runStrategyScheduler(options: StrategyRunnerOptions): Prom
             next_action: "Complete the existing Harbor owner-approval workflow; no replacement order will be created." }, at: options.now });
         summary.blocked += 1;
       } else {
-        await store.resolveExecution(unresolved.id, result.status, result.evidence, options.now);
+        const reconciliationEvidence = result.status === "not_included"
+          ? { ...result.evidence, occurrence_release_reason: "not_included" }
+          : result.evidence;
+        await store.resolveExecution(unresolved.id, result.status, reconciliationEvidence, options.now);
         await store.appendAudit({ strategyId: item.strategyId, executionId: unresolved.id,
           actor: "reconciler", kind: "reconciled", detail: { status: result.status, ...result.evidence }, at: options.now });
         if (result.status === "validated") await store.markTradeComplete(item.strategyId, options.now);

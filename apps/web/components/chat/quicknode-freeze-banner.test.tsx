@@ -13,7 +13,7 @@ describe("QuickNodeFreezeBanner", () => {
         tx_hash: HASH,
         ledger_index: 9_843_206,
         network: "testnet",
-      }]} />,
+      }]} realLedgerReceipt />,
     );
 
     expect(html).toContain("QuickNode Streams detected a transaction signed with your agent&#x27;s key outside Harbor (ledger 9,843,206). Harbor froze the agent.");
@@ -24,6 +24,16 @@ describe("QuickNodeFreezeBanner", () => {
     expect(html).toContain("pointer-coarse:h-11");
     expect(html).not.toContain("memo");
     expect(html).not.toContain("flags");
+  });
+
+  it("suppresses explorer links for demo and mock notices", () => {
+    const html = renderToStaticMarkup(<QuickNodeFreezeBanner notices={[{
+      tx_hash: HASH,
+      ledger_index: 9_843_206,
+      network: "testnet",
+    }]} />);
+    expect(html).toContain("Harbor froze the agent");
+    expect(html).not.toContain("testnet.xrpl.org");
   });
 
   it("renders nothing without a notice", () => {

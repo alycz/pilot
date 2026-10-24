@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { XrplRpc } from "../src/adapters/xrpl-rpc";
 import type { Strategy } from "../src/contracts";
-import { createProductionStrategyAdapter } from "../src/strategy/execution-adapter";
+import {
+  createProductionStrategyAdapter,
+  validateStrategyTestnetReceipt,
+} from "../src/strategy/execution-adapter";
 
 const account = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
 const issuer = "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV";
@@ -34,6 +37,9 @@ type Overrides = {
   deepFrozen?: boolean;
   peerAuthorized?: boolean;
   linkFrozen?: boolean;
+  serverLedgerAge?: number;
+  serverLedgerSeq?: number;
+  omitServerLedgerAge?: boolean;
 };
 
 function harness(overrides: Overrides = {}) {
@@ -51,7 +57,11 @@ function harness(overrides: Overrides = {}) {
         : { TakerGets: { currency, issuer, value: "1" }, TakerPays: "1000000" }] };
     }
     if (command === "fee") return { drops: { open_ledger_fee: "12" } };
-    if (command === "server_info") return { info: { validated_ledger: { reserve_base_xrp: "10", reserve_inc_xrp: "2" } } };
+    if (command === "server_info") return { info: { validated_ledger: {
+      reserve_base_xrp: "10", reserve_inc_xrp: "2",
+      seq: overrides.serverLedgerSeq ?? 100,
+      ...(overrides.omitServerLedgerAge ? {} : { age: overrides.serverLedgerAge ?? 1 }),
+    } } };
     throw new Error(`unexpected ${command}`);
   }) };
   const db = { prepare: vi.fn((sql: string) => ({ bind: vi.fn(() => ({ first: vi.fn(async () =>
@@ -78,11 +88,57 @@ describe("production strategy observation provenance", () => {
     ["frozen trustline", { frozen: true }],
     ["deep-frozen trustline", { deepFrozen: true }],
     ["unauthorized trustline", { peerAuthorized: false }],
+    ["missing validated-ledger age", { omitServerLedgerAge: true }],
+    ["stale validated-ledger head", { serverLedgerAge: 21 }],
+    ["contradictory validated-ledger sequence", { serverLedgerSeq: 99 }],
   ] as const)("rejects %s", async (_name, overrides) => {
     await expect(harness(overrides).observe(strategy, at)).rejects.toThrow();
   });
 
   it("marks a frozen Harbor link inactive even with OfferCreate permission", async () => {
     expect((await harness({ linkFrozen: true }).observe(strategy, at)).grantActive).toBe(false);
+  });
+});
+
+describe("strategy validated Testnet receipt", () => {
+  const hash = "AB".repeat(32);
+  const execution = {
+    status: "executed",
+    hash,
+    ledger_index: 101,
+    result: "success",
+    signed_by: "delegate",
+  };
+  const status = {
+    hash,
+    network: "testnet",
+    validated: true,
+    ledger_index: 101,
+    engine_result: "tesSUCCESS",
+  };
+
+  it("requires matching explicit validated Testnet evidence", () => {
+    expect(validateStrategyTestnetReceipt(execution, status)).toEqual({
+      txHash: hash,
+      network: "testnet",
+      ledgerIndex: 101,
+      validated: true,
+      engineResult: "tesSUCCESS",
+      result: "success",
+    });
+  });
+
+  it.each([
+    ["lowercase hash", { ...execution, hash: hash.toLowerCase() }, status],
+    ["non-success result", { ...execution, result: "filled" }, status],
+    ["owner signature", { ...execution, signed_by: "owner" }, status],
+    ["zero ledger", { ...execution, ledger_index: 0 }, status],
+    ["unvalidated status", execution, { ...status, validated: false }],
+    ["wrong network", execution, { ...status, network: "devnet" }],
+    ["non-success engine result", execution, { ...status, engine_result: "tecPATH_DRY" }],
+    ["different ledger", execution, { ...status, ledger_index: 102 }],
+    ["different hash", execution, { ...status, hash: "CD".repeat(32) }],
+  ] as const)("rejects %s", (_name, actualExecution, actualStatus) => {
+    expect(() => validateStrategyTestnetReceipt(actualExecution, actualStatus)).toThrow();
   });
 });

@@ -2,9 +2,11 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import type { ReactNode } from "react";
 
+import { HarnessChatHost } from "@/components/harness-chat";
 import { DelegationLifecycleGuard } from "@/components/shell/delegation-lifecycle-guard";
 
 import "./globals.css";
+import "../components/harness-chat/harness-chat.css";
 
 const geistSans = localFont({
   src: "./fonts/Geist-Variable.woff2",
@@ -43,7 +45,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`} suppressHydrationWarning>
       <body className="min-h-dvh bg-background font-sans text-foreground antialiased">
-        {children}
+        <HarnessChatHost>{children}</HarnessChatHost>
         <DelegationLifecycleGuard />
       </body>
     </html>

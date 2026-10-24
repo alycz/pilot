@@ -3,16 +3,19 @@ import Link from "next/link";
 import React from "react";
 
 import type { QuickNodeFreezeNotice } from "./stream-parts";
+import { xrplTestnetTransactionUrl } from "../../lib/xrpl-explorer";
 
 export function QuickNodeFreezeBanner({
   notices,
+  realLedgerReceipt = false,
 }: {
   notices: readonly QuickNodeFreezeNotice[];
+  realLedgerReceipt?: boolean;
 }) {
   const notice = notices.at(-1);
   if (!notice) return null;
 
-  const explorerUrl = `https://testnet.xrpl.org/transactions/${notice.tx_hash}`;
+  const explorerUrl = realLedgerReceipt ? xrplTestnetTransactionUrl(notice.tx_hash) : undefined;
   return (
     <section
       aria-label="QuickNode Streams freeze notice"
@@ -37,7 +40,7 @@ export function QuickNodeFreezeBanner({
             >
               Revoke on-ledger
             </Link>
-            <a
+            {explorerUrl ? <a
               className="inline-flex h-9 items-center justify-center gap-1.5 border border-border-strong px-3 font-mono text-[11px] font-medium uppercase tracking-wide text-foreground transition hover:bg-surface pointer-coarse:h-11 pointer-coarse:min-w-11"
               href={explorerUrl}
               rel="noreferrer"
@@ -45,7 +48,7 @@ export function QuickNodeFreezeBanner({
             >
               View transaction <ExternalLink aria-hidden="true" className="h-3.5 w-3.5" />
               <span className="sr-only"> (opens in a new tab)</span>
-            </a>
+            </a> : null}
           </div>
         </div>
       </div>

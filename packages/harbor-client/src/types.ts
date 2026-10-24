@@ -4,6 +4,7 @@ import {
   ExecResultSchema,
   ExecutionCapabilitySchema,
   ExecutionContractSchema,
+  Ap4mPublicEvidenceSchema,
   Ap4mReceiptSchema,
   MandateConstraintsSchema,
   MandateSchema,
@@ -14,12 +15,17 @@ import {
   StrategyCreateArgsSchema,
   StrategyKillSwitchSchema,
   StrategyOwnerAuthorizationSchema,
+  StrategyPlanPreviewSchema,
+  StrategyPlanValidationResultSchema,
   StrategySchema,
+  StrategySimulateArgsSchema,
+  StrategyValidateArgsSchema,
   TxBuildSchema,
   VenueSchema,
 } from "@pilot/contracts";
 import type {
   AccountLink,
+  Ap4mPublicEvidence,
   Ap4mReceipt,
   Asset,
   Envelope,
@@ -33,6 +39,10 @@ import type {
   StrategyCreateArgs,
   StrategyKillSwitch,
   StrategyOwnerAuthorization,
+  StrategyPlanPreview,
+  StrategyPlanValidationResult,
+  StrategySimulateArgs,
+  StrategyValidateArgs,
   TxBuild,
   Venue,
   ExecutionCapability,
@@ -197,6 +207,84 @@ export interface AmmInfoResult {
   amm: JsonObject;
 }
 
+export type MarketAnalyticsAsset =
+  | { kind: "native"; currency: "XRP"; issuer: null }
+  | { kind: "issued"; currency: string; issuer: string };
+
+export interface MarketAnalyticsEstimate {
+  direction: "sell-base" | "buy-base";
+  requested_base: string;
+  filled_base: string;
+  quote_amount: string;
+  average_price: string | null;
+  price_impact_bps: string | null;
+  benchmark: "book-mid" | null;
+  available: boolean;
+  limited_by_depth: boolean;
+  levels_consumed: number;
+}
+
+export interface MarketAnalyticsSnapshotResult {
+  network: Network;
+  pair: { base: MarketAnalyticsAsset; quote: MarketAnalyticsAsset };
+  source: {
+    operation: "analytics.marketSnapshot";
+    providers: string[];
+    request_count: number;
+    bounded: true;
+  };
+  observed_at: string;
+  ledger_index?: number;
+  ledger_indexes?: { bids: number | null; asks: number | null; amm: number | null };
+  freshness: {
+    status: "live-observation" | "partial-observation" | "mixed-ledger";
+    basis: "validated-ledger";
+    age_seconds: null;
+    note: string;
+  };
+  units: { base_size: string; quote_size: string; price: string; spread_bps: string };
+  book: {
+    bids: Array<{ price: string; base_size: string; quote_size: string; offer_count: number; cumulative_base_size: string }>;
+    asks: Array<{ price: string; base_size: string; quote_size: string; offer_count: number; cumulative_base_size: string }>;
+    limited: boolean;
+    max_levels: number;
+    availability: { bids: "available" | "empty" | "error"; asks: "available" | "empty" | "error" };
+    invalid_offer_count: number;
+  };
+  metrics: {
+    best_bid: string | null;
+    best_ask: string | null;
+    mid: string | null;
+    spread: string | null;
+    spread_bps: string | null;
+  };
+  executable_liquidity: Array<{
+    base_amount: string;
+    sell_base: MarketAnalyticsEstimate;
+    buy_base: MarketAnalyticsEstimate;
+  }>;
+  amm?: {
+    account: string | null;
+    base_reserve: string;
+    quote_reserve: string;
+    implied_price: string;
+    trading_fee_bps: string;
+    units: Record<string, string>;
+  };
+  availability: { amm: "available" | "unavailable" | "error" };
+  history: {
+    points: Array<{ observed_at: string; ledger_index?: number; price: string }>;
+    started_at: string;
+    ended_at: string;
+    max_samples: 1;
+    complete: false;
+    reason: string;
+  };
+  recent_trades: { support: "unsupported"; rows: []; reason: string };
+  partial: boolean;
+  partial_reasons: string[];
+}
+
 export interface VaultInfoResult {
   network: Extract<Network, "devnet" | "lending-devnet">;
   ledger_current_index?: number;
@@ -351,6 +439,7 @@ export interface CredentialIdsResult {
 export interface Ap4mPurchaseResult {
   receipt: Ap4mReceipt;
   data: JsonObject;
+  evidence?: Ap4mPublicEvidence;
 }
 
 export interface ChannelStatusResult {
@@ -682,6 +771,15 @@ export interface HarborOperationMap {
     };
     result: DexDepthResult;
   };
+  "analytics.marketSnapshot": {
+    args: {
+      network: Network;
+      pair: { base: Asset; quote: Asset };
+      depth_limit?: number;
+      sample_base_amounts?: string[];
+    };
+    result: MarketAnalyticsSnapshotResult;
+  };
   "amm.info": {
     args: { network: Network; asset: Asset; asset2: Asset; account?: string };
     result: AmmInfoResult;
@@ -948,6 +1046,14 @@ export interface HarborOperationMap {
     args: StrategyCreateArgs & { request_id: string };
     result: Strategy;
   };
+  "strategy.validate": {
+    args: StrategyValidateArgs;
+    result: StrategyPlanValidationResult;
+  };
+  "strategy.simulate": {
+    args: StrategySimulateArgs;
+    result: StrategyPlanPreview;
+  };
   "strategy.list": {
     args: { owner: string; network: "testnet" };
     result: Strategy[];
@@ -1101,6 +1207,9 @@ const XrplDecimalSchema = z
   .string()
   .max(128)
   .regex(/^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$/);
+const AnalyticsPositiveDecimalSchema = XrplDecimalSchema
+  .max(96)
+  .refine((value) => /[1-9]/.test(value.split(/[eE]/, 1)[0] ?? ""), "must be greater than zero");
 
 function validNativeIssuedValue(value: string): boolean {
   const match = /^(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(value);
@@ -1477,6 +1586,17 @@ export const HarborArgsSchemas = {
     limit: z.number().int().min(1).max(400).optional(),
     ledger_index: z.literal("validated").optional(),
   }).strict(),
+  "analytics.marketSnapshot": z.object({
+    network: NetworkSchema,
+    pair: z.object({ base: AssetSchema, quote: AssetSchema }).strict().refine(
+      ({ base, quote }) =>
+        base.currency !== quote.currency ||
+        ("issuer" in base ? base.issuer : undefined) !== ("issuer" in quote ? quote.issuer : undefined),
+      "base and quote must identify different assets",
+    ),
+    depth_limit: z.number().int().min(1).max(100).optional(),
+    sample_base_amounts: z.array(AnalyticsPositiveDecimalSchema).min(1).max(5).optional(),
+  }).strict(),
   "amm.info": z
     .object({
       network: NetworkSchema,
@@ -1821,6 +1941,8 @@ export const HarborArgsSchemas = {
     }
   }),
   "strategy.create": StrategyCreateTransportArgsSchema as unknown as z.ZodType<HarborOperationMap["strategy.create"]["args"]>,
+  "strategy.validate": StrategyValidateArgsSchema,
+  "strategy.simulate": StrategySimulateArgsSchema,
   "strategy.list": z.object({ owner: AccountSchema, network: z.literal("testnet") }).strict(),
   "strategy.get": z.object({
     strategy_id: NonEmptyStringSchema.max(96), owner: AccountSchema, network: z.literal("testnet"),
@@ -2224,6 +2346,112 @@ const AmmInfoResultSchema = z.object({
   ledger_index: z.number().int().nonnegative(),
   amm: JsonObjectSchema,
 }).strict();
+const MarketAnalyticsIdentitySchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("native"), currency: z.literal("XRP"), issuer: z.null() }).strict(),
+  z.object({ kind: z.literal("issued"), currency: IssuedCurrencySchema, issuer: AccountSchema }).strict(),
+]);
+const MarketAnalyticsLevelSchema = z.object({
+  price: AnalyticsPositiveDecimalSchema,
+  base_size: AnalyticsPositiveDecimalSchema,
+  quote_size: AnalyticsPositiveDecimalSchema,
+  offer_count: z.number().int().positive(),
+  cumulative_base_size: AnalyticsPositiveDecimalSchema,
+}).strict();
+const SignedAnalyticsDecimalSchema = z.string().max(96).regex(
+  /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$/,
+);
+const MarketAnalyticsEstimateSchema = z.object({
+  direction: z.enum(["sell-base", "buy-base"]),
+  requested_base: AnalyticsPositiveDecimalSchema,
+  filled_base: XrplDecimalSchema,
+  quote_amount: XrplDecimalSchema,
+  average_price: AnalyticsPositiveDecimalSchema.nullable(),
+  price_impact_bps: SignedAnalyticsDecimalSchema.nullable(),
+  benchmark: z.literal("book-mid").nullable(),
+  available: z.boolean(),
+  limited_by_depth: z.boolean(),
+  levels_consumed: z.number().int().nonnegative(),
+}).strict();
+const MarketAnalyticsSnapshotResultSchema = z.object({
+  network: NetworkSchema,
+  pair: z.object({ base: MarketAnalyticsIdentitySchema, quote: MarketAnalyticsIdentitySchema }).strict(),
+  source: z.object({
+    operation: z.literal("analytics.marketSnapshot"),
+    providers: z.array(z.string().min(1).max(120)).min(1).max(8),
+    request_count: z.number().int().min(1).max(10),
+    bounded: z.literal(true),
+  }).strict(),
+  observed_at: z.string().datetime({ offset: true }),
+  ledger_index: z.number().int().nonnegative().optional(),
+  ledger_indexes: z.object({
+    bids: z.number().int().nonnegative().nullable(),
+    asks: z.number().int().nonnegative().nullable(),
+    amm: z.number().int().nonnegative().nullable(),
+  }).strict().optional(),
+  freshness: z.object({
+    status: z.enum(["live-observation", "partial-observation", "mixed-ledger"]),
+    basis: z.literal("validated-ledger"),
+    age_seconds: z.null(),
+    note: z.string().min(1).max(500),
+  }).strict(),
+  units: z.object({
+    base_size: z.string().min(1),
+    quote_size: z.string().min(1),
+    price: z.string().min(1),
+    spread_bps: z.string().min(1),
+  }).strict(),
+  book: z.object({
+    bids: z.array(MarketAnalyticsLevelSchema).max(100),
+    asks: z.array(MarketAnalyticsLevelSchema).max(100),
+    limited: z.boolean(),
+    max_levels: z.number().int().min(1).max(100),
+    availability: z.object({
+      bids: z.enum(["available", "empty", "error"]),
+      asks: z.enum(["available", "empty", "error"]),
+    }).strict(),
+    invalid_offer_count: z.number().int().nonnegative(),
+  }).strict(),
+  metrics: z.object({
+    best_bid: AnalyticsPositiveDecimalSchema.nullable(),
+    best_ask: AnalyticsPositiveDecimalSchema.nullable(),
+    mid: AnalyticsPositiveDecimalSchema.nullable(),
+    spread: SignedAnalyticsDecimalSchema.nullable(),
+    spread_bps: SignedAnalyticsDecimalSchema.nullable(),
+  }).strict(),
+  executable_liquidity: z.array(z.object({
+    base_amount: AnalyticsPositiveDecimalSchema,
+    sell_base: MarketAnalyticsEstimateSchema.extend({ direction: z.literal("sell-base") }).strict(),
+    buy_base: MarketAnalyticsEstimateSchema.extend({ direction: z.literal("buy-base") }).strict(),
+  }).strict()).max(5),
+  amm: z.object({
+    account: AccountSchema.nullable(),
+    base_reserve: AnalyticsPositiveDecimalSchema,
+    quote_reserve: AnalyticsPositiveDecimalSchema,
+    implied_price: AnalyticsPositiveDecimalSchema,
+    trading_fee_bps: XrplDecimalSchema,
+    units: z.record(z.string(), z.string()),
+  }).strict().optional(),
+  availability: z.object({ amm: z.enum(["available", "unavailable", "error"]) }).strict(),
+  history: z.object({
+    points: z.array(z.object({
+      observed_at: z.string().datetime({ offset: true }),
+      ledger_index: z.number().int().nonnegative().optional(),
+      price: AnalyticsPositiveDecimalSchema,
+    }).strict()).max(1),
+    started_at: z.string().datetime({ offset: true }),
+    ended_at: z.string().datetime({ offset: true }),
+    max_samples: z.literal(1),
+    complete: z.literal(false),
+    reason: z.string().min(1).max(500),
+  }).strict(),
+  recent_trades: z.object({
+    support: z.literal("unsupported"),
+    rows: z.tuple([]),
+    reason: z.string().min(1).max(500),
+  }).strict(),
+  partial: z.boolean(),
+  partial_reasons: z.array(z.string().min(1).max(300)).max(20),
+}).strict();
 const TokenLookupResultSchema = z.object({
   network: NetworkSchema,
   asset: AssetSchema,
@@ -2355,6 +2583,7 @@ const CredentialIdsResultSchema = z.object({
 const Ap4mPurchaseResultSchema = z.object({
   receipt: Ap4mReceiptSchema,
   data: JsonObjectSchema,
+  evidence: Ap4mPublicEvidenceSchema.optional(),
 }).strict();
 const ChannelStatusResultSchema = z.object({
   channel_id: NonEmptyStringSchema,
@@ -2416,6 +2645,7 @@ export const HarborResultSchemas = {
   "ledger.account.tx": AccountTransactionsResultSchema,
   "dex.book": DexBookResultSchema,
   "dex.depth": DexDepthResultSchema,
+  "analytics.marketSnapshot": MarketAnalyticsSnapshotResultSchema,
   "amm.info": AmmInfoResultSchema,
   "vault.info": VaultInfoResultSchema,
   "vault.positions": VaultPositionsResponseSchema,
@@ -2450,6 +2680,8 @@ export const HarborResultSchemas = {
   "tx.submit": TxSubmitResultSchema,
   "tx.status": TxStatusResultSchema,
   "strategy.create": StrictStrategySchema,
+  "strategy.validate": StrategyPlanValidationResultSchema,
+  "strategy.simulate": StrategyPlanPreviewSchema,
   "strategy.list": z.array(StrictStrategySchema),
   "strategy.get": StrictStrategySchema,
   "strategy.audit": z.array(StrategyAuditEventSchema),

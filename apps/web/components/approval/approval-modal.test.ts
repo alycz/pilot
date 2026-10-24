@@ -5,6 +5,7 @@ import {
   canAttemptLedgerApproval,
   isApprovalExpired,
   ledgerApprovalActionLabel,
+  ledgerApprovalSignerLabel,
   ledgerApprovalNeedsRebuild,
   ledgerExpectedScreens,
   signOnlyAfterPreflight,
@@ -91,6 +92,14 @@ describe("Ledger approval presentation", () => {
     expect(ledgerApprovalActionLabel({ expiresAt: expiry, now: Date.parse("2026-10-18T00:09:00.000Z"), ledger: true })).toBe("Approve on Ledger");
     expect(ledgerApprovalActionLabel({ expiresAt: expiry, now: Date.parse("2026-10-18T00:09:45.000Z"), ledger: true })).toBe("Rebuild and approve");
     expect(ledgerApprovalActionLabel({ expiresAt: expiry, now: Date.parse(expiry), ledger: false })).toBe("Sign only");
+  });
+
+  it.each([
+    ["webhid", "Signed via Ledger transport · account 1"],
+    ["virtual", "Signed via Virtual Ledger (Speculos) · account 1"],
+    [undefined, "Signed through configured Ledger flow · account 1"],
+  ] as const)("labels %s signing provenance truthfully", (transport, expected) => {
+    expect(ledgerApprovalSignerLabel({ accountIndex: 1, transport })).toBe(expected);
   });
 
   it("keeps signing disabled until the device and a required rebuild are armed", () => {

@@ -90,6 +90,7 @@ export const UNTRUSTED_FIELD_RULES: Readonly<
     { kind: "provider", path: ["result"] },
   ],
   "tokens.lookup": [
+    { kind: "token-name", path: ["metadata", "code"] },
     { kind: "token-name", path: ["metadata", "name"] },
     { kind: "token-description", path: ["metadata", "description"] },
     { kind: "token-domain", path: ["metadata", "Domain"] },
@@ -97,6 +98,7 @@ export const UNTRUSTED_FIELD_RULES: Readonly<
     { kind: "token-icon", path: ["metadata", "icon"] },
   ],
   "tokens.trending": [
+    { kind: "token-name", path: ["data", "*", "code"] },
     { kind: "token-name", path: ["data", "*", "name"] },
     { kind: "token-description", path: ["data", "*", "description"] },
     { kind: "token-domain", path: ["data", "*", "Domain"] },
@@ -129,6 +131,7 @@ export const OP_SCREENING_CLASSIFICATION: Readonly<
   "account.link": "structured",
   "account.revoke": "structured",
   "account.status": "structured",
+  "analytics.marketSnapshot": "structured",
   "amendments.status": "untrusted",
   "amm.info": "structured",
   "amm.pools": "structured",
@@ -195,7 +198,12 @@ export const OP_SCREENING_CLASSIFICATION: Readonly<
   "strategy.list": "structured",
   "strategy.pause": "structured",
   "strategy.resume": "structured",
+  // Validation and paper simulation return only closed-schema diagnostics,
+  // fixed explanations, canonical numbers, and normalized identifiers whose
+  // character sets and lengths are bounded by the declarative compiler.
+  "strategy.simulate": "structured",
   "strategy.stop": "structured",
+  "strategy.validate": "structured",
   "tokens.flagged": "structured",
   "tokens.lookup": "untrusted",
   "tokens.trending": "untrusted",

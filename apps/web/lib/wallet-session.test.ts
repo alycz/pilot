@@ -217,7 +217,7 @@ describe("wallet-bound authorization", () => {
     }
   });
 
-  it("verifies a one-time non-submittable proof and seals only public identity", () => {
+  it("verifies a non-submittable proof and seals only public identity", () => {
     const wallet = Wallet.generate();
     const issued = issueWalletChallenge(wallet.classicAddress, "testnet", {
       now: 1_000,

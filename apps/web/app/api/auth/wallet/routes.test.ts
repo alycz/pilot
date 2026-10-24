@@ -1,6 +1,9 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Wallet } from "xrpl";
+import { chmod, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   sealWalletSession,
@@ -32,10 +35,12 @@ const PROFILE_KEYS = [
   "NEXT_PUBLIC_DEV_SIGNER",
   "SESSION_SECRET",
   "EXEC_NETWORK",
+  "P_LIVE_RLUSD_ACQUISITION_STATE_DIR",
 ] as const;
 const originalEnvironment = Object.fromEntries(
   PROFILE_KEYS.map((key) => [key, process.env[key]]),
 ) as Record<(typeof PROFILE_KEYS)[number], string | undefined>;
+let proofStateDirectory: string;
 
 function request(
   url: string,
@@ -87,20 +92,24 @@ function challengeRequest(url: string, wallet: Wallet, headers: HeadersInit = {}
 }
 
 describe("wallet auth route deployment boundary", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    proofStateDirectory = await mkdtemp(join(tmpdir(), "pilot-wallet-auth-route-"));
+    await chmod(proofStateDirectory, 0o700);
     process.env.SESSION_SECRET = SECRET;
+    process.env.P_LIVE_RLUSD_ACQUISITION_STATE_DIR = proofStateDirectory;
     delete process.env.PILOT_DEPLOYMENT_PROFILE;
     delete process.env.PILOT_PUBLIC_ORIGIN;
     delete process.env.NEXT_PUBLIC_DEV_SIGNER;
     delete process.env.NEXT_PUBLIC_PILOT_BUILD_MARKER;
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     for (const key of PROFILE_KEYS) {
       const value = originalEnvironment[key];
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }
+    await rm(proofStateDirectory, { recursive: true, force: true });
   });
 
   it.each([
@@ -435,6 +444,32 @@ describe("wallet auth route deployment boundary", () => {
       account: wallet.classicAddress,
       network: "testnet",
     });
+  });
+
+  it("durably consumes one signed authentication proof before issuing a session", async () => {
+    configure("local-wallet", "1");
+    const wallet = Wallet.generate();
+    const origin = "http://127.0.0.1:3003";
+    const challengeResponse = await issueChallenge(challengeRequest(
+      `${origin}/api/auth/wallet/challenge`,
+      wallet,
+    ));
+    const challengeCookie = challengeResponse.cookies.get(WALLET_CHALLENGE_COOKIE)?.value;
+    const challengeBody = await challengeResponse.json() as { tx_json: Record<string, unknown> };
+    const txBlob = wallet.sign(challengeBody.tx_json as never).tx_blob;
+    const post = () => createSession(request(`${origin}/api/auth/wallet/session`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin },
+      body: JSON.stringify({ tx_blob: txBlob }),
+      cookies: { [WALLET_CHALLENGE_COOKIE]: challengeCookie! },
+    }));
+
+    const responses = await Promise.all([post(), post()]);
+    expect(responses.filter((response) => response.status === 200)).toHaveLength(1);
+    expect(responses.every((response) => [200, 401, 503].includes(response.status))).toBe(true);
+    expect(responses.filter(
+      (response) => response.cookies.get(WALLET_SESSION_COOKIE)?.value,
+    )).toHaveLength(1);
   });
 
   it.each([undefined, "https://localhost."])(

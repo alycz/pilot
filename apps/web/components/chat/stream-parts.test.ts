@@ -23,6 +23,39 @@ describe("Pilot chat stream parts", () => {
     blocked_field_kinds: ["document-snippet"],
   } as const;
 
+  const ap4mEvent = {
+    receipt: {
+      receipt_id: "receipt-1", mandate_id: "mandate-1", merchant_id: "venue-yield-desk",
+      sku: "yield-report", intent_id: "intent-1", l3a_digest: "A".repeat(64),
+      l3b_digest: "B".repeat(64), scheme: "exact", amount: { asset: { kind: "xrp" }, value: "1" },
+      proof: { tx_hash: "C".repeat(64) },
+      merchant_validation: { intentId: "intent-1", validated: true, checks: { agent_identity: "pass", intent: "pass", credential: "pass", payment: "pass" }, validation_errors: [] },
+      settlement: "validated", at: "2026-10-21T12:04:00.000Z",
+    },
+    evidence: {
+      version: "ap4m-public-evidence-v1", provenance: "live-testnet", network: "testnet", rail: "exact",
+      intent: { intentId: "intent-1", intentSummary: "Buy report", intentStatus: "ACTIVE", orders: [{ orderId: "order-1", orderExecutionType: "DEFERRED", orderExpiry: 1_793_000_000, orderTotalAmount: { amount: "1", currency: "USD" }, items: [{ itemId: "yield-report", itemName: "Yield report", itemUnitPrice: { amount: "1", currency: "USD" }, itemQuantity: 1, itemDeliveryMethod: "DIGITAL" }], merchants: [{ srcDpaId: "src-dpa", merchantName: "Desk", merchantUrl: "https://merchant.example.test" }] }] },
+      artifacts: [
+        { kind: "l1", digest: "1".repeat(64), digest_basis: "sha256-utf8/vi-l1-presentation" },
+        { kind: "l2", digest: "2".repeat(64), digest_basis: "sha256-utf8/vi-l2-merchant-presentation" },
+        { kind: "l3a", digest: "A".repeat(64), digest_basis: "sha256-utf8/vi-l3a-presentation" },
+        { kind: "l3b", digest: "B".repeat(64), digest_basis: "sha256-utf8/vi-l3b-presentation" },
+        { kind: "payment", digest: "C".repeat(64), digest_basis: "xrpl/signed-transaction-hash" },
+      ],
+    },
+  };
+
+  it("accepts only strictly bound exact/live AP4M evidence parts", () => {
+    const onAp4m = vi.fn();
+    const callbacks = { onText: vi.fn(), onCard: vi.fn(), onPreference: vi.fn(), onAp4m };
+    parsePilotStreamLine(`data: ${JSON.stringify({ type: "data-ap4m", data: ap4mEvent })}`, callbacks);
+    parsePilotStreamLine(`data: ${JSON.stringify({ type: "data-ap4m", data: { ...ap4mEvent, evidence: { ...ap4mEvent.evidence, provenance: "fixture" } } })}`, callbacks);
+    parsePilotStreamLine(`data: ${JSON.stringify({ type: "data-ap4m", data: { ...ap4mEvent, receipt: { ...ap4mEvent.receipt, settlement: "settlement_unknown" } } })}`, callbacks);
+    parsePilotStreamLine(`data: ${JSON.stringify({ type: "data-ap4m", data: { ...ap4mEvent, receipt: { ...ap4mEvent.receipt, merchant_validation: { ...ap4mEvent.receipt.merchant_validation, validated: false, validation_errors: ["failed"] } } } })}`, callbacks);
+    expect(onAp4m).toHaveBeenCalledOnce();
+    expect(onAp4m).toHaveBeenCalledWith(ap4mEvent);
+  });
+
   it("keeps text and card parsing while recognizing preference proposals", () => {
     const onText = vi.fn();
     const onCard = vi.fn();

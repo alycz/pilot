@@ -40,7 +40,7 @@ CREATE TABLE qn_nonces (nonce TEXT PRIMARY KEY, received_at TEXT NOT NULL);
 CREATE TABLE links (
   id TEXT PRIMARY KEY, principal TEXT NOT NULL, owner TEXT NOT NULL,
   network TEXT NOT NULL, delegate TEXT NOT NULL, status TEXT NOT NULL,
-  revoke_tx TEXT, frozen_at TEXT, frozen_reason TEXT
+  revoke_tx TEXT, frozen_at TEXT, frozen_reason TEXT, created_at TEXT NOT NULL
 );
 CREATE TABLE executions (id TEXT PRIMARY KEY, hash TEXT);
 CREATE TABLE qn_watchdog_events (
@@ -62,7 +62,8 @@ CREATE TABLE qn_rpc_counters (
 );
 CREATE TABLE x402_payers (
   network TEXT NOT NULL, payer TEXT NOT NULL, status TEXT NOT NULL,
-  updated_at TEXT NOT NULL, PRIMARY KEY (network, payer)
+  funded_ledger_index INTEGER, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+  PRIMARY KEY (network, payer)
 );
 CREATE TABLE x402_payments (hash TEXT);
 CREATE TABLE ap4m_purchase_attempts (tx_hash TEXT);
@@ -183,9 +184,10 @@ function event(
 async function seedLink(db: SqliteD1): Promise<void> {
   await db.prepare(
     `INSERT INTO links
-      (id, principal, owner, network, delegate, status, revoke_tx, frozen_at, frozen_reason)
-     VALUES ('link-1', 'pilot', ?, 'testnet', ?, 'active', NULL, NULL, NULL)`,
-  ).bind(OWNER, DELEGATE).run();
+      (id, principal, owner, network, delegate, status, revoke_tx, frozen_at,
+       frozen_reason, created_at)
+     VALUES ('link-1', 'pilot', ?, 'testnet', ?, 'active', NULL, NULL, NULL, ?)`,
+  ).bind(OWNER, DELEGATE, "2026-10-21T18:59:00.000Z").run();
   await db.prepare("INSERT INTO executions (id, hash) VALUES ('exec-1', ?)")
     .bind(HASH_HARBOR).run();
 }
@@ -232,7 +234,7 @@ function routeContext(
     freeze: async () => ({ ok: true, skipped: false }),
   },
   payer: WatchdogPayerAuthority = {
-    isPayer: async () => false,
+    activationFloor: async () => undefined,
     ownsTransaction: async () => false,
     disable: async () => false,
   },
@@ -355,6 +357,119 @@ describe("QuickNode watchdog filter", () => {
 });
 
 describe("QuickNode watchdog authority", () => {
+  it("ignores pre-activation history but accepts unseen post-link events out of order", async () => {
+    const db = new SqliteD1();
+    const frozen: string[] = [];
+    const registry: WatchdogRegistry = {
+      freeze: async (_network, account) => {
+        frozen.push(account);
+        return { ok: true, skipped: false };
+      },
+    };
+    try {
+      await seedLink(db);
+      const historical = {
+        ...event("99".repeat(32), OWNER, DELEGATE),
+        ledger_index: 12_300,
+        close_time: "2026-10-21T18:58:59.000Z",
+      };
+      const stale = await processQuickNodeWatchdog(asD1(db), {
+        events: [historical],
+      }, {
+        receivedAt: NOW.toISOString(),
+        network: "testnet",
+        action: "freeze",
+        runTag: "test_run",
+        registry,
+      });
+      expect(stale).toMatchObject({ events: [], inserted: 0, newlyFrozen: 0 });
+      expect(frozen).toEqual([]);
+
+      const watermark = await processQuickNodeWatchdog(asD1(db), {
+        events: [{
+          ...event(HASH_HARBOR, OWNER, DELEGATE),
+          ledger_index: 12_350,
+        }],
+      }, {
+        receivedAt: NOW.toISOString(),
+        network: "testnet",
+        action: "freeze",
+        runTag: "test_run",
+        registry,
+      });
+      expect(watermark).toMatchObject({ inserted: 1, newlyFrozen: 0 });
+
+      const postLinkOutOfOrder = {
+        ...event("AA".repeat(32), OWNER, DELEGATE),
+        ledger_index: 12_301,
+        close_time: "2026-10-21T18:59:01.000Z",
+      };
+      const current = await processQuickNodeWatchdog(asD1(db), {
+        events: [postLinkOutOfOrder],
+      }, {
+        receivedAt: NOW.toISOString(),
+        network: "testnet",
+        action: "freeze",
+        runTag: "test_run",
+        registry,
+      });
+      expect(current).toMatchObject({ inserted: 1, newlyFrozen: 1 });
+      expect(current.events[0]).toMatchObject({
+        tx_hash: "AA".repeat(32),
+        class: "out_of_band_delegate",
+        action: "frozen",
+      });
+      expect(frozen).toEqual([OWNER]);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("uses the payer funding ledger as its activation floor", async () => {
+    const db = new SqliteD1();
+    const disabled: string[] = [];
+    const payer: WatchdogPayerAuthority = {
+      activationFloor: async (account) => account === PAYER
+        ? { ledgerIndex: 12_346, activatedAt: "2026-10-21T18:59:00.000Z" }
+        : undefined,
+      ownsTransaction: async () => false,
+      disable: async (account) => {
+        disabled.push(account);
+        return true;
+      },
+    };
+    try {
+      const historical = await processQuickNodeWatchdog(asD1(db), {
+        events: [event("BB".repeat(32), PAYER, null)],
+      }, {
+        receivedAt: NOW.toISOString(),
+        network: "testnet",
+        action: "freeze",
+        runTag: "test_run",
+        payer,
+      });
+      expect(historical).toMatchObject({ events: [], inserted: 0, newlyFrozen: 0 });
+      expect(disabled).toEqual([]);
+
+      const activated = await processQuickNodeWatchdog(asD1(db), {
+        events: [{
+          ...event("CC".repeat(32), PAYER, null),
+          ledger_index: 12_346,
+        }],
+      }, {
+        receivedAt: NOW.toISOString(),
+        network: "testnet",
+        action: "freeze",
+        runTag: "test_run",
+        payer,
+      });
+      expect(activated).toMatchObject({ inserted: 1, newlyFrozen: 1 });
+      expect(disabled).toEqual([PAYER]);
+    } finally {
+      db.close();
+    }
+  });
+
   it("reads only principal-owned events and projects the fixed next step", async () => {
     const db = new SqliteD1();
     try {
@@ -408,7 +523,9 @@ describe("QuickNode watchdog authority", () => {
       },
     };
     const payer: WatchdogPayerAuthority = {
-      isPayer: async (account) => account === PAYER,
+      activationFloor: async (account) => account === PAYER
+        ? { ledgerIndex: 12_000, activatedAt: "2026-10-21T18:59:00.000Z" }
+        : undefined,
       ownsTransaction: async (hash) => hash === HASH_PAYER,
       disable: async (account) => {
         disabled.push(account);
@@ -650,19 +767,26 @@ describe("QuickNode watchdog server seam", () => {
     const ap4mHash = "77".repeat(32);
     try {
       await db.prepare(
-        "INSERT INTO x402_payers (network, payer, status, updated_at) VALUES (?, ?, 'ready', ?)",
-      ).bind("testnet", PAYER, NOW.toISOString()).run();
+        `INSERT INTO x402_payers
+          (network, payer, status, funded_ledger_index, created_at, updated_at)
+         VALUES (?, ?, 'ready', ?, ?, ?)`,
+      ).bind("testnet", PAYER, 12_000, "2026-10-21T18:59:00.000Z", NOW.toISOString()).run();
       await db.prepare(
-        "INSERT INTO x402_payers (network, payer, status, updated_at) VALUES (?, ?, 'ready', ?)",
-      ).bind("devnet", PAYER, NOW.toISOString()).run();
+        `INSERT INTO x402_payers
+          (network, payer, status, funded_ledger_index, created_at, updated_at)
+         VALUES (?, ?, 'ready', ?, ?, ?)`,
+      ).bind("devnet", PAYER, 12_100, "2026-10-21T18:59:30.000Z", NOW.toISOString()).run();
       await db.prepare("INSERT INTO x402_payments (hash) VALUES (?)")
         .bind(x402Hash).run();
       await db.prepare("INSERT INTO ap4m_purchase_attempts (tx_hash) VALUES (?)")
         .bind(ap4mHash).run();
 
       const authority = createWatchdogPayerAuthority(asD1(db), "testnet");
-      await expect(authority.isPayer(PAYER, "testnet")).resolves.toBe(true);
-      await expect(authority.isPayer(OWNER, "testnet")).resolves.toBe(false);
+      await expect(authority.activationFloor(PAYER, "testnet")).resolves.toEqual({
+        ledgerIndex: 12_000,
+        activatedAt: "2026-10-21T18:59:00.000Z",
+      });
+      await expect(authority.activationFloor(OWNER, "testnet")).resolves.toBeUndefined();
       await expect(authority.ownsTransaction(x402Hash)).resolves.toBe(true);
       await expect(authority.ownsTransaction(ap4mHash)).resolves.toBe(true);
       await expect(authority.ownsTransaction("88".repeat(32))).resolves.toBe(false);

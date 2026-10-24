@@ -1211,6 +1211,7 @@ describe("model and session routes", () => {
     expect(await sessionResponse.json()).toEqual({
       mode: "demo",
       model: "provider/free-tools:free",
+      selected: false,
       connected: false,
       demo: expect.objectContaining({ available: true }),
     });
@@ -1284,6 +1285,7 @@ describe("model and session routes", () => {
     expect(await response.json()).toEqual({
       mode: "oauth",
       model: "provider/paid-tools",
+      selected: true,
       connected: true,
       demo: expect.objectContaining({ available: true }),
     });

@@ -90,6 +90,11 @@ async function installWalletFirstRoutes(
       });
       return;
     }
+    if (route.request().method() === "DELETE") {
+      walletAuthenticated = false;
+      await route.fulfill({ json: { authenticated: false } });
+      return;
+    }
     await route.fulfill({
       json: walletAuthenticated
         ? {
@@ -292,7 +297,7 @@ test("an unavailable free demo stays disabled without hiding OpenRouter or read-
   await expect(page.getByRole("link", { name: /Connect OpenRouter/i })).toBeVisible();
   expect(boundary.demoSessionResponses).toEqual([]);
 
-  await page.getByRole("button", { name: /Back/i }).click();
+  await page.getByRole("button", { name: /Use a different wallet/i }).click();
   await expect(page.getByRole("link", { name: /Explore the read-only demo/i })).toBeVisible();
 });
 

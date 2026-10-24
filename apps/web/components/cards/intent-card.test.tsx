@@ -22,7 +22,7 @@ vi.mock("./state-cards", async () => {
   };
 });
 
-import { IntentCard } from "./intent-card";
+import { IntentCard, testnetTransactionExplorerUrl } from "./intent-card";
 import { DraftingCard } from "./state-cards";
 
 const event: CardEvent = {
@@ -93,7 +93,7 @@ describe("IntentCard AWS trust receipt", () => {
     }));
 
     expect(markup).toContain("Key protected by AWS KMS");
-    expect(markup).toContain("Approved on Ledger");
+    expect(markup).toContain("Signed through configured Ledger flow");
     expect(markup).toContain("account 1");
   });
 
@@ -103,7 +103,34 @@ describe("IntentCard AWS trust receipt", () => {
       ownerSigner: { kind: "ledger", accountIndex: 99 } as never,
     }));
 
-    expect(markup).not.toContain("Approved on Ledger");
+    expect(markup).not.toContain("Signed through configured Ledger flow");
     expect(markup).toBe(renderToStaticMarkup(createElement(DraftingCard, { event })));
+  });
+
+  it("renders an explorer receipt only for a real validated Testnet 64-hex hash", () => {
+    const hash = "a".repeat(64);
+    const validated = { ...event, state: "validated" as const, hash };
+    const markup = renderToStaticMarkup(createElement(IntentCard, {
+      event: validated,
+      realLedgerReceipt: true,
+    }));
+    expect(markup).toContain("Validated ledger transaction · XRPL Testnet");
+    expect(markup).toContain(hash.toUpperCase());
+    expect(markup).toContain(`https://testnet.xrpl.org/transactions/${hash.toUpperCase()}`);
+    expect(testnetTransactionExplorerUrl(validated, true)).toBe(`https://testnet.xrpl.org/transactions/${hash.toUpperCase()}`);
+  });
+
+  it("never links submitted, simulated, malformed, mock, or non-Testnet receipts", () => {
+    const hash = "B".repeat(64);
+    const candidates: Array<{ candidate: CardEvent; real: boolean }> = [
+      { candidate: { ...event, state: "submitted", hash }, real: true },
+      { candidate: { ...event, state: "validated", hash: `SIM${"A".repeat(61)}` }, real: true },
+      { candidate: { ...event, state: "validated", hash }, real: false },
+      { candidate: { ...event, state: "validated", hash, intent: { ...event.intent, network: "devnet" } }, real: true },
+    ];
+    for (const { candidate, real } of candidates) {
+      expect(testnetTransactionExplorerUrl(candidate, real)).toBeUndefined();
+      expect(renderToStaticMarkup(createElement(IntentCard, { event: candidate, realLedgerReceipt: real }))).not.toContain("testnet.xrpl.org/transactions");
+    }
   });
 });

@@ -17,6 +17,7 @@ export const TRADING_ISOLATED_V1_MIGRATIONS = Object.freeze([
 	"0005_v2_approval_recovery.sql",
 	"0006_local_trading_isolated_onboarding_v1.sql",
 	"0012_isolated_sequence_authority.sql",
+	"0014_declarative_strategies.sql",
 ]);
 
 export const X402_ISOLATED_V1_MIGRATIONS = Object.freeze([
@@ -44,6 +45,7 @@ const PROFILES = Object.freeze({
 			"0005_v2_approval_recovery.sql": "f761f8b889b13a553c0f3baec40b5738bb136a40c6b6389144cfc70c47e8dfda",
 			"0006_local_trading_isolated_onboarding_v1.sql": "a2c8d06cc2eb763f9eb57ac33ecf4166463b0707e448f91186c2ec36296f4a48",
 			"0012_isolated_sequence_authority.sql": "6bb35501d472ca3ec7215e7073fde77433a8152644819ed0bdca51e4c3a659b9",
+			"0014_declarative_strategies.sql": "c6cea482f4ba8c31339695c7ee405fa898a4974d7c08d1a1f37e16ab232436ad",
 		}),
 	}),
 	"x402-isolated-v1": Object.freeze({

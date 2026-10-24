@@ -61,7 +61,7 @@ function decision(id: string): StrategyDecision {
 }
 
 describe("StrategyStore durable isolation and concurrency", () => {
-  it("scopes the fail-closed global kill by principal, owner and network", async () => {
+  it("scopes the fail-closed global kill by owner and network within one principal binding", async () => {
     const database = new Database();
     try {
       const store = new StrategyStore(d1(database), "shared-principal");

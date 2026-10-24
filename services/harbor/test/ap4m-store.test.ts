@@ -289,6 +289,20 @@ function result(): Ap4mStoredResult {
 			at: '2026-10-21T18:04:00.000Z',
 		},
 		data: merchantResponse().data,
+		evidence: {
+			version: 'ap4m-public-evidence-v1',
+			provenance: 'live-testnet',
+			network: 'testnet',
+			rail: 'exact',
+			intent: preparedContext().intent,
+			artifacts: [
+				{ kind: 'l1', digest: 'A'.repeat(64), digest_basis: 'sha256-utf8/vi-l1-presentation' },
+				{ kind: 'l2', digest: 'B'.repeat(64), digest_basis: 'sha256-utf8/vi-l2-merchant-presentation' },
+				{ kind: 'l3a', digest: L3A_DIGEST.toUpperCase(), digest_basis: 'sha256-utf8/vi-l3a-presentation' },
+				{ kind: 'l3b', digest: L3B_DIGEST.toUpperCase(), digest_basis: 'sha256-utf8/vi-l3b-presentation' },
+				{ kind: 'payment', digest: HASH, digest_basis: 'xrpl/signed-transaction-hash' },
+			],
+		},
 	};
 }
 
@@ -687,6 +701,12 @@ describe('Ap4mPurchaseStore settlement safety', () => {
 			hash: HASH, ledgerIndex: 49, deliveredAmount: '6', at: '2026-10-21T18:03:40.000Z',
 		})).outcome).toBe('transitioned');
 		expect(db.database.prepare('SELECT status FROM ap4m_spend').get()).toEqual({ status: 'committed' });
+		const missingEvidence = result();
+		delete missingEvidence.evidence;
+		await expect(store.markDelivered(MANDATE, 'idem-1', {
+			result: missingEvidence, at: '2026-10-21T18:03:45.000Z',
+		})).rejects.toBeInstanceOf(Ap4mPurchaseStoreError);
+		expect((await store.get(MANDATE, 'idem-1'))?.status).toBe('settled');
 		const wrongSemanticAsset = result();
 		wrongSemanticAsset.receipt.amount.asset.currency = 'USD';
 		await expect(store.markDelivered(MANDATE, 'idem-1', {
@@ -702,6 +722,12 @@ describe('Ap4mPurchaseStore settlement safety', () => {
 		expect((await store.markDelivered(MANDATE, 'idem-1', {
 			result: result(), at: '2026-10-21T18:04:00.000Z',
 		})).outcome).toBe('replay');
+		const legacy = result();
+		delete legacy.evidence;
+		db.database.prepare(
+			'UPDATE ap4m_purchase_attempts SET result_json = ? WHERE mandate_id = ? AND idempotency_key = ?',
+		).run(JSON.stringify(legacy), MANDATE, 'idem-1');
+		expect((await store.get(MANDATE, 'idem-1'))?.result).toEqual(legacy);
 	});
 
 	it('releases pre-signing failures exactly once but never releases settlement-unknown', async () => {

@@ -7,6 +7,7 @@ import {
   readOpenFinanceSession,
   sealOpenFinanceSession,
 } from "../../../../../lib/mastercard/open-finance";
+import { resolvePilotRequestAuthority } from "../../../../../lib/runtime-profile";
 
 function noStore(response: NextResponse): NextResponse {
   response.headers.set("Cache-Control", "no-store");
@@ -18,9 +19,29 @@ function errorResponse(error: unknown, fallback: string): NextResponse {
   return noStore(NextResponse.json({ error: message }, { status: 400 }));
 }
 
+function isSameOriginRequest(request: Request): boolean {
+  try {
+    const expectedOrigin = resolvePilotRequestAuthority(process.env, request).origin;
+    return request.headers.get("origin") === expectedOrigin;
+  } catch {
+    return false;
+  }
+}
+
+function rejectCrossOrigin(request: Request): NextResponse | undefined {
+  if (isSameOriginRequest(request)) return undefined;
+  return noStore(NextResponse.json(
+    { error: "Cross-origin Open Finance request rejected" },
+    { status: 403 },
+  ));
+}
+
 export async function startOpenFinance(
+  request: NextRequest,
   service: OpenFinanceService,
 ): Promise<NextResponse> {
+  const rejected = rejectCrossOrigin(request);
+  if (rejected) return rejected;
   try {
     const started = await service.start();
     const response = NextResponse.json({
@@ -46,6 +67,8 @@ export async function refreshOpenFinance(
   request: NextRequest,
   service: OpenFinanceService,
 ): Promise<NextResponse> {
+  const rejected = rejectCrossOrigin(request);
+  if (rejected) return rejected;
   const session = readOpenFinanceSession(request);
   if (!session) {
     return noStore(NextResponse.json({ error: "Open Finance session is unavailable" }, { status: 401 }));

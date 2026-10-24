@@ -6,6 +6,7 @@
 import type { CardEvent, CardState, Intent, PolicyResult } from "@pilot/contracts";
 
 import { demoAwsTrust, demoIntent, fixtureEvent } from "../../app/chat/fixtures";
+import type { RecommendedRequestMode } from "./request-mode";
 
 export type DemoScenarioId =
   | "swap"
@@ -100,16 +101,44 @@ export function classifyDemoPrompt(prompt: string): DemoScenarioId {
 }
 
 /** Builds the scripted plan for a prompt. `seq` keeps intent ids unique per turn. */
-export function routeDemoPrompt(prompt: string, seq: number): DemoPlan {
+export function routeDemoPrompt(
+  prompt: string,
+  seq: number,
+  mode: RecommendedRequestMode = "one_time",
+): DemoPlan {
+  if (mode === "clarify") {
+    return {
+      scenario: "fallback",
+      reply: "The request does not say whether this should be one transaction, a recurring rule, or an autonomous strategy. Choose a request mode or clarify the scope. This simulation creates no authority and sends nothing to a wallet or ledger.",
+      events: [],
+      followUp: "No transaction, schedule, or mandate was created.",
+    };
+  }
+  if (mode === "recurring") {
+    return {
+      scenario: "fallback",
+      reply: "Recurring mode would draft a bounded schedule for review: exact interval, action, Testnet account and assets, cumulative value and fee caps, trade count, cooldown, and expiry. This signed-out simulation does not create or run that schedule.",
+      events: [],
+      followUp: "Review and owner approval would be separate. Nothing touched a wallet or ledger.",
+    };
+  }
+  if (mode === "autonomous") {
+    return {
+      scenario: "fallback",
+      reply: "Autonomous mode would draft a supported declarative strategy for immutable review: ordered rules, exact Testnet account and assets, actions, limits, expiry, semantics version, and digest. Choosing the mode is not approval, and this signed-out simulation cannot activate or execute it.",
+      events: [],
+      followUp: "No mandate, wallet proof, transaction, or ledger submission was created.",
+    };
+  }
   if (prompt.trim().toLowerCase() === "review the recorded ledger approval") {
-    return recordedLedgerOfferPlan(seq);
+    return oneTimeOnly(recordedLedgerOfferPlan(seq));
   }
   const scenario = classifyDemoPrompt(prompt);
   switch (scenario) {
     case "swap":
-      return swapPlan(parseSwap(prompt) ?? { amount: 80, sell: "RLUSD", buy: "XRP" }, seq);
+      return oneTimeOnly(swapPlan(parseSwap(prompt) ?? { amount: 80, sell: "RLUSD", buy: "XRP" }, seq));
     case "vault":
-      return vaultPlan(prompt, seq);
+      return oneTimeOnly(vaultPlan(prompt, seq));
     case "blocked":
       return blockedPlan(seq);
     case "compare":
@@ -126,6 +155,13 @@ export function routeDemoPrompt(prompt: string, seq: number): DemoPlan {
         events: [],
       };
   }
+}
+
+function oneTimeOnly(plan: DemoPlan): DemoPlan {
+  return {
+    ...plan,
+    followUp: `${plan.followUp ? `${plan.followUp} ` : ""}This is one simulated transaction only; it creates no recurring schedule or autonomous mandate.`,
+  };
 }
 
 function recordedLedgerOfferPlan(seq: number): DemoPlan {

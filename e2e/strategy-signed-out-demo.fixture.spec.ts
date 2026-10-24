@@ -109,7 +109,7 @@ test("signed-out visitors can explore deterministic bounded decisions without co
 
   const response = await page.goto("/strategy");
   expect(response?.ok()).toBe(true);
-  await expect(page.getByRole("heading", { name: "Explore a bounded rebalancer" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Explore bounded autonomous strategies" })).toBeVisible();
   await expect(page.getByText(/illustrative simulation.*client only/i)).toBeVisible();
   await expect(page.getByText(/simulator itself uses no wallet.*network-dependent/i)).toBeVisible();
   await expect(page.getByRole("heading", { name: "Sample assumptions" })).toBeAttached();
@@ -201,7 +201,7 @@ test("mobile reduced-motion demo remains manual, keyboard operable, and containe
   const boundary = await installSignedOutNoConfigBoundary(page, lane.baseURL);
 
   await page.goto("/strategy");
-  await expect(page.getByRole("heading", { name: "Explore a bounded rebalancer" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Explore bounded autonomous strategies" })).toBeVisible();
   const decision = page.getByRole("status", { name: /simulation decision/i });
   const before = await decision.textContent();
   await page.waitForTimeout(1_500);

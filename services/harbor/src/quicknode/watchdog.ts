@@ -53,9 +53,17 @@ export type WatchdogRegistry = Readonly<{
   ): Promise<{ ok: boolean; skipped: boolean }>;
 }>;
 
+export type WatchdogActivationFloor = Readonly<{
+  ledgerIndex: number | null;
+  activatedAt: string;
+}>;
+
 /** The configured AP4M/x402 runtime supplies this without exposing its key. */
 export type WatchdogPayerAuthority = Readonly<{
-  isPayer(account: string, network: WatchdogNetwork): Promise<boolean>;
+  activationFloor(
+    account: string,
+    network: WatchdogNetwork,
+  ): Promise<WatchdogActivationFloor | undefined>;
   ownsTransaction(hash: string): Promise<boolean>;
   disable(account: string, reason: string, at: string): Promise<boolean>;
 }>;
@@ -79,6 +87,7 @@ type LinkMatch = {
   id: string;
   owner: string;
   frozen_at: string | null;
+  created_at: string;
 };
 
 type StoredEvent = {
@@ -115,7 +124,7 @@ async function linkForDelegate(
   if (!event.delegate) return undefined;
   const rows = await db
     .prepare(
-      `SELECT id, owner, frozen_at FROM links
+      `SELECT id, owner, frozen_at, created_at FROM links
         WHERE network = ? AND owner = ? AND delegate = ?
           AND status <> 'revoked' AND revoke_tx IS NULL
         ORDER BY id LIMIT 2`,
@@ -123,6 +132,32 @@ async function linkForDelegate(
     .bind(network, event.account, event.delegate)
     .all<LinkMatch>();
   return rows.results.length === 1 ? rows.results[0] : undefined;
+}
+
+function closeTimeMilliseconds(value: string): number | undefined {
+  if (/^\d{1,12}$/.test(value)) {
+    const rippleSeconds = Number(value);
+    const milliseconds = (rippleSeconds + 946_684_800) * 1_000;
+    return Number.isSafeInteger(milliseconds) ? milliseconds : undefined;
+  }
+  const milliseconds = Date.parse(value);
+  return Number.isFinite(milliseconds) ? milliseconds : undefined;
+}
+
+function isAtOrAfterActivation(
+  event: WatchdogStreamEvent,
+  floor: WatchdogActivationFloor,
+): boolean {
+  if (floor.ledgerIndex !== null) {
+    return Number.isSafeInteger(floor.ledgerIndex) &&
+      floor.ledgerIndex >= 0 &&
+      event.ledger_index >= floor.ledgerIndex;
+  }
+  const eventAt = closeTimeMilliseconds(event.close_time);
+  const activatedAt = Date.parse(floor.activatedAt);
+  return eventAt !== undefined &&
+    Number.isFinite(activatedAt) &&
+    eventAt >= activatedAt;
 }
 
 async function isBudgetAccount(
@@ -149,6 +184,10 @@ async function classify(
 ): Promise<{ classification: WatchdogEvent["class"]; link?: LinkMatch } | undefined> {
   const link = await linkForDelegate(db, event, network);
   if (link) {
+    if (!isAtOrAfterActivation(event, {
+      ledgerIndex: null,
+      activatedAt: link.created_at,
+    })) return undefined;
     return {
       classification: await executionExists(db, event.tx_hash)
         ? "harbor"
@@ -159,7 +198,10 @@ async function classify(
   if (!event.delegate && await isBudgetAccount(db, event.account, network)) {
     return { classification: "owner" };
   }
-  if (payer && await payer.isPayer(event.account, network)) {
+  const payerFloor = payer
+    ? await payer.activationFloor(event.account, network)
+    : undefined;
+  if (payer && payerFloor && isAtOrAfterActivation(event, payerFloor)) {
     return {
       classification: await payer.ownsTransaction(event.tx_hash)
         ? "harbor"

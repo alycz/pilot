@@ -4,6 +4,7 @@ import { decode, type Payment } from 'xrpl';
 import type { OpContext, OpDef } from '../catalog/registry';
 import {
 	Ap4mReceiptSchema,
+	Ap4mPublicEvidenceSchema,
 	PolicySchema,
 	type Mandate,
 	type Merchant,
@@ -27,6 +28,9 @@ import {
 	validateAp4mSignedPayment,
 	type Ap4mLedgerPreparation,
 } from '../exec/ap4m-purchase';
+import {
+	buildExactAp4mPublicEvidence,
+} from '../exec/ap4m-evidence';
 import {
 	Ap4mTypedDataSchema,
 	validateAp4mMerchantResponse,
@@ -348,6 +352,9 @@ function strictReplay(row: Ap4mPurchaseAttempt): Ap4mPurchaseResult {
 	return {
 		receipt: Ap4mReceiptSchema.parse(row.result.receipt),
 		data: Ap4mTypedDataSchema.parse(row.result.data),
+		...(row.result.evidence === undefined ? {} : {
+			evidence: Ap4mPublicEvidenceSchema.parse(row.result.evidence),
+		}),
 	};
 }
 
@@ -886,7 +893,16 @@ export async function handleAp4mPurchase(ctx: OpContext, raw: Ap4mPurchaseArgs):
 			paidAmount: context.receiptAmount,
 			settlement: { scheme: 'exact', settlement: 'validated', proof: { tx_hash: attempt.txHash! } }, at,
 		});
-		const delivered = await purchaseStore.markDelivered(args.mandate_id, args.idempotency_key, { result, at });
+		const evidence = await buildExactAp4mPublicEvidence({
+			mandate: mandate.mandate,
+			context,
+			receipt: result.receipt,
+			txHash: attempt.txHash!,
+		});
+		const delivered = await purchaseStore.markDelivered(args.mandate_id, args.idempotency_key, {
+			result: { ...result, evidence },
+			at,
+		});
 		if (delivered.outcome !== 'transitioned' && delivered.outcome !== 'replay') {
 			throw new Ap4mPurchaseError('Purchase receipt could not be persisted', 'PURCHASE_FAILED');
 		}
@@ -1263,7 +1279,7 @@ export const ops: OpDef[] = [{
 	summary: 'Purchase one allowlisted AP4M product under an active Testnet mandate.',
 	tags: ['ap4m', 'mastercard', 'x402', 'requires-credential', 'testnet'],
 	args: Ap4mPurchaseArgsSchema,
-	returns: '{ receipt: Ap4mReceipt, data: Ap4mTypedData }',
+	returns: '{ receipt: Ap4mReceipt, data: Ap4mTypedData, evidence?: Ap4mPublicEvidence }',
 	caveats: [],
 	example: 'await harbor.ap4m.purchase({ mandate_id: "...", merchant_id: "venue-yield-desk", sku: "yield-report", idempotency_key: "request-uuid" })',
 	handler: (ctx, args) => handleAp4mPurchase(ctx, args as Ap4mPurchaseArgs),

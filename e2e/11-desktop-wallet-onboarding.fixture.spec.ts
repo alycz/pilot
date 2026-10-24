@@ -134,7 +134,12 @@ test("desktop wallet guidance is ordered, official, keyboard reachable, and seed
   await expect(gemSetup).toBeFocused();
   await tabUntilFocused(page, crossmarkSetup);
   await expect(crossmarkSetup).toBeFocused();
-  expect(await page.locator('input[name*="seed" i], input[name*="private" i], textarea').count()).toBe(0);
+  expect(await page.locator([
+    'input[name*="seed" i]',
+    'input[name*="private" i]',
+    'textarea[name*="seed" i]',
+    'textarea[name*="private" i]',
+  ].join(", ")).count()).toBe(0);
 
   const xaman = page.getByRole("button", { name: /Xaman/i });
   await expect(xaman).toBeDisabled();
@@ -255,6 +260,63 @@ test("a Mainnet GemWallet fails closed before Pilot issues a Testnet challenge",
   expect(boundary.walletChallengeRequests).toEqual([]);
   expect(boundary.modelRequests).toEqual([]);
   expect(boundary.tradingRequests).toEqual([]);
+});
+
+test("a rejected GemWallet connection stays before every Pilot authority boundary", async ({
+  page,
+  lane,
+}) => {
+  requireLane(lane, "fixture");
+  const boundary = createWalletOnboardingBoundary();
+  await installSyntheticGemWallet(page, { connectOutcomes: ["rejected"] });
+  await installWalletOnboardingRoutes(page, boundary, { baseURL: lane.baseURL });
+
+  await page.goto(pilotRoutes.onboarding);
+  await page.getByRole("button", { name: /GemWallet/i }).click();
+  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Connect account/i }).click();
+
+  await expect(page.getByRole("alert").filter({
+    hasText: /connection.*rejected|cancelled|canceled/i,
+  }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: /Connect account/i })).toBeVisible();
+  expect(boundary.walletChallengeRequests).toEqual([]);
+  expect(boundary.walletSessionMethods.filter((method) => method === "POST")).toEqual([]);
+  expect(boundary.modelRequests).toEqual([]);
+  expect(boundary.tradingRequests).toEqual([]);
+});
+
+test("a rejected GemWallet authentication proof stays unauthenticated and retries explicitly", async ({
+  page,
+  lane,
+}) => {
+  requireLane(lane, "fixture");
+  const boundary = createWalletOnboardingBoundary();
+  await installSyntheticGemWallet(page, { proofOutcomes: ["rejected", "success"] });
+  await installWalletOnboardingRoutes(page, boundary, { baseURL: lane.baseURL });
+
+  await page.goto(pilotRoutes.onboarding);
+  await page.getByRole("button", { name: /GemWallet/i }).click();
+  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Connect account/i }).click();
+  await page.getByRole("button", { name: /Sign authentication proof/i }).click();
+
+  await expect(page.getByRole("alert").filter({
+    hasText: /signing.*rejected|cancelled|canceled/i,
+  }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: /Sign authentication proof/i })).toBeVisible();
+  expect(boundary.walletChallengeRequests).toEqual(["POST /api/auth/wallet/challenge"]);
+  expect(boundary.walletSessionMethods.filter((method) => method === "POST")).toEqual([]);
+  expect(boundary.modelRequests).toEqual([]);
+  expect(boundary.tradingRequests).toEqual([]);
+
+  await page.getByRole("button", { name: /Sign authentication proof/i }).click();
+  await expect(page.getByRole("heading", { name: /Choose model access/i })).toBeVisible();
+  expect(boundary.walletChallengeRequests).toEqual([
+    "POST /api/auth/wallet/challenge",
+    "POST /api/auth/wallet/challenge",
+  ]);
+  expect(boundary.walletSessionMethods.filter((method) => method === "POST")).toEqual(["POST"]);
 });
 
 test("missing Crossmark fails during the prompt-free availability check", async ({
@@ -637,6 +699,38 @@ test("switching providers after account connection clears pre-proof wallet state
   expect((await readSyntheticCrossmarkCalls(page)).filter(
     (call) => call.startsWith("sign:"),
   )).toEqual([]);
+  expect(boundary.walletSessionMethods.filter((method) => method === "DELETE")).toEqual([]);
+});
+
+test("switching identity clears the authenticated wallet and model authority first", async ({
+  page,
+  lane,
+}) => {
+  requireLane(lane, "fixture");
+  const boundary = createWalletOnboardingBoundary();
+  await installSyntheticGemWallet(page);
+  await installSyntheticCrossmark(page);
+  await installWalletOnboardingRoutes(page, boundary, { baseURL: lane.baseURL });
+
+  await page.goto(pilotRoutes.onboarding);
+  await page.getByRole("button", { name: /Crossmark/i }).click();
+  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Connect account/i }).click();
+  await page.getByRole("button", { name: /Sign authentication proof/i }).click();
+  await expect(page.getByRole("heading", { name: /Choose model access/i })).toBeVisible();
+
+  const deletesBeforeSwitch = boundary.walletSessionMethods.filter(
+    (method) => method === "DELETE",
+  ).length;
+  await page.getByRole("button", { name: /Use a different wallet/i }).click();
+  await expect(page.getByRole("heading", { name: /Authenticate your budget wallet/i })).toBeVisible();
+  await page.getByRole("button", { name: /GemWallet/i }).click();
+
+  await expect(page.getByRole("button", { name: /Check extension/i })).toBeVisible();
+  expect(boundary.walletSessionMethods.filter(
+    (method) => method === "DELETE",
+  )).toHaveLength(deletesBeforeSwitch + 1);
+  await expect(page.getByRole("heading", { name: /Choose model access/i })).toHaveCount(0);
 });
 
 test("a saved delegation rejects a different provider before wallet proof", async ({
@@ -714,6 +808,261 @@ test("wallet and model readiness creates no trading authority until explicit opt
   });
 });
 
+test("wallet proof alone creates a Pilot account and model setup stays optional", async ({
+  page,
+  lane,
+  evidence,
+}, testInfo) => {
+  requireLane(lane, "fixture");
+  const boundary = createWalletOnboardingBoundary();
+  await installSyntheticCrossmark(page);
+  await installWalletOnboardingRoutes(page, boundary, { baseURL: lane.baseURL });
+
+  await page.goto(pilotRoutes.onboarding);
+  await page.getByRole("button", { name: /Crossmark/i }).click();
+  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Connect account/i }).click();
+  await page.getByRole("button", { name: /Sign authentication proof/i }).click();
+
+  await expect(page.getByText(/wallet account ready/i).first()).toBeVisible();
+  await page.getByRole("button", { name: /Skip model setup/i }).click();
+
+  await expect(page.getByRole("heading", { name: /Wallet account ready/i })).toBeVisible();
+  await expect(page.getByText(/Not configured · optional/i)).toBeVisible();
+  await expect(page.getByText(/Model access remains unconfigured/i)).toBeVisible();
+  expect(boundary.walletChallengeRequests).toEqual(["POST /api/auth/wallet/challenge"]);
+  expect(boundary.walletSessionMethods.filter((method) => method === "POST")).toEqual(["POST"]);
+  expect(boundary.demoSessionWrites).toEqual([]);
+  expect(boundary.tradingRequests).toEqual([]);
+  await attachPageScreenshot(page, testInfo, "mock-provider-conformance-wallet-account-ready");
+
+  evidence.record("wallet-account-without-model-fixture", {
+    evidenceKind: "mock-provider-conformance",
+    realExtensionConnected: false,
+    realWalletProof: false,
+    walletSessionWrites: 1,
+    modelSessionWrites: 0,
+    tradingRequests: 0,
+    assertion: "A verified wallet proof completes Pilot account onboarding without OpenRouter, demo-model, or trading authority.",
+  });
+});
+
+test("a valid wallet session survives same-tab reload without restoring signing authority", async ({
+  page,
+  lane,
+}) => {
+  requireLane(lane, "fixture");
+  const boundary = createWalletOnboardingBoundary();
+  await installSyntheticCrossmark(page);
+  await installWalletOnboardingRoutes(page, boundary, { baseURL: lane.baseURL });
+
+  await page.goto(pilotRoutes.onboarding);
+  await page.getByRole("button", { name: /Crossmark/i }).click();
+  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Connect account/i }).click();
+  await page.getByRole("button", { name: /Sign authentication proof/i }).click();
+  await expect(page.getByRole("heading", { name: /Choose model access/i })).toBeVisible();
+  const proofCalls = (await readSyntheticCrossmarkCalls(page)).filter(
+    (call) => call === "sign:AccountSet",
+  );
+  expect(proofCalls).toEqual(["sign:AccountSet"]);
+
+  await page.reload();
+
+  await expect(page.getByRole("heading", { name: /Choose model access/i })).toBeVisible();
+  expect((await readSyntheticCrossmarkCalls(page)).filter(
+    (call) => call === "sign:AccountSet",
+  )).toEqual([]);
+});
+
+test("same-tab restore shows the existing OAuth session and skip clears it server-side", async ({
+  page,
+  lane,
+}) => {
+  requireLane(lane, "fixture");
+  const boundary = createWalletOnboardingBoundary();
+  await installSyntheticCrossmark(page);
+  await installWalletOnboardingRoutes(page, boundary, {
+    baseURL: lane.baseURL,
+    oauthConnected: true,
+    walletSession: "authenticated",
+  });
+  await page.addInitScript(({ account }) => {
+    sessionStorage.setItem("pilot:wallet", JSON.stringify({
+      provider: "crossmark",
+      network: "testnet",
+      account,
+    }));
+  }, { account: WALLET_FIXTURE_ACCOUNT });
+
+  await page.goto(pilotRoutes.onboarding);
+
+  await expect(page.getByRole("heading", { name: /Choose model access/i })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Reconnect OpenRouter/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Continue with OpenRouter/i })).toBeVisible();
+  expect((await readSyntheticCrossmarkCalls(page)).filter(
+    (call) => call === "sign:AccountSet",
+  )).toEqual([]);
+
+  await page.getByRole("button", { name: /Skip model setup/i }).click();
+
+  await expect(page.getByRole("heading", { name: /Wallet account ready/i })).toBeVisible();
+  await expect(page.getByText(/Not configured · optional/i)).toBeVisible();
+  expect(boundary.modelRequests.filter(
+    (request) => request === "DELETE /api/auth/openrouter/session",
+  )).toEqual(["DELETE /api/auth/openrouter/session"]);
+});
+
+for (const callbackPath of ["", "?openrouter=connected"] as const) {
+  test(`a transient model-session failure preserves wallet identity${callbackPath ? " after OAuth return" : " on same-tab restore"}`, async ({
+    page,
+    lane,
+  }) => {
+    requireLane(lane, "fixture");
+    const boundary = createWalletOnboardingBoundary();
+    await installSyntheticCrossmark(page);
+    await installWalletOnboardingRoutes(page, boundary, {
+      baseURL: lane.baseURL,
+      oauthConnected: true,
+      walletSession: "authenticated",
+    });
+    await page.addInitScript(({ account }) => {
+      sessionStorage.setItem("pilot:wallet", JSON.stringify({
+        provider: "crossmark",
+        network: "testnet",
+        account,
+      }));
+    }, { account: WALLET_FIXTURE_ACCOUNT });
+    await page.route("**/api/auth/openrouter/session", async (route) => {
+      if (route.request().method() === "GET") {
+        await route.abort("failed");
+        return;
+      }
+      await route.fallback();
+    });
+
+    await page.goto(`${pilotRoutes.onboarding}${callbackPath}`);
+
+    await expect(page.getByRole("heading", { name: /Choose model access/i })).toBeVisible();
+    await expect(page.getByText(WALLET_FIXTURE_ACCOUNT)).toBeVisible();
+    await expect(page.getByRole("status").filter({
+      hasText: /could not check.*model session/i,
+    })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Try free demo/i })).toBeDisabled();
+    await expect(page.getByRole("link", { name: /Connect OpenRouter/i })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Skip model setup/i })).toBeEnabled();
+    await expect(page.getByRole("heading", { name: /Authenticate your budget wallet/i })).toHaveCount(0);
+    expect((await readSyntheticCrossmarkCalls(page)).filter(
+      (call) => call === "sign:AccountSet",
+    )).toEqual([]);
+  });
+}
+
+test("an indeterminate session check keeps identity visible and locks authority changes", async ({
+  page,
+  lane,
+}) => {
+  requireLane(lane, "fixture");
+  const boundary = createWalletOnboardingBoundary();
+  await installSyntheticCrossmark(page);
+  await installWalletOnboardingRoutes(page, boundary, { baseURL: lane.baseURL });
+
+  await page.goto(pilotRoutes.onboarding);
+  await page.getByRole("button", { name: /Crossmark/i }).click();
+  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Connect account/i }).click();
+  await page.getByRole("button", { name: /Sign authentication proof/i }).click();
+  await expect(page.getByRole("heading", { name: /Choose model access/i })).toBeVisible();
+
+  await page.route("**/api/auth/wallet/session", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.abort("failed");
+      return;
+    }
+    await route.fallback();
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event("pilot:wallet-session-changed")));
+
+  await expect(page.getByRole("heading", { name: /Choose model access/i })).toBeVisible();
+  await expect(page.getByRole("status").filter({
+    hasText: /could not revalidate.*known account remains visible/i,
+  })).toBeVisible();
+  await expect(page.getByText(WALLET_FIXTURE_ACCOUNT)).toBeVisible();
+  await expect(page.getByRole("button", { name: /Try free demo/i })).toBeDisabled();
+  await expect(page.getByRole("link", { name: /Connect OpenRouter/i })).toHaveCount(0);
+  await expect(page.locator('[aria-disabled="true"]').filter({
+    hasText: /Connect OpenRouter/i,
+  })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Authenticate your budget wallet/i })).toHaveCount(0);
+});
+
+test("an indeterminate check during optional trading preserves state and exposes no authority control", async ({
+  page,
+  lane,
+}) => {
+  requireLane(lane, "fixture");
+  const boundary = createWalletOnboardingBoundary();
+  await installSyntheticCrossmark(page);
+  await installWalletOnboardingRoutes(page, boundary, { baseURL: lane.baseURL });
+
+  await page.goto(pilotRoutes.onboarding);
+  await page.getByRole("button", { name: /Crossmark/i }).click();
+  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Connect account/i }).click();
+  await page.getByRole("button", { name: /Sign authentication proof/i }).click();
+  await page.getByRole("button", { name: /Skip model setup/i }).click();
+  await page.getByRole("button", { name: /Enable Testnet trading/i }).click();
+  await expect(page.getByRole("heading", { name: /Prepare the budget account/i })).toBeVisible();
+  const providerCallsBeforeFailure = await readSyntheticCrossmarkCalls(page);
+  const tradingRequestsBeforeFailure = [...boundary.tradingRequests];
+
+  await page.route("**/api/auth/wallet/session", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.abort("failed");
+      return;
+    }
+    await route.fallback();
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event("pilot:wallet-session-changed")));
+
+  await expect(page.getByRole("heading", { name: /Trading changes are locked/i })).toBeVisible();
+  await expect(page.getByText(/partially completed Testnet setup is preserved/i)).toBeVisible();
+  await expect(page.getByText(/may still remain active/i)).toBeVisible();
+  await expect(page.getByRole("button", { name: /Create trust line/i })).toHaveCount(0);
+  expect(await readSyntheticCrossmarkCalls(page)).toEqual(providerCallsBeforeFailure);
+  expect(boundary.tradingRequests).toEqual(tradingRequestsBeforeFailure);
+});
+
+test("an invalidated live wallet session immediately removes model readiness", async ({
+  page,
+  lane,
+}) => {
+  requireLane(lane, "fixture");
+  const boundary = createWalletOnboardingBoundary();
+  await installSyntheticCrossmark(page);
+  await installWalletOnboardingRoutes(page, boundary, { baseURL: lane.baseURL });
+
+  await page.goto(pilotRoutes.onboarding);
+  await page.getByRole("button", { name: /Crossmark/i }).click();
+  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Connect account/i }).click();
+  await page.getByRole("button", { name: /Sign authentication proof/i }).click();
+  await expect(page.getByRole("heading", { name: /Choose model access/i })).toBeVisible();
+
+  await page.route("**/api/auth/wallet/session", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({ json: { authenticated: false } });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event("pilot:wallet-session-changed")));
+
+  await expect(page.getByRole("heading", { name: /Authenticate your budget wallet/i })).toBeVisible();
+  await expect(page.getByText(/wallet session is no longer valid/i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Choose model access/i })).toHaveCount(0);
+});
+
 test("an authenticated server session without tab metadata requires exact-wallet reconnect", async ({
   page,
   lane,
@@ -732,7 +1081,7 @@ test("an authenticated server session without tab metadata requires exact-wallet
     hasText: /reconnect the exact wallet|reconnect.*this tab/i,
   }).first()).toBeVisible();
   await expect(page.getByRole("heading", { name: /Choose model access/i })).toHaveCount(0);
-  expect(boundary.modelRequests).toEqual(["GET /api/auth/openrouter/session"]);
+  expect(boundary.modelRequests).toEqual([]);
   expect(boundary.tradingRequests).toEqual([]);
 
   evidence.record("wallet-new-tab-reconnect-fixture", {
@@ -767,7 +1116,7 @@ test("an expired wallet session stays before model selection and trading", async
   await expect(page.getByRole("alert").filter({
     hasText: /reconnect the exact wallet|session expired/i,
   }).first()).toBeVisible();
-  expect(boundary.modelRequests).toEqual(["GET /api/auth/openrouter/session"]);
+  expect(boundary.modelRequests).toEqual([]);
   expect(boundary.tradingRequests).toEqual([]);
   expect(await readSyntheticCrossmarkCalls(page)).not.toContain("sign:AccountSet");
 });

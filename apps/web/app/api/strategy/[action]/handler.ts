@@ -4,7 +4,11 @@ import {
   type ArgsFor,
   type HarborOpName,
 } from "@pilot/harbor-client";
-import { StrategyKillSwitchSchema } from "@pilot/contracts";
+import {
+  StrategyKillSwitchSchema,
+  TESTNET_RLUSD_CURRENCY,
+  TESTNET_RLUSD_ISSUER,
+} from "@pilot/contracts";
 
 import { resolvePilotRequestAuthority } from "../../../../lib/runtime-profile";
 import { verifyAndConsumeStrategyProof, type StrategyProofAction } from "../../../../lib/strategy-mandate-proof";
@@ -12,7 +16,7 @@ import { readWalletSession } from "../../../../lib/wallet-session";
 
 const MAX_BODY_BYTES = 65_536;
 const SAFE_ACTIONS = new Set([
-  "create", "list", "get", "audit", "activate", "pause", "resume", "stop", "kill",
+  "validate", "simulate", "create", "list", "get", "audit", "activate", "pause", "resume", "stop", "kill",
   "global-kill-get", "global-kill-enable", "global-kill-clear",
 ]);
 
@@ -130,6 +134,20 @@ function assertResponseScope(
       (event as { strategy_id?: unknown }).strategy_id !== args.strategy_id)) throw new Error();
     return;
   }
+  if (op === "strategy.validate") {
+    if (!envelope.data || typeof envelope.data !== "object" || Array.isArray(envelope.data)) throw new Error();
+    const normalized = (envelope.data as { normalized_proposal?: unknown }).normalized_proposal;
+    if (normalized !== undefined && (!normalized || typeof normalized !== "object" || Array.isArray(normalized) ||
+      (normalized as { account?: unknown }).account !== account ||
+      (normalized as { network?: unknown }).network !== "testnet")) throw new Error();
+    return;
+  }
+  if (op === "strategy.simulate") {
+    if (!envelope.data || typeof envelope.data !== "object" || Array.isArray(envelope.data) ||
+      (envelope.data as { boundary?: unknown }).boundary !== "paper_only" ||
+      (envelope.data as { ledger_acceptance?: unknown }).ledger_acceptance !== "not_tested") throw new Error();
+    return;
+  }
   if (op !== "strategy.create" && op !== "strategy.list" && op !== "strategy.get" &&
     op !== "strategy.authorize" && op !== "strategy.pause" && op !== "strategy.resume" &&
     op !== "strategy.stop" && op !== "strategy.kill") return;
@@ -166,6 +184,22 @@ type Call = {
 
 async function operation(action: string, body: Record<string, unknown>, owner: string): Promise<Call> {
   const scoped = { owner, network: "testnet" as const };
+  if (action === "validate") {
+    const proposal = bindProposalScope(body, owner);
+    return { op: "strategy.validate", args: proposal };
+  }
+  if (action === "simulate") {
+    exactKeys(body, ["proposal", "observation", "at"]);
+    if (!safeObject(body.proposal) || !safeObject(body.observation) || typeof body.at !== "string") throw new Error();
+    return {
+      op: "strategy.simulate",
+      args: {
+        proposal: bindProposalScope(body.proposal, owner),
+        observation: bindObservationScope(body.observation, owner),
+        at: body.at,
+      },
+    };
+  }
   if (action === "create") {
     const requestId = requestIdFrom(body);
     const { request_id: _requestId, ...draft } = body;
@@ -213,6 +247,25 @@ async function operation(action: string, body: Record<string, unknown>, owner: s
     };
   }
   throw new Error();
+}
+
+function bindObservationScope(body: Record<string, unknown>, owner: string): Record<string, unknown> {
+  if (["owner", "account", "network", "principal", "tenant", "issued_asset"].some((key) => key in body)) {
+    throw new Error();
+  }
+  return {
+    ...body,
+    account: owner,
+    network: "testnet",
+    issued_asset: { currency: TESTNET_RLUSD_CURRENCY, issuer: TESTNET_RLUSD_ISSUER },
+  };
+}
+
+function bindProposalScope(body: Record<string, unknown>, owner: string): Record<string, unknown> {
+  if (["owner", "account", "network", "principal", "tenant", "authorization"].some((key) => key in body)) {
+    throw new Error();
+  }
+  return { ...body, account: owner, network: "testnet" };
 }
 
 function proofInput(body: Record<string, unknown>, action: StrategyProofAction) {

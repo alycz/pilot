@@ -11,8 +11,7 @@ test("logged-out Ledger demo replays recorded screens without device or network 
   const unexpectedRequests: string[] = [];
   page.on("request", (request) => {
     const target = new URL(request.url());
-    if (target.origin !== lane.baseURL) unexpectedRequests.push(request.url());
-    if (target.pathname.startsWith("/api/")) {
+    if (target.origin !== lane.baseURL || target.pathname.startsWith("/api/")) {
       unexpectedRequests.push(request.url());
     }
   });

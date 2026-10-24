@@ -2,6 +2,7 @@ import { CardEventSchema } from "@pilot/contracts";
 import type {
   CardEvent,
   CardState,
+  CardTrust,
   ExecResult,
   Intent,
   PolicyResult,
@@ -85,60 +86,66 @@ export class CardStateMachine {
     return this.transition({ state: "planned" });
   }
 
-  async simulated(build: TxBuild): Promise<CardEvent> {
-    return this.transition({ state: "simulated", build });
+  async simulated(build: TxBuild, trust?: CardTrust): Promise<CardEvent> {
+    return this.transition({ state: "simulated", build, ...(trust ? { trust } : {}) });
   }
 
   async policyChecked(options: {
     build: TxBuild;
     policy?: PolicyResult;
+    trust?: CardTrust;
   }): Promise<CardEvent> {
     return this.transition({ state: "policy_checked", ...options });
   }
 
-  async executing(build: TxBuild): Promise<CardEvent> {
-    return this.transition({ state: "executing", build });
+  async executing(build: TxBuild, trust?: CardTrust): Promise<CardEvent> {
+    return this.transition({ state: "executing", build, ...(trust ? { trust } : {}) });
   }
 
-  async submitted(build: TxBuild, hash: string): Promise<CardEvent> {
-    return this.transition({ state: "submitted", build, hash });
+  async submitted(build: TxBuild, hash: string, trust?: CardTrust): Promise<CardEvent> {
+    return this.transition({ state: "submitted", build, hash, ...(trust ? { trust } : {}) });
   }
 
   async validated(
     build: TxBuild,
     exec: ExecResult,
     hash: string,
+    trust?: CardTrust,
   ): Promise<CardEvent> {
-    return this.transition({ state: "validated", build, exec, hash });
+    return this.transition({ state: "validated", build, exec, hash, ...(trust ? { trust } : {}) });
   }
 
   async awaitingApproval(
     build: TxBuild,
     exec: Extract<ExecResult, { status: "needs_approval" }>,
+    trust?: CardTrust,
   ): Promise<CardEvent> {
     return this.transition({
       state: "awaiting_approval",
       build,
       exec,
       policy: exec.policy,
+      ...(trust ? { trust } : {}),
     });
   }
 
   async blocked(
     build: TxBuild,
     exec: Extract<ExecResult, { status: "blocked" }>,
+    trust?: CardTrust,
   ): Promise<CardEvent> {
     return this.transition({
       state: "blocked",
       build,
       exec,
       policy: exec.policy,
+      ...(trust ? { trust } : {}),
     });
   }
 
   async failed(
     error: unknown,
-    details: { build?: TxBuild; exec?: ExecResult } = {},
+    details: { build?: TxBuild; exec?: ExecResult; trust?: CardTrust } = {},
   ): Promise<CardEvent> {
     return this.transition({
       state: "failed",

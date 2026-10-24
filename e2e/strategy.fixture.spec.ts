@@ -389,7 +389,7 @@ test("strategy offers a non-authorizing simulation without an authenticated Test
   await installHarness(page, lane.baseURL, harness);
 
   await page.goto("/strategy");
-  await expect(page.getByRole("heading", { name: "Explore a bounded rebalancer" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Explore bounded autonomous strategies" })).toBeVisible();
   await expect(page.getByText(/illustrative simulation.*client only/i)).toBeVisible();
   await expect(page.getByText(/this simulation never grants trading authority/i)).toBeVisible();
   await expect(page.getByRole("button", { name: "Review immutable mandate" })).toHaveCount(0);
@@ -414,12 +414,12 @@ test("same-page wallet changes isolate and reset signed-out simulation state", a
   harness.audit.set(activeA.strategy_id, [eventFor(activeA, "activated", "same-page-a")]);
   harness.sessionAccount = ACCOUNT_A;
   await page.evaluate(() => window.dispatchEvent(new Event("pilot:wallet-session-changed")));
-  await expect(page.getByRole("heading", { name: "Explore a bounded rebalancer" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Explore bounded autonomous strategies" })).toHaveCount(0);
   await expect(page.locator('[role="status"][aria-live="polite"]')).toContainText("active");
 
   harness.sessionAccount = undefined;
   await page.evaluate(() => window.dispatchEvent(new Event("pilot:wallet-session-changed")));
-  await expect(page.getByRole("heading", { name: "Explore a bounded rebalancer" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Explore bounded autonomous strategies" })).toBeVisible();
   await expect(page.getByRole("status", { name: /simulation decision/i })).toContainText(/hold/i);
   await expect(page.getByText("1 / 7", { exact: true })).toBeVisible();
   expect(harness.mutationBodies).toEqual([]);

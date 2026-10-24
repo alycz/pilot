@@ -239,6 +239,8 @@ function context(store: MemoryStrategyStore) {
 describe("strategy operations", () => {
   it("registers only owner-facing operations and no browser-callable tick", () => {
     expect(ops.map(({ name }) => name)).toEqual([
+      "strategy.validate",
+      "strategy.simulate",
       "strategy.create",
       "strategy.list",
       "strategy.get",

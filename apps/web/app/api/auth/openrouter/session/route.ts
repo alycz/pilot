@@ -92,6 +92,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const response = NextResponse.json({
     mode: session?.mode ?? "demo",
     model: session?.model ?? getDefaultModel(),
+    selected: session !== null,
     connected: session?.mode === "oauth",
     demo: await publicDemoStatus(),
   });

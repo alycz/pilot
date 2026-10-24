@@ -8,13 +8,13 @@ set -Eeuo pipefail
 set +x
 umask 077
 
-readonly RUN_ENV="${HARBOR_RUN_ENV_PATH:?set HARBOR_RUN_ENV_PATH}"
-readonly SECRET_DIR="${HARBOR_PRIVATE_SECRETS_ROOT:?set HARBOR_PRIVATE_SECRETS_ROOT}"
+readonly RUN_ENV="/absolute/private/pilot/run.env"
+readonly SECRET_DIR="/absolute/private/pilot/harbor-secrets"
 readonly HARBOR_ENV="$SECRET_DIR/harbor.dev.vars"
-readonly PILOT_ENV="${PILOT_PRIVATE_SECRETS_ROOT:?set PILOT_PRIVATE_SECRETS_ROOT}/pilot.env.local"
+readonly PILOT_ENV="/absolute/private/pilot/pilot-secrets/pilot.env.local"
 readonly REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 readonly WRANGLER_CONFIG="$REPO_ROOT/wrangler.jsonc"
-readonly DECISIONS_FILE="${HARBOR_PRIVATE_EVIDENCE_ROOT:?set HARBOR_PRIVATE_EVIDENCE_ROOT}/bootstrap-audit.md"
+readonly DECISIONS_FILE="/absolute/private/pilot/evidence/bootstrap-audit.md"
 readonly TESTNET_RPC="https://s.altnet.rippletest.net:51234"
 readonly DEVNET_RPC="https://s.devnet.rippletest.net:51234"
 readonly TESTNET_FAUCET="https://faucet.altnet.rippletest.net/accounts"
@@ -464,7 +464,7 @@ main() {
   [[ "$WORKER_NAME" == "$HARBOR_REPO" && "$D1_NAME" == "$HARBOR_REPO" ]] ||
     die "run.env Worker, D1, and Harbor repository names must match"
 
-  mkdir -p "$SECRET_DIR" "$(dirname "$DECISIONS_FILE")"
+  mkdir -p "$SECRET_DIR" "$REPO_ROOT/decisions"
   chmod 700 "$SECRET_DIR"
   touch "$HARBOR_ENV" "$PILOT_ENV" "$DECISIONS_FILE"
   chmod 600 "$HARBOR_ENV" "$PILOT_ENV"

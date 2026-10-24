@@ -4,18 +4,16 @@ import { readFile } from "node:fs/promises";
 
 import { createHarborRestClient } from "@pilot/harbor-client";
 
-const PILOT_ENV_FILE = process.env.PILOT_ENV_FILE;
-const OWNER = process.env.P_LIVE_TEST_ACCOUNT;
-const RLUSD_ISSUER = process.env.P_LIVE_RLUSD_ISSUER;
-const VAULT_ID = process.env.P_LIVE_VAULT_ID;
-
-for (const [name, value] of Object.entries({ PILOT_ENV_FILE, P_LIVE_TEST_ACCOUNT: OWNER, P_LIVE_RLUSD_ISSUER: RLUSD_ISSUER, P_LIVE_VAULT_ID: VAULT_ID })) {
-  if (!value) throw new Error(`${name} is required`);
-}
+const PILOT_ENV_FILE =
+  process.env.PILOT_ENV_FILE ??
+  "/absolute/private/pilot/pilot-secrets/pilot.env.local";
+const OWNER = "r5QTTcw4XtrY58EeBiaJDoDV7ZRzYa5GL";
 const RLUSD = {
   currency: "524C555344000000000000000000000000000000",
-  issuer: RLUSD_ISSUER,
+  issuer: "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV",
 };
+const VAULT_ID =
+  "148D87773B3AB1A29179C3EC34944720C7C5C468D5D4FC2974609CACF434BD6F";
 
 function parseEnv(text) {
   const result = {};
@@ -98,7 +96,7 @@ async function main() {
       capturedAt: new Date().toISOString(),
       captureContext: {
         endpoint: environment.HARBOR_URL,
-        provenance: "Operator-requested runtime endpoint; this output does not attest deployment identity or acceptance.",
+        provenance: "Synthetic destination fixture; no deployment identity or acceptance claim.",
       },
       note: "Public test-ledger identifiers and typed Harbor envelopes only; no authorization material or signed blobs.",
       reads: relevant,

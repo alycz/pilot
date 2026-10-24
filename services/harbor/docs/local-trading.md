@@ -7,7 +7,7 @@ credential, disables cron and x402, and exposes only `tx.swap`, `tx.execute`,
 `tx.submit`, and `tx.status`.
 
 After the separate action-time approval for local credential creation, create
-`${HARBOR_PRIVATE_SECRETS_ROOT:?set HARBOR_PRIVATE_SECRETS_ROOT}/harbor-local-trading.env.local`
+`/absolute/private/pilot/harbor-secrets/harbor-local-trading.env.local`
 with the fixed local-only provisioner while every Harbor profile is stopped:
 
 ```bash

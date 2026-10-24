@@ -58,6 +58,69 @@ describe("executeProposedIntent", () => {
     ]);
   });
 
+  it("propagates only Harbor-provided screen, signer, and QuickNode provenance by phase", async () => {
+    const harbor = createHarborRestClient({ mock: true });
+    const events: any[] = [];
+    const result = await executeProposedIntent(swap("50", "trust-propagation"), {
+      account: {
+        main_account: "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+        budget_account: account,
+      },
+      network: "testnet",
+      harborRest: {
+        op: async (name, args) => {
+          const envelope = await harbor.op(name, args);
+          if (!envelope.ok) return envelope;
+          if (name === "tx.swap") return {
+            ...envelope,
+            trust: {
+              screen: { provider: "aws-bedrock-guardrails", fields_checked: 4, fields_blocked: 0 },
+              rpc: { route: "quicknode", methods_quicknode: 2, methods_fallback: 0 },
+            },
+          };
+          if (name === "tx.execute") return {
+            ...envelope,
+            data: {
+              ...envelope.data,
+              signer: { kind: "aws-kms-kek", key_ref: "alias/harbor/kek" },
+              confirmation: {
+                provider: "quicknode-webhook",
+                at: "2026-10-18T00:00:01.000Z",
+                latency_ms: 480,
+              },
+            },
+            trust: {
+              rpc: { route: "quicknode", methods_quicknode: 1, methods_fallback: 0 },
+            },
+          };
+          return envelope;
+        },
+      },
+      emitCard: (event) => {
+        events.push(event);
+      },
+    });
+
+    expect(result.state).toBe("validated");
+    expect(events[0].trust).toBeUndefined();
+    expect(events[1].trust).toBeUndefined();
+    expect(events.find((event) => event.state === "simulated")?.trust).toEqual({
+      screen: { provider: "aws-bedrock-guardrails", fields_checked: 4, fields_blocked: 0 },
+      rpc: "quicknode",
+    });
+    expect(events.find((event) => event.state === "submitted")?.trust).not.toHaveProperty("signer");
+    expect(events.at(-1)?.trust).toEqual({
+      screen: { provider: "aws-bedrock-guardrails", fields_checked: 4, fields_blocked: 0 },
+      rpc: "quicknode",
+      signer: { kind: "aws-kms-kek", key_ref: "alias/harbor/kek" },
+      confirmation: {
+        provider: "quicknode-webhook",
+        at: "2026-10-18T00:00:01.000Z",
+        latency_ms: 480,
+      },
+    });
+  });
+
   it("stops a 1,000 RLUSD swap at awaiting_approval", async () => {
     const states: string[] = [];
     const result = await executeProposedIntent(swap("1000"), {
@@ -186,6 +249,42 @@ describe("executeProposedIntent", () => {
     });
     expect(calls.filter((name) => name === "tx.swap")).toHaveLength(1);
     expect(calls.filter((name) => name === "tx.execute")).toHaveLength(1);
+  });
+
+  it("shares one mutation claim across AP4M and ordinary intent tools", async () => {
+    const calls: string[] = [];
+    const tools = createAgentTools({
+      account: {
+        main_account: "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+        budget_account: account,
+      },
+      network: "testnet",
+      harborRest: {
+        op: async (name) => {
+          calls.push(name);
+          throw new Error("AP4M blocked by Harbor");
+        },
+      },
+      harborMcp: { tools: {}, close: async () => undefined },
+      ap4m: {
+        activeMandate: { mandate_id: "mandate-1", owner: account },
+        createIdempotencyKey: () => "server-idempotency-1",
+      },
+    });
+    const purchase = (tools as Record<string, any>).ap4m_purchase.execute as (
+      input: { merchant_id: string; sku: string },
+    ) => Promise<unknown>;
+    const propose = (tools as Record<string, any>).propose_intent.execute as (
+      intent: unknown,
+    ) => Promise<{ state: string; error?: string }>;
+
+    await expect(purchase({ merchant_id: "venue-yield-desk", sku: "yield-report" }))
+      .rejects.toThrow("AP4M blocked by Harbor");
+    await expect(propose(swap("50", "after-ap4m"))).resolves.toMatchObject({
+      state: "blocked",
+      error: expect.stringContaining("same wallet proof"),
+    });
+    expect(calls).toEqual(["mandate.status"]);
   });
 
   it("rejects mainnet or mismatched intents before calling Harbor", async () => {

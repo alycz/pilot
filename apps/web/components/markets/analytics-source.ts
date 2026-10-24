@@ -271,7 +271,40 @@ export function normalizeAnalyticsEnvelope(
     if (!softEmpty) {
       return { status: "error", message: parsed.data.error.message, retryable: true, receivedAt };
     }
-    return { status: "error", message: parsed.data.error.message, retryable: true, receivedAt };
+    let scoped: ScopedAnalyticsRequest;
+    try {
+      scoped = scopeAnalyticsRequest(request);
+    } catch (cause) {
+      return { status: "error", message: cause instanceof Error ? cause.message : "Analytics request was invalid.", retryable: false, receivedAt };
+    }
+    const code = parsed.data.error.code?.toLocaleLowerCase() ?? "";
+    const reason = code.includes("unsupported")
+      ? "unsupported"
+      : code.includes("liquidity") || code.includes("offers")
+        ? "no-liquidity"
+        : "no-observations";
+    return {
+      status: "empty",
+      reason,
+      message: parsed.data.error.message,
+      meta: {
+        network: scoped.network,
+        mode: options.mode ?? "live",
+        source: { operation: "analytics.marketSnapshot", providers: [], requestCount: 0, bounded: true },
+        observedAt: null,
+        ledgerIndex: null,
+        ledgerIndexes: null,
+        ledgerCloseTime: null,
+        receivedAt,
+        freshness: {
+          state: "unknown",
+          ageMs: null,
+          maxAgeMs: options.freshnessMs ?? ANALYTICS_DEFAULT_FRESHNESS_MS,
+          reason: "No market observation was returned.",
+        },
+        units: {},
+      },
+    };
   }
 
   let scoped: ScopedAnalyticsRequest;

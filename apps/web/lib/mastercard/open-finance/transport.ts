@@ -8,6 +8,11 @@ import type {
 } from "./types";
 
 const DEFAULT_BASE_URL = "https://api.finicity.com";
+const ALLOWED_SANDBOX_ORIGINS = new Set([DEFAULT_BASE_URL]);
+const ALLOWED_CONNECT_HOSTS = new Set([
+  "connect.finicity.com",
+  "connect2.finicity.com",
+]);
 
 const MOCK_ACCOUNT: OpenFinanceAccount = {
   id: "mock-checking-001",
@@ -63,10 +68,54 @@ interface SandboxConfig {
   fetchImpl: FetchLike;
 }
 
+function sandboxBaseUrl(value: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error("MASTERCARD_OF_BASE_URL must be the approved Finicity HTTPS origin");
+  }
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.username !== "" ||
+    parsed.password !== "" ||
+    parsed.port !== "" ||
+    parsed.pathname !== "/" ||
+    parsed.search !== "" ||
+    parsed.hash !== "" ||
+    !ALLOWED_SANDBOX_ORIGINS.has(parsed.origin)
+  ) {
+    throw new Error("MASTERCARD_OF_BASE_URL must be the approved Finicity HTTPS origin");
+  }
+  return parsed.origin;
+}
+
 function requireString(value: string | undefined, name: string): string {
   const normalized = value?.trim();
   if (!normalized) throw new Error(`${name} is not configured`);
   return normalized;
+}
+
+export function validatedConnectLink(value: unknown): string {
+  if (typeof value !== "string" || value.length > 4_096) {
+    throw new Error("Open Finance Data Connect link is invalid");
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error("Open Finance Data Connect link is invalid");
+  }
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.username !== "" ||
+    parsed.password !== "" ||
+    parsed.port !== "" ||
+    !ALLOWED_CONNECT_HOSTS.has(parsed.hostname.toLowerCase())
+  ) {
+    throw new Error("Open Finance Data Connect link is not an approved Finicity HTTPS URL");
+  }
+  return parsed.href;
 }
 
 async function readJson(response: Response, operation: string): Promise<unknown> {
@@ -85,8 +134,11 @@ function asRecord(value: unknown, operation: string): Record<string, unknown> {
 
 export class SandboxOpenFinanceTransport implements OpenFinanceTransport {
   readonly mode = "sandbox" as const;
+  private readonly config: SandboxConfig;
 
-  constructor(private readonly config: SandboxConfig) {}
+  constructor(config: SandboxConfig) {
+    this.config = { ...config, baseUrl: sandboxBaseUrl(config.baseUrl) };
+  }
 
   private headers(token?: string): HeadersInit {
     return {
@@ -137,7 +189,7 @@ export class SandboxOpenFinanceTransport implements OpenFinanceTransport {
       body: JSON.stringify({ partnerId: this.config.partnerId, customerId }),
     });
     const data = asRecord(await readJson(response, "Data Connect generation"), "Data Connect generation");
-    return { link: requireString(data.link as string | undefined, "Open Finance Data Connect link") };
+    return { link: validatedConnectLink(data.link) };
   }
 
   async listAccounts(token: string, customerId: string): Promise<OpenFinanceAccount[]> {
@@ -197,7 +249,7 @@ export function createOpenFinanceTransport(
   if (openFinanceMode(env) === "mock") return new MockOpenFinanceTransport();
 
   return new SandboxOpenFinanceTransport({
-    baseUrl: (env.MASTERCARD_OF_BASE_URL?.trim() || DEFAULT_BASE_URL).replace(/\/$/, ""),
+    baseUrl: env.MASTERCARD_OF_BASE_URL?.trim() || DEFAULT_BASE_URL,
     partnerId: requireString(env.MASTERCARD_OF_PARTNER_ID, "MASTERCARD_OF_PARTNER_ID"),
     partnerSecret: requireString(env.MASTERCARD_OF_PARTNER_SECRET, "MASTERCARD_OF_PARTNER_SECRET"),
     appKey: requireString(env.MASTERCARD_OF_APP_KEY, "MASTERCARD_OF_APP_KEY"),

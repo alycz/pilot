@@ -8,6 +8,17 @@ import {
   readPersonalizationFixtureSession,
 } from "../../../../lib/personalization-fixture-session";
 
+const MAX_VAULT_REQUEST_BYTES = 1_048_576;
+
+function cancelRequestBody(reader: ReadableStreamDefaultReader<Uint8Array>): void {
+  try {
+    void reader.cancel().catch(() => undefined);
+  } catch {
+    // Cancellation is cleanup only. An untrusted stream must not delay or
+    // replace the bounded-request response.
+  }
+}
+
 export function json(data: unknown, status = 200): Response {
   return Response.json(data, {
     status,
@@ -163,22 +174,54 @@ export function errorResponse(error: unknown): Response {
   const status =
     lower.includes("authorization")
       ? 401
-      : lower.includes("conflict") || lower.includes("storage is busy")
-        ? 409
-      : validationError ||
-          lower.includes("required") ||
-          lower.includes("invalid") ||
-          lower.includes("unsupported") ||
-          lower.includes("must") ||
-          lower.includes("cannot")
-        ? 400
-        : 500;
+      : lower.includes("too large")
+        ? 413
+        : lower.includes("conflict") || lower.includes("storage is busy")
+          ? 409
+          : validationError ||
+              lower.includes("required") ||
+              lower.includes("invalid") ||
+              lower.includes("unsupported") ||
+              lower.includes("must") ||
+              lower.includes("cannot")
+            ? 400
+            : 500;
   return json({ ok: false, error: { message } }, status);
 }
 
 export async function objectBody(request: Request): Promise<Record<string, unknown>> {
   assertJsonMutation(request);
-  const value: unknown = await request.json();
+  const declaredLength = request.headers.get("content-length");
+  if (
+    declaredLength !== null &&
+    /^\d+$/.test(declaredLength) &&
+    Number(declaredLength) > MAX_VAULT_REQUEST_BYTES
+  ) {
+    throw new Error("Vault request body is too large");
+  }
+
+  const reader = request.body?.getReader();
+  if (!reader) throw new Error("Request body must be valid JSON");
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_VAULT_REQUEST_BYTES) {
+      cancelRequestBody(reader);
+      throw new Error("Vault request body is too large");
+    }
+    chunks.push(value);
+  }
+
+  let value: unknown;
+  try {
+    const encoded = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
+    value = JSON.parse(encoded.toString("utf8"));
+  } catch {
+    throw new Error("Request body must be valid JSON");
+  }
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Request body must be a JSON object");
   }

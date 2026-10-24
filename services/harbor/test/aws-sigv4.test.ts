@@ -55,7 +55,9 @@ describe("AWS SigV4 transport", () => {
     expect(init).toMatchObject({
       method: "POST",
       body: JSON.stringify({ KeyUsage: "SIGN_VERIFY" }),
+      redirect: "error",
     });
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
     expect(new Headers(init?.headers).get("x-amz-target")).toBe(
       "TrentService.CreateKey",
     );
@@ -142,6 +144,74 @@ describe("AWS SigV4 transport", () => {
       awsFetch("kms", "TrentService.Sign", {}, {
         env: LOCAL_ENV,
         clientFactory: malformed.factory,
+      }),
+    ).rejects.toMatchObject({ code: "AWS_MALFORMED_RESPONSE" });
+  });
+
+  it("bounds responses and applies one finite transport deadline", async () => {
+    const oversized = clientFactory(new Response(JSON.stringify({ too: "large" })));
+    await expect(
+      awsFetch("kms", "TrentService.Sign", {}, {
+        env: LOCAL_ENV,
+        clientFactory: oversized.factory,
+        maxResponseBytes: 8,
+      }),
+    ).rejects.toMatchObject({ code: "AWS_MALFORMED_RESPONSE" });
+
+    const neverFactory: AwsSigningClientFactory = () => ({
+      fetch: vi.fn().mockReturnValue(new Promise<Response>(() => undefined)),
+    });
+    await expect(
+      awsFetch("kms", "TrentService.Sign", {}, {
+        env: LOCAL_ENV,
+        clientFactory: neverFactory,
+        timeoutMs: 5,
+      }),
+    ).rejects.toMatchObject({ code: "AWS_TRANSPORT_ERROR", retryable: true });
+
+    const stalledBody = clientFactory(new Response(
+      new ReadableStream<Uint8Array>({
+        start() {
+          // The client must keep the same deadline while consuming the body.
+        },
+      }),
+    ));
+    await expect(
+      awsFetch("kms", "TrentService.Sign", {}, {
+        env: LOCAL_ENV,
+        clientFactory: stalledBody.factory,
+        timeoutMs: 5,
+      }),
+    ).rejects.toMatchObject({ code: "AWS_TRANSPORT_ERROR", retryable: true });
+  });
+
+  it("never waits for best-effort oversized-response cleanup", async () => {
+    const never = () => new Promise<void>(() => undefined);
+    const declared = clientFactory(new Response(
+      new ReadableStream<Uint8Array>({ cancel: never }),
+      { headers: { "content-length": "2" } },
+    ));
+    await expect(
+      awsFetch("kms", "TrentService.Sign", {}, {
+        env: LOCAL_ENV,
+        clientFactory: declared.factory,
+        maxResponseBytes: 1,
+      }),
+    ).rejects.toMatchObject({ code: "AWS_MALFORMED_RESPONSE" });
+
+    const streamed = clientFactory(new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array(2));
+        },
+        cancel: never,
+      }),
+    ));
+    await expect(
+      awsFetch("kms", "TrentService.Sign", {}, {
+        env: LOCAL_ENV,
+        clientFactory: streamed.factory,
+        maxResponseBytes: 1,
       }),
     ).rejects.toMatchObject({ code: "AWS_MALFORMED_RESPONSE" });
   });

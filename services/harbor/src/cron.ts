@@ -30,7 +30,7 @@ export async function scheduled(
     operationName: "watcher.scan",
   });
   await runWatcher({ db: env.DB, env, xrplRpc: routed.rpc });
-  if (env.AUTONOMOUS_STRATEGY_RUNNER !== "true" || env.EXEC_NETWORK !== "testnet" || env.MAINNET_EXECUTION === "true") return;
+  if (env.AUTONOMOUS_STRATEGY_RUNNER !== "true" || env.EXEC_NETWORK !== "testnet" || env.MAINNET_EXECUTION !== "false") return;
   const adapters = new Map<string, StrategyExecutionAdapter>();
   const adapterForPrincipal = dependencies.adapterForPrincipal ?? ((principal: string) => {
     let adapter = adapters.get(principal);

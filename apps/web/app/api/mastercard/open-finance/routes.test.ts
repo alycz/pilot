@@ -6,6 +6,10 @@ import {
   MockOpenFinanceTransport,
   OpenFinanceService,
 } from "../../../../lib/mastercard/open-finance";
+import {
+  sealWalletSession,
+  WALLET_SESSION_COOKIE,
+} from "../../../../lib/wallet-session";
 
 import {
   refreshOpenFinance,
@@ -14,16 +18,38 @@ import {
 } from "./_lib/handlers";
 import { GET as mockConnect } from "./mock-connect/route";
 
+const SESSION_SECRET = "test-session-secret-that-is-longer-than-thirty-two-characters";
+const WALLET_ACCOUNT = "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59";
+const OTHER_WALLET_ACCOUNT = "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe";
+
+function walletCookie(account = WALLET_ACCOUNT): string {
+  return sealWalletSession({
+    version: 1,
+    account,
+    network: "testnet",
+    expiresAt: Date.now() + 60_000,
+  }, SESSION_SECRET, { PILOT_DEPLOYMENT_PROFILE: "hosted" });
+}
+
 function request(
   path: string,
   cookie?: string,
   headers: Record<string, string> = {},
+  walletAccount: string | null = WALLET_ACCOUNT,
 ): NextRequest {
+  const cookies = [
+    walletAccount
+      ? `${WALLET_SESSION_COOKIE}=${encodeURIComponent(walletCookie(walletAccount))}`
+      : undefined,
+    cookie
+      ? `${OPEN_FINANCE_SESSION_COOKIE}=${encodeURIComponent(cookie)}`
+      : undefined,
+  ].filter(Boolean).join("; ");
   return new NextRequest(`https://pilot.example${path}`, {
     method: "POST",
     headers: {
       origin: "https://pilot.example",
-      ...(cookie ? { cookie: `${OPEN_FINANCE_SESSION_COOKIE}=${encodeURIComponent(cookie)}` } : {}),
+      ...(cookies ? { cookie: cookies } : {}),
       ...headers,
     },
   });
@@ -31,10 +57,10 @@ function request(
 
 describe("Mastercard Open Finance routes", () => {
   beforeAll(() => {
-    process.env.SESSION_SECRET =
-      "test-session-secret-that-is-longer-than-thirty-two-characters";
+    process.env.SESSION_SECRET = SESSION_SECRET;
     process.env.PILOT_DEPLOYMENT_PROFILE = "hosted";
     process.env.PILOT_PUBLIC_ORIGIN = "https://pilot.example";
+    delete process.env.NEXT_PUBLIC_PILOT_BUILD_MARKER;
   });
 
   it("runs the complete mock flow without exposing raw PII", async () => {
@@ -103,6 +129,63 @@ describe("Mastercard Open Finance routes", () => {
     expect((await summarizeOpenFinance(request("/summary"), service)).status).toBe(401);
   });
 
+  it("isolates Open Finance state across wallet account switches", async () => {
+    const service = new OpenFinanceService(new MockOpenFinanceTransport());
+    const refresh = vi.spyOn(service, "refresh");
+    const start = await startOpenFinance(
+      request("/api/mastercard/open-finance/start"),
+      service,
+    );
+    const cookie = start.cookies.get(OPEN_FINANCE_SESSION_COOKIE)?.value;
+    expect(cookie).toBeTruthy();
+
+    const switched = await refreshOpenFinance(
+      request("/api/mastercard/open-finance/refresh", cookie, {}, OTHER_WALLET_ACCOUNT),
+      service,
+    );
+    expect(switched.status).toBe(401);
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("allows an authenticated same-origin summary GET without an Origin header", async () => {
+    const service = new OpenFinanceService(new MockOpenFinanceTransport());
+    const start = await startOpenFinance(
+      request("/api/mastercard/open-finance/start"),
+      service,
+    );
+    const startedCookie = start.cookies.get(OPEN_FINANCE_SESSION_COOKIE)?.value;
+    const refresh = await refreshOpenFinance(
+      request("/api/mastercard/open-finance/refresh", startedCookie),
+      service,
+    );
+    const refreshedCookie = refresh.cookies.get(OPEN_FINANCE_SESSION_COOKIE)?.value;
+    const response = await summarizeOpenFinance(
+      new NextRequest("https://pilot.example/api/mastercard/open-finance/summary", {
+        headers: {
+          cookie: [
+            `${WALLET_SESSION_COOKIE}=${encodeURIComponent(walletCookie())}`,
+            `${OPEN_FINANCE_SESSION_COOKIE}=${encodeURIComponent(refreshedCookie!)}`,
+          ].join("; "),
+        },
+      }),
+      service,
+    );
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).label).toBe("Mastercard Open Finance · mock");
+  });
+
+  it("requires an authenticated wallet before creating a provider customer", async () => {
+    const service = new OpenFinanceService(new MockOpenFinanceTransport());
+    const start = vi.spyOn(service, "start");
+    const response = await startOpenFinance(
+      request("/api/mastercard/open-finance/start", undefined, {}, null),
+      service,
+    );
+    expect(response.status).toBe(401);
+    expect(start).not.toHaveBeenCalled();
+  });
+
   it("rejects missing and cross-origin mutation requests before side effects", async () => {
     const service = new OpenFinanceService(new MockOpenFinanceTransport());
     const start = vi.spyOn(service, "start");
@@ -149,6 +232,7 @@ describe("Mastercard Open Finance routes", () => {
     const configuredAuthority = new NextRequest(internalUrl, {
       method: "POST",
       headers: {
+        cookie: `${WALLET_SESSION_COOKIE}=${encodeURIComponent(walletCookie())}`,
         origin: "https://pilot.example",
         "x-forwarded-host": "attacker.example",
         "x-forwarded-proto": "http",

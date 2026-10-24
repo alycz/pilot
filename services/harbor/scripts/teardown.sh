@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 # Resource names must come from the run kit so this script cannot drift to a
 # Worker or database outside the scope approved for this run.
-readonly RUN_ENV="${HARBOR_RUN_ENV_PATH:?set HARBOR_RUN_ENV_PATH}"
+readonly RUN_ENV="/absolute/private/pilot/run.env"
 readonly SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_DIR="$(CDPATH='' cd -- "${SCRIPT_DIR}/.." && pwd)"
 

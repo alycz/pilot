@@ -31,17 +31,15 @@ jobs:
         working-directory: .
         run: node scripts/integrity/verify.mjs
 
-      - name: Verify execution-service integrity
-        run: node scripts/integrity/verify.mjs
-
       - name: Install Harbor dependencies
         run: npm ci
 
       - name: Verify generated files
-        run: node scripts/build-catalog.mjs && git diff --exit-code
+        run: npm run generate && git diff --exit-code
 
       - name: Typecheck Harbor
         run: npm run typecheck
 
       - name: Run Harbor offline tests
         run: npm test
+

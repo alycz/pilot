@@ -155,7 +155,7 @@ node --experimental-transform-types services/harbor/scripts/quicknode/provision.
 `xrplWalletFilter` webhook with `compression:"none"`, runs the materialized
 watchdog filter against all three ledgers, then creates or reuses the Stream
 with `end_range:-1` and no backfill. IDs are written only to
-`${HARBOR_PRIVATE_STATE_ROOT:?set HARBOR_PRIVATE_STATE_ROOT}/qn-state.event.json` with owner-only permissions.
+`/absolute/private/pilot/harbor-state/qn-state.event.json` with owner-only permissions.
 
 ### 4. Prove the webhook
 

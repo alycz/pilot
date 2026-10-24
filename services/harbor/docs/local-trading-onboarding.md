@@ -4,7 +4,7 @@ This profile is the one-time, restart-safe boundary for creating the isolated
 local Testnet trading state. It shares only these artifacts with the later
 trading runtime:
 
-- `${HARBOR_PRIVATE_SECRETS_ROOT:?set HARBOR_PRIVATE_SECRETS_ROOT}/harbor-local-trading.env.local`
+- `/absolute/private/pilot/harbor-secrets/harbor-local-trading.env.local`
 - `.wrangler/harbor-local-trading`
 - the named bearer principal and its KEK-wrapped delegate
 

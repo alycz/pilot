@@ -389,7 +389,7 @@ administrator-alias startup hold applies specifically to the isolated-v1
 `npm run dev:local:x402` is a legacy, standalone Testnet signing profile on
 `127.0.0.1:8791`. It has its own state at
 `.wrangler/harbor-local-x402`, exact external credential file at
-`${HARBOR_PRIVATE_SECRETS_ROOT:?set HARBOR_PRIVATE_SECRETS_ROOT}/harbor-local-x402.env.local`, named
+`/absolute/private/pilot/harbor-secrets/harbor-local-x402.env.local`, named
 principal, dedicated payer, and fixed merchant receiver. It is not used by the
 isolated Pilot path on `127.0.0.2` and shares neither its credential nor D1
 state. The separately isolated x402 profile is described below.
@@ -445,8 +445,8 @@ The isolated process has its own D1 tree and private files:
 
 - one explicitly approved external absolute state root, bound into both the
   Harbor credential and an immutable root marker; no checkout-relative fallback
-- `${HARBOR_PRIVATE_SECRETS_ROOT:?set HARBOR_PRIVATE_SECRETS_ROOT}/harbor-local-x402-isolated-v1.env.local`
-- `${PILOT_PRIVATE_SECRETS_ROOT:?set PILOT_PRIVATE_SECRETS_ROOT}/pilot-isolated-x402-capability-v1.env.local`
+- `/absolute/private/pilot/harbor-secrets/harbor-local-x402-isolated-v1.env.local`
+- `/absolute/private/pilot/pilot-secrets/pilot-isolated-x402-capability-v1.env.local`
 
 The Harbor file contains the dedicated credential, KEK, and exact profile
 markers. The Pilot capability file contains only that dedicated named bearer;
@@ -460,7 +460,7 @@ credentials, a payer, private files, and one bounded official Testnet funding
 request, so it requires separate action-time authorization and operator
 presence. Before provisioning, the operator must save the unmodified public
 `data` results from `account.status` and `onboarding.readiness` at
-`${HARBOR_PRIVATE_EVIDENCE_ROOT:?set HARBOR_PRIVATE_EVIDENCE_ROOT}/pilot-isolated-trading-delegate-v1.json`
+`/absolute/private/pilot/evidence/pilot-isolated-trading-delegate-v1.json`
 using
 [`config/pilot-isolated-trading-delegate-evidence-v1.json.template`](config/pilot-isolated-trading-delegate-evidence-v1.json.template).
 The evidence must be a private mode-`0600` file with an empty native ACL and
@@ -485,7 +485,7 @@ npm run provision:local:x402:isolated:v1 -- \
 `resume` requires the same immutable marker and complete real Miniflare D1
 layout and applies no migration. The launcher is resume-only and never creates
 a replacement state tree. The proposed root for later operator review is
-`${HARBOR_PRIVATE_STATE_ROOT:?set HARBOR_PRIVATE_STATE_ROOT}/harbor-local-x402-isolated-v1`; it is
+`/absolute/private/pilot/harbor-state/harbor-local-x402-isolated-v1`; it is
 not a code default and has not been created or approved for activation.
 
 Every CLI value and the evidence file are validated before migrations, D1

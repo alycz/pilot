@@ -149,6 +149,7 @@ describe("XRPL transports", () => {
     expect(init).toMatchObject({
       method: "POST",
       headers: { "content-type": "application/json" },
+      redirect: "error",
       signal: controller.signal,
     });
     expect(JSON.parse(String(init?.body))).toEqual({
@@ -157,11 +158,31 @@ describe("XRPL transports", () => {
     });
   });
 
+  it("does not follow redirects and cancels HTTP error bodies", async () => {
+    let canceled = false;
+    const body = new ReadableStream<Uint8Array>({
+      cancel() {
+        canceled = true;
+        return new Promise<void>(() => undefined);
+      },
+    });
+    const fetcher = vi.fn(async () => new Response(body, { status: 503 }));
+    const transport = new JsonRpcTransport(fetcher);
+
+    await expect(transport.request(jsonRpcRequest())).rejects.toMatchObject({
+      code: "HTTP_503",
+      retryable: true,
+    });
+    expect(fetcher.mock.calls[0]?.[1]?.redirect).toBe("error");
+    expect(canceled).toBe(true);
+  });
+
   it("rejects and cancels a response whose declared length exceeds the cap", async () => {
     let canceled = false;
     const body = new ReadableStream<Uint8Array>({
       cancel() {
         canceled = true;
+        return new Promise<void>(() => undefined);
       },
     });
     const transport = new JsonRpcTransport(
@@ -191,6 +212,7 @@ describe("XRPL transports", () => {
       },
       cancel() {
         canceled = true;
+        return new Promise<void>(() => undefined);
       },
     });
     const transport = new JsonRpcTransport(

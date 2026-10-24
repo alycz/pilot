@@ -7,8 +7,8 @@ import {
   realpathSync,
   rmSync,
 } from "node:fs";
-import { homedir } from "node:os";
-import { join, relative } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { dirname, join, relative } from "node:path";
 
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import { afterEach, describe, expect, it } from "vitest";
@@ -29,7 +29,6 @@ import {
 
 const roots: string[] = [];
 const REPO_ROOT = realpathSync(process.cwd());
-const PORTABLE_TEMP_ROOT = realpathSync(homedir());
 const MIGRATIONS = [
   "0001_init.sql",
   "0002_x402_payments.sql",
@@ -68,7 +67,7 @@ function validatePortableExistingState(stateRoot: string) {
 
 function temporaryStateRoot(): string {
   const parent = realpathSync(mkdtempSync(join(
-    PORTABLE_TEMP_ROOT,
+    (process.platform === "darwin" ? realpathSync(tmpdir()) : realpathSync(homedir())),
     ".harbor-x402-miniflare-",
   )));
   roots.push(parent);

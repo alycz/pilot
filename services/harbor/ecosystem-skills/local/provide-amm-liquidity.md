@@ -56,3 +56,4 @@ The XRPL's constant-product pricing, LP-token ownership, issuer restrictions, fe
 Do not report success from a submit response alone. Query `tx.status` by hash until it is final, and require `validated: true` (or Harbor's equivalent final validated state) plus metadata `TransactionResult: "tesSUCCESS"`. A non-validated result is not final according to the official [`tx` method](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/transaction-methods/tx).
 
 After validation, re-read `amm.info`, `amm.position`, and the account's trust lines. Report the actual amounts deposited, LP tokens received, resulting pool share and ratio, transaction fee, validated ledger index, and explorer link. If the hash expires without validation, or metadata differs materially from the confirmed simulation, report the failure or discrepancy and do not claim liquidity was added.
+

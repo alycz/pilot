@@ -8,8 +8,8 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -40,7 +40,6 @@ import {
 } from "../scripts/local-ap4m-x402-combined-state.mjs";
 
 const REPO_ROOT = realpathSync(process.cwd());
-const PORTABLE_TEMP_ROOT = realpathSync(homedir());
 const roots: string[] = [];
 const noAcl = () => undefined;
 const PRINCIPAL = "combined-principal";
@@ -58,7 +57,7 @@ const migrations = [
 ];
 
 function temporaryRoot(label: string) {
-  const root = realpathSync(mkdtempSync(join(PORTABLE_TEMP_ROOT, `.combined-${label}-`)));
+  const root = realpathSync(mkdtempSync(join((process.platform === "darwin" ? realpathSync(tmpdir()) : realpathSync(homedir())), `.combined-${label}-`)));
   chmodSync(root, 0o700);
   roots.push(root);
   return root;

@@ -328,10 +328,27 @@ export class StrategyStore {
         authorization_method = ?, approved_at = ?, config_json = ?
         WHERE principal = ? AND id = ? AND version = ? AND digest = ? AND status = 'draft'
         AND EXISTS (SELECT 1 FROM strategies WHERE principal = ? AND id = ? AND generation = ?
-          AND lifecycle IN ('draft','paused'))`)
+          AND lifecycle IN ('draft','paused')) AND EXISTS (
+          SELECT 1 FROM strategy_global_controls
+          WHERE principal = ? AND owner = ? AND network = ? AND kill_enabled = 0
+        ) AND NOT EXISTS (
+          SELECT 1 FROM strategies owner_scope WHERE owner_scope.owner = ?
+            AND owner_scope.network = ? AND owner_scope.principal <> ?
+        ) AND NOT EXISTS (
+          SELECT 1 FROM strategy_global_controls control_scope WHERE control_scope.owner = ?
+            AND control_scope.network = ? AND control_scope.principal <> ?
+        ) AND NOT EXISTS (
+          SELECT 1 FROM strategy_executions execution
+          WHERE execution.principal = ? AND execution.strategy_id = ?
+            AND execution.unresolved = 1
+        )`)
         .bind(args.authorization.authorization_id, args.authorization.method, args.authorization.approved_at,
           JSON.stringify(mandate), this.principal, mandate.mandate_id, mandate.version, mandate.digest,
-          this.principal, strategy.strategy_id, strategy.generation),
+          this.principal, strategy.strategy_id, strategy.generation,
+          this.principal, mandate.account, mandate.network,
+          mandate.account, mandate.network, this.principal,
+          mandate.account, mandate.network, this.principal,
+          this.principal, strategy.strategy_id),
       this.db.prepare(`UPDATE strategies SET lifecycle = 'active', generation = generation + 1,
         next_evaluation_at = ?, hold_reason = NULL, error_code = NULL, updated_at = ?
         WHERE principal = ? AND id = ? AND mandate_id = ? AND mandate_digest = ? AND generation = ?
@@ -341,12 +358,16 @@ export class StrategyStore {
         AND NOT EXISTS (SELECT 1 FROM strategies owner_scope WHERE owner_scope.owner = ?
           AND owner_scope.network = ? AND owner_scope.principal <> ?)
         AND NOT EXISTS (SELECT 1 FROM strategy_global_controls control_scope WHERE control_scope.owner = ?
-          AND control_scope.network = ? AND control_scope.principal <> ?)`)
+          AND control_scope.network = ? AND control_scope.principal <> ?)
+        AND NOT EXISTS (SELECT 1 FROM strategy_executions execution
+          WHERE execution.principal = ? AND execution.strategy_id = ?
+            AND execution.unresolved = 1)`)
         .bind(next, at, this.principal, strategy.strategy_id, mandate.mandate_id, mandate.digest, strategy.generation,
           this.principal, mandate.mandate_id, args.authorization.authorization_id,
           this.principal, mandate.account, mandate.network,
           mandate.account, mandate.network, this.principal,
-          mandate.account, mandate.network, this.principal),
+          mandate.account, mandate.network, this.principal,
+          this.principal, strategy.strategy_id),
       this.db.prepare(`UPDATE strategy_schedules SET enabled = 1, next_evaluation_at = ?,
         generation = generation + 1, updated_at = ? WHERE principal = ? AND strategy_id = ?
         AND EXISTS (SELECT 1 FROM strategies WHERE principal = ? AND id = ? AND lifecycle = 'active'
@@ -823,7 +844,11 @@ export class StrategyStore {
   }
 
   async markSubmittingFenced(executionId: string, strategy: Strategy, lease: StrategyLease, now: Date): Promise<boolean> {
-    const reservationStatement = isDeclarativeMandate(strategy.mandate)
+    const declarative = isDeclarativeMandate(strategy.mandate);
+    const reservationTable = declarative
+      ? "strategy_declarative_reservations"
+      : "strategy_budget_reservations";
+    const reservationStatement = declarative
       ? this.db.prepare(`UPDATE strategy_declarative_reservations SET state = 'unknown', updated_at = ?
           WHERE principal = ? AND execution_id = ? AND state = 'reserved' AND EXISTS (
             SELECT 1 FROM strategy_executions WHERE principal = ? AND id = ? AND submission_state = 'submitting')`)
@@ -848,7 +873,10 @@ export class StrategyStore {
           SELECT 1 FROM strategies owner_scope WHERE owner_scope.owner = ? AND owner_scope.network = ?
             AND owner_scope.principal <> ?) AND NOT EXISTS (
           SELECT 1 FROM strategy_global_controls control_scope WHERE control_scope.owner = ?
-            AND control_scope.network = ? AND control_scope.principal <> ?)`)
+            AND control_scope.network = ? AND control_scope.principal <> ?) AND EXISTS (
+          SELECT 1 FROM ${reservationTable} reservation
+          WHERE reservation.principal = ? AND reservation.execution_id = ?
+            AND reservation.state = 'reserved')`)
         .bind(now.toISOString(), this.principal, executionId, this.principal, strategy.strategy_id,
           strategy.generation, strategy.mandate.mandate_id, strategy.mandate.digest,
           this.principal, strategy.mandate.mandate_id, strategy.mandate.version,
@@ -856,7 +884,8 @@ export class StrategyStore {
           lease.principal, lease.strategyId, lease.token, lease.fencingToken, now.toISOString(),
           this.principal, strategy.mandate.account, strategy.mandate.network,
           strategy.mandate.account, strategy.mandate.network, this.principal,
-          strategy.mandate.account, strategy.mandate.network, this.principal),
+          strategy.mandate.account, strategy.mandate.network, this.principal,
+          this.principal, executionId),
       reservationStatement,
     ]);
     if (changes(results[0]) === 0) return false;
@@ -1003,11 +1032,14 @@ export class StrategyStore {
           SELECT 1 FROM strategies owner_scope WHERE owner_scope.owner = ? AND owner_scope.network = ?
             AND owner_scope.principal <> ?) AND NOT EXISTS (
           SELECT 1 FROM strategy_global_controls control_scope WHERE control_scope.owner = ?
-            AND control_scope.network = ? AND control_scope.principal <> ?))`)
+            AND control_scope.network = ? AND control_scope.principal <> ?) AND NOT EXISTS (
+          SELECT 1 FROM strategy_executions execution WHERE execution.principal = ?
+            AND execution.strategy_id = ? AND execution.unresolved = 1))`)
         .bind(lifecycle, enabled ? 1 : 0, at, reason, at, this.principal, strategyId, current.generation, ...allowed,
           enabled ? 1 : 0, this.principal, current.mandate.account, current.mandate.network,
           current.mandate.account, current.mandate.network, this.principal,
-          current.mandate.account, current.mandate.network, this.principal),
+          current.mandate.account, current.mandate.network, this.principal,
+          this.principal, strategyId),
       this.db.prepare(`UPDATE strategy_schedules SET enabled = ?, generation = generation + 1,
         next_evaluation_at = CASE WHEN ? = 1 THEN ? ELSE next_evaluation_at END, updated_at = ?
         WHERE principal = ? AND strategy_id = ? AND EXISTS (
@@ -1101,7 +1133,12 @@ export class StrategySchedulerStore {
       AND lease_token = ? AND fencing_token = ?`).bind(lease.principal, lease.strategyId, lease.token, lease.fencingToken).run();
   }
 
-  async createTrigger(due: DueStrategy, lease: StrategyLease, triggerId: string, now: Date): Promise<"created" | "duplicate"> {
+  async createTrigger(
+    due: DueStrategy,
+    lease: StrategyLease,
+    triggerId: string,
+    now: Date,
+  ): Promise<"created" | "terminal" | "duplicate"> {
     const result = await this.db.prepare(`INSERT OR IGNORE INTO strategy_triggers(
       id, principal, strategy_id, schedule_generation, scheduled_for, status, lease_fencing_token, created_at, updated_at
     ) SELECT ?, ?, ?, ?, ?, 'running', ?, ?, ? WHERE EXISTS (
@@ -1118,7 +1155,21 @@ export class StrategySchedulerStore {
       .bind(lease.fencingToken, now.toISOString(), due.principal, triggerId, due.strategyId,
         due.scheduleGeneration, due.scheduledFor, due.principal, due.strategyId, lease.token,
         lease.fencingToken, now.toISOString()).run();
-    return changes(recovered) === 1 ? "created" : "duplicate";
+    if (changes(recovered) === 1) return "created";
+    const existing = await this.db.prepare(`SELECT status FROM strategy_triggers
+      WHERE principal = ? AND id = ? AND strategy_id = ? AND schedule_generation = ?
+        AND scheduled_for = ?`)
+      .bind(
+        due.principal,
+        triggerId,
+        due.strategyId,
+        due.scheduleGeneration,
+        due.scheduledFor,
+      )
+      .first<{ status: string }>();
+    return existing && ["complete", "blocked", "failed"].includes(existing.status)
+      ? "terminal"
+      : "duplicate";
   }
 
   async getTriggerDecision(principal: string, triggerId: string): Promise<{

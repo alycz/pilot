@@ -122,11 +122,7 @@ async function checkText(dispatch: Dispatch, text: string): Promise<number> {
 }
 
 function checkedStatusPath(input: string): string {
-  const evidenceRootInput = process.env.HARBOR_PRIVATE_EVIDENCE_ROOT;
-  if (!evidenceRootInput) {
-    throw new Error("HARBOR_PRIVATE_EVIDENCE_ROOT is required for evidence writes");
-  }
-  const statusRoot = resolve(evidenceRootInput);
+  const statusRoot = resolve(process.cwd(), "status");
   const path = resolve(input);
   const pathFromRoot = relative(statusRoot, path);
   if (
@@ -136,7 +132,7 @@ function checkedStatusPath(input: string): string {
     pathFromRoot.includes("\\") ||
     !pathFromRoot.endsWith(".md")
   ) {
-    throw new Error("Evidence path must be one markdown file directly under HARBOR_PRIVATE_EVIDENCE_ROOT");
+    throw new Error("Evidence path must be one markdown file directly under status/");
   }
   return path;
 }
@@ -205,7 +201,7 @@ export async function runG1Guardrails(options: G1Options = {}): Promise<G1Result
 function statusArgument(argv: readonly string[]): string | undefined {
   if (argv.length === 0) return undefined;
   if (argv.length !== 2 || argv[0] !== "--status" || !argv[1]) {
-    throw new Error("Usage: g1-guardrails [--status <external-output-path>]");
+    throw new Error("Usage: g1-guardrails [--status status/H-aws.md]");
   }
   return argv[1];
 }

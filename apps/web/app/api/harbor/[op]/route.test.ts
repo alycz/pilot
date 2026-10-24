@@ -17,6 +17,10 @@ const ENVIRONMENT: HarborProxyEnvironment = {
   PILOT_DEPLOYMENT_PROFILE: "hosted",
   PILOT_PUBLIC_ORIGIN: "https://pilot.example",
 };
+const AUTH_ENVIRONMENT: HarborProxyEnvironment = {
+  ...ENVIRONMENT,
+  EXEC_NETWORK: "testnet",
+};
 const LOCAL_X402_ENVIRONMENT: HarborProxyEnvironment = {
   EXEC_NETWORK: "testnet",
   HARBOR_API_KEY: "pilot:test-token",
@@ -44,6 +48,25 @@ const RLUSD_ISSUER = "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV";
 const RLUSD_CURRENCY = "524C555344000000000000000000000000000000";
 const XRP = { currency: "XRP" } as const;
 const RLUSD = { currency: RLUSD_CURRENCY, issuer: RLUSD_ISSUER } as const;
+const MANDATE_PREPARE_ARGS = {
+  owner: ACCOUNT,
+  network: "testnet",
+  constraints: {
+    currency: "USD",
+    per_payment_max: "5.00",
+    daily_max: "10.00",
+    total_max: "25.00",
+    payees: ["venue-yield-desk"],
+  },
+  payees: ["venue-yield-desk"],
+  expires_at: "2026-10-24T08:00:00.000Z",
+} as const;
+const MANDATE_REGISTER_ARGS = {
+  mandate_id: "mandate-1",
+  l1: "l1~signed",
+  l2: "l2~signed",
+  setup_tx_hash: "A".repeat(64),
+} as const;
 
 function request(
   body: string,
@@ -124,6 +147,183 @@ describe("POST /api/harbor/[op]", () => {
     expect(response.status).toBe(401);
     expect((await response.json()).error.code).toBe("HARBOR_PROXY_UNAUTHORIZED");
     expect(upstreamFetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["mandate.prepare", MANDATE_PREPARE_ARGS],
+    ["mandate.register", MANDATE_REGISTER_ARGS],
+    ["mandate.revoke", { mandate_id: "mandate-1" }],
+    ["credential.payerAccept", {}],
+    ["ap4m.purchase", {
+      mandate_id: "mandate-1",
+      merchant_id: "venue-yield-desk",
+      sku: "yield-report",
+      idempotency_key: "purchase-1",
+    }],
+  ] as const)("rejects unauthorized sponsor mutation %s before Harbor dispatch", async (op, args) => {
+    const upstreamFetch = vi.fn();
+    const handler = createProductionHarborProxyHandler({
+      authorizeOperation: () => false,
+      env: AUTH_ENVIRONMENT,
+      fetch: fetchDependency(upstreamFetch),
+    });
+
+    const response = await handler(request(JSON.stringify(args)), context(op));
+
+    expect(response.status).toBe(401);
+    expect((await response.json()).error.code).toBe("HARBOR_PROXY_UNAUTHORIZED");
+    expect(upstreamFetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["credential.revoke", { subject: ACCOUNT }],
+    ["channel.settle", { channel_id: "channel-1" }],
+    ["quicknode.unfreeze", {}],
+    ["quicknode.test.registerLink", {}],
+  ] as const)("does not expose unavailable privileged sponsor operation %s", async (op, args) => {
+    const upstreamFetch = vi.fn();
+    const handler = createProductionHarborProxyHandler({
+      authorizeOperation: () => true,
+      env: AUTH_ENVIRONMENT,
+      fetch: fetchDependency(upstreamFetch),
+    });
+
+    const response = await handler(request(JSON.stringify(args)), context(op));
+
+    expect(response.status).toBe(404);
+    expect((await response.json()).error.code).toBe("HARBOR_PROXY_INVALID_OP");
+    expect(upstreamFetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["mandate.prepare", MANDATE_PREPARE_ARGS],
+    ["mandate.register", MANDATE_REGISTER_ARGS],
+  ] as const)("allows wallet-bound onboarding operation %s", async (op, args) => {
+    const session = sealWalletSession({
+      version: 1,
+      account: ACCOUNT,
+      network: "testnet",
+      expiresAt: Date.now() + 60_000,
+    }, SESSION_SECRET, AUTH_ENVIRONMENT);
+    const upstreamFetch = vi.fn(async () => Response.json({ ok: true }));
+    const handler = createProductionHarborProxyHandler({
+      authorizeOperation: authorizeBrowserHarborOperation,
+      env: AUTH_ENVIRONMENT,
+      fetch: fetchDependency(upstreamFetch),
+    });
+    const priorEnvironment = {
+      EXEC_NETWORK: process.env.EXEC_NETWORK,
+      PILOT_DEPLOYMENT_PROFILE: process.env.PILOT_DEPLOYMENT_PROFILE,
+      PILOT_PUBLIC_ORIGIN: process.env.PILOT_PUBLIC_ORIGIN,
+      SESSION_SECRET: process.env.SESSION_SECRET,
+    };
+    try {
+      process.env.EXEC_NETWORK = "testnet";
+      process.env.PILOT_DEPLOYMENT_PROFILE = "hosted";
+      process.env.PILOT_PUBLIC_ORIGIN = "https://pilot.example";
+      process.env.SESSION_SECRET = SESSION_SECRET;
+      const response = await handler(request(JSON.stringify(args), {
+        headers: { cookie: `${WALLET_SESSION_COOKIE}=${encodeURIComponent(session)}` },
+      }), context(op));
+
+      expect(response.status).toBe(200);
+      expect(upstreamFetch).toHaveBeenCalledTimes(1);
+    } finally {
+      for (const [name, value] of Object.entries(priorEnvironment)) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
+  });
+
+  it.each([
+    ["owner", { ...MANDATE_PREPARE_ARGS, owner: X402_PAY_TO }, "testnet"],
+    ["network", MANDATE_PREPARE_ARGS, "devnet"],
+  ] as const)("rejects mandate.prepare with a wallet-session %s mismatch", async (_scope, args, sessionNetwork) => {
+    const session = sealWalletSession({
+      version: 1,
+      account: ACCOUNT,
+      network: sessionNetwork,
+      expiresAt: Date.now() + 60_000,
+    }, SESSION_SECRET, AUTH_ENVIRONMENT);
+    const upstreamFetch = vi.fn();
+    const handler = createProductionHarborProxyHandler({
+      authorizeOperation: authorizeBrowserHarborOperation,
+      env: AUTH_ENVIRONMENT,
+      fetch: fetchDependency(upstreamFetch),
+    });
+    const priorEnvironment = {
+      EXEC_NETWORK: process.env.EXEC_NETWORK,
+      PILOT_DEPLOYMENT_PROFILE: process.env.PILOT_DEPLOYMENT_PROFILE,
+      PILOT_PUBLIC_ORIGIN: process.env.PILOT_PUBLIC_ORIGIN,
+      SESSION_SECRET: process.env.SESSION_SECRET,
+    };
+    try {
+      process.env.EXEC_NETWORK = "testnet";
+      process.env.PILOT_DEPLOYMENT_PROFILE = "hosted";
+      process.env.PILOT_PUBLIC_ORIGIN = "https://pilot.example";
+      process.env.SESSION_SECRET = SESSION_SECRET;
+      const response = await handler(request(JSON.stringify(args), {
+        headers: { cookie: `${WALLET_SESSION_COOKIE}=${encodeURIComponent(session)}` },
+      }), context("mandate.prepare"));
+
+      expect(response.status).toBe(401);
+      expect((await response.json()).error.code).toBe("HARBOR_PROXY_UNAUTHORIZED");
+      expect(upstreamFetch).not.toHaveBeenCalled();
+    } finally {
+      for (const [name, value] of Object.entries(priorEnvironment)) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
+  });
+
+  it.each([
+    ["mandate.revoke", { mandate_id: "mandate-1" }],
+    ["credential.payerAccept", {}],
+    ["ap4m.purchase", {
+      mandate_id: "mandate-1",
+      merchant_id: "venue-yield-desk",
+      sku: "yield-report",
+      idempotency_key: "purchase-1",
+    }],
+  ] as const)("keeps privileged sponsor operation %s browser-denied", async (op, args) => {
+    const session = sealWalletSession({
+      version: 1,
+      account: ACCOUNT,
+      network: "testnet",
+      expiresAt: Date.now() + 60_000,
+    }, SESSION_SECRET, AUTH_ENVIRONMENT);
+    const upstreamFetch = vi.fn();
+    const handler = createProductionHarborProxyHandler({
+      authorizeOperation: authorizeBrowserHarborOperation,
+      env: AUTH_ENVIRONMENT,
+      fetch: fetchDependency(upstreamFetch),
+    });
+    const priorEnvironment = {
+      EXEC_NETWORK: process.env.EXEC_NETWORK,
+      PILOT_DEPLOYMENT_PROFILE: process.env.PILOT_DEPLOYMENT_PROFILE,
+      PILOT_PUBLIC_ORIGIN: process.env.PILOT_PUBLIC_ORIGIN,
+      SESSION_SECRET: process.env.SESSION_SECRET,
+    };
+    try {
+      process.env.EXEC_NETWORK = "testnet";
+      process.env.PILOT_DEPLOYMENT_PROFILE = "hosted";
+      process.env.PILOT_PUBLIC_ORIGIN = "https://pilot.example";
+      process.env.SESSION_SECRET = SESSION_SECRET;
+      const response = await handler(request(JSON.stringify(args), {
+        headers: { cookie: `${WALLET_SESSION_COOKIE}=${encodeURIComponent(session)}` },
+      }), context(op));
+
+      expect(response.status).toBe(401);
+      expect((await response.json()).error.code).toBe("HARBOR_PROXY_UNAUTHORIZED");
+      expect(upstreamFetch).not.toHaveBeenCalled();
+    } finally {
+      for (const [name, value] of Object.entries(priorEnvironment)) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
   });
 
   it("rejects unauthorized x402.pay before any local Harbor fetch", async () => {
@@ -1222,6 +1422,37 @@ describe("POST /api/harbor/[op]", () => {
 
     expect(response.status).toBe(413);
     expect((await response.json()).error.code).toBe("HARBOR_PROXY_REQUEST_TOO_LARGE");
+    expect(upstreamFetch).not.toHaveBeenCalled();
+  });
+
+  it("returns promptly when oversized Harbor stream cancellation never settles", async () => {
+    const upstreamFetch = vi.fn();
+    const cancel = vi.fn(() => new Promise<void>(() => undefined));
+    const handler = createHarborProxyHandler({
+      env: ENVIRONMENT,
+      fetch: fetchDependency(upstreamFetch),
+    });
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(1_048_577));
+      },
+      cancel,
+    });
+    const streamed = new Request("https://pilot.example/api/harbor/policy.set", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "https://pilot.example",
+      },
+      body,
+      duplex: "half",
+    } as RequestInit & { duplex: "half" });
+
+    const response = await handler(streamed, context("policy.set"));
+
+    expect(response.status).toBe(413);
+    expect((await response.json()).error.code).toBe("HARBOR_PROXY_REQUEST_TOO_LARGE");
+    expect(cancel).toHaveBeenCalledOnce();
     expect(upstreamFetch).not.toHaveBeenCalled();
   });
 

@@ -5,15 +5,12 @@ import {
   combineIsolatedX402Credentials,
   createIsolatedX402ChildEnvironment,
   GENERIC_DOTENV_PATHS,
+  ISOLATED_X402_PILOT_CAPABILITY_FILE,
+  ISOLATED_X402_PILOT_CREDENTIAL_FILE,
+  ISOLATED_X402_PILOT_STATE_DIRECTORY,
   parseIsolatedX402CapabilityFile,
   REPOSITORY_ROOT,
 } from "./dev-pilot-isolated-x402-v1.mjs";
-
-const SECRETS_ROOT = "/private-secrets";
-const STATE_ROOT = "/private-state";
-const CREDENTIAL_FILE = "/private-secrets/pilot-isolated-v1.env.local";
-const CAPABILITY_FILE = "/private-secrets/pilot-isolated-x402-capability-v1.env.local";
-const STATE_DIRECTORY = "/private-state/p-live-isolated-v1";
 
 const PRIMARY = `isolated-trading:${"T".repeat(32)}`;
 const X402 = `isolated-x402:${"X".repeat(32)}`;
@@ -38,8 +35,6 @@ describe("fixed isolated x402 Pilot launcher", () => {
     const plan = await buildIsolatedX402LaunchPlan({
       environment: {
         PATH: "/safe/bin",
-        PILOT_PRIVATE_SECRETS_ROOT: SECRETS_ROOT,
-        PILOT_PRIVATE_STATE_ROOT: STATE_ROOT,
         HARBOR_API_KEY: "ambient",
         HARBOR_X402_API_KEY: "ambient",
         HARBOR_X402_URL: "https://attacker.example",
@@ -47,12 +42,12 @@ describe("fixed isolated x402 Pilot launcher", () => {
       },
       assertMissing: async (path) => checked.push(path),
       lstatFile: vi.fn(async (path) => {
-        expect(path).toBe(STATE_DIRECTORY);
+        expect(path).toBe(ISOLATED_X402_PILOT_STATE_DIRECTORY);
         return directoryInfo();
       }),
       readCredentialFile: vi.fn(async (path) => {
-        if (path === CREDENTIAL_FILE) return BASE_SOURCE;
-        expect(path).toBe(CAPABILITY_FILE);
+        if (path === ISOLATED_X402_PILOT_CREDENTIAL_FILE) return BASE_SOURCE;
+        expect(path).toBe(ISOLATED_X402_PILOT_CAPABILITY_FILE);
         return CAPABILITY_SOURCE;
       }),
     });
@@ -94,10 +89,6 @@ describe("fixed isolated x402 Pilot launcher", () => {
       `${CAPABILITY_SOURCE}HARBOR_X402_URL=http://127.0.0.2:8792\n`,
     ))
       .toThrow("Unsupported isolated x402 credential entry");
-    await expect(buildIsolatedX402LaunchPlan({
-      environment: {},
-      assertMissing: async () => {},
-    })).rejects.toThrow("PILOT_PRIVATE_SECRETS_ROOT must be an explicit absolute path");
     await expect(buildIsolatedX402LaunchPlan({ argv: ["--port=3004"] }))
       .rejects.toThrow("accepts no arguments");
     await expect(buildIsolatedX402LaunchPlan({
@@ -116,7 +107,7 @@ describe("fixed isolated x402 Pilot launcher", () => {
       HARBOR_X402_API_KEY: "ambient",
       SESSION_SECRET: "ambient",
       AWS_SECRET_ACCESS_KEY: "ambient",
-    }, credentials, STATE_DIRECTORY);
+    }, credentials);
     expect(child.HARBOR_API_KEY).toBe(PRIMARY);
     expect(child.HARBOR_X402_API_KEY).toBe(X402);
     expect(child.SESSION_SECRET).toBe(SESSION);

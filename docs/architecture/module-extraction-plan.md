@@ -1,6 +1,6 @@
 # Pilot module extraction plan
 
-This architecture roadmap changes no product, auth, quota, wallet, signing, or memory behavior. The wallet type boundary below is implemented; all other boundaries remain proposals for separate review.
+The reproducibility base changes no product, auth, quota, wallet, signing, or memory behavior. The stacked source-organization PR completes only the wallet type boundary below. All other boundaries remain proposed for parent review.
 
 ## 1. Onboarding flow
 
@@ -24,7 +24,7 @@ Keep `packages/harbor-client/src/types.ts` as a re-export facade. First add a pi
 
 ## 4. Chat composition
 
-Keep `app/api/chat/handler.ts` as the route-facing facade. Extract model selection/quota reservation, Harbor tool wiring, memory/lesson proposal orchestration, and stream response shaping behind current interfaces. Reservation uncertainty, consent epochs, tool exposure, and error mapping cannot change in an organization-only change.
+Keep `app/api/chat/handler.ts` as the route-facing facade. Extract model selection/quota reservation, Harbor tool wiring, memory/lesson proposal orchestration, and stream response shaping behind current interfaces. Reservation uncertainty, consent epochs, tool exposure, and error mapping cannot change in an organization PR.
 
 ## 5. Hermes retention
 
@@ -36,4 +36,4 @@ Shared type declarations and `PilotWalletError` now live in `packages/wallet/src
 
 ## Sequencing
 
-The safest order is compatibility inventory, wallet type-only extraction, Harbor-client facade split, onboarding state/presentation split, then the RLUSD/chat/Hermes stateful modules. The last three are independent high-risk efforts and should not be combined in one change.
+The safest order is compatibility inventory, wallet type-only extraction, Harbor-client facade split, onboarding state/presentation split, then the RLUSD/chat/Hermes stateful modules. The last three are independent high-risk efforts and should not share a PR.

@@ -979,7 +979,7 @@ describe("isolated local Harbor launcher", () => {
     expect(localBaseMigration).toBe(productionBaseMigration);
     expect(config.d1_databases[0].database_name).not.toBe("pilot-harbor-disabled");
     expect(config.d1_databases[0].database_id).not.toBe(
-      "26650077-dd29-413f-a527-b33494bb99e4",
+      "ffffffff-ffff-4fff-8fff-ffffffffffff",
     );
     expect(config).not.toHaveProperty("worker_loaders");
     expect(config).not.toHaveProperty("triggers");

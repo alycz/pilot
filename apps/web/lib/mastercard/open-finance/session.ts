@@ -22,6 +22,8 @@ export interface OpenFinanceBrowserSession {
   version: 1;
   customer_id: string;
   account_id?: string;
+  wallet_account: string;
+  wallet_network: "testnet" | "devnet";
 }
 
 function key(secret: string): Buffer {
@@ -63,7 +65,9 @@ export function openOpenFinanceSession(
     if (
       parsed.version !== 1 ||
       typeof parsed.customer_id !== "string" ||
-      (parsed.account_id !== undefined && typeof parsed.account_id !== "string")
+      (parsed.account_id !== undefined && typeof parsed.account_id !== "string") ||
+      typeof parsed.wallet_account !== "string" ||
+      (parsed.wallet_network !== "testnet" && parsed.wallet_network !== "devnet")
     ) {
       return null;
     }

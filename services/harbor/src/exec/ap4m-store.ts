@@ -1346,15 +1346,16 @@ export class Ap4mPurchaseStore {
 	): Promise<Ap4mTransitionResult> {
 		const txHash = hash(value.hash);
 		positiveInteger(value.ledgerIndex, 'ledger index');
-		text(value.deliveredAmount, 'delivered amount', 80);
+		const deliveredMicros = microusd(value.deliveredAmount, 'delivered amount');
 		timestamp(value.at, 'settled at');
 		const results = await this.db.batch([
 			this.db.prepare(`UPDATE ap4m_purchase_attempts
 				SET status = 'settled', ledger_index = ?, delivered_amount = ?, settled_at = ?, updated_at = ?
 				WHERE principal = ? AND mandate_id = ? AND idempotency_key = ?
-					AND status IN ('signed', 'settlement_unknown') AND tx_hash = ?`)
+					AND status IN ('signed', 'settlement_unknown') AND tx_hash = ?
+					AND amount_microusd = ?`)
 				.bind(value.ledgerIndex, value.deliveredAmount, value.at, value.at,
-					this.principal, mandateId, idempotencyKey, txHash),
+					this.principal, mandateId, idempotencyKey, txHash, deliveredMicros),
 			this.db.prepare(`UPDATE ap4m_spend SET status = 'committed', updated_at = ?
 				WHERE principal = ? AND mandate_id = ? AND id = (
 					SELECT spend_id FROM ap4m_purchase_attempts
@@ -1364,6 +1365,10 @@ export class Ap4mPurchaseStore {
 		]);
 		const row = await this.required(mandateId, idempotencyKey);
 		if (changed(results[0] ?? { success: false }) === 1) return { outcome: 'transitioned', row };
+		if ((row.status === 'signed' || row.status === 'settlement_unknown') &&
+			(row.amountUsd === null || microusd(row.amountUsd, 'reserved amount') !== deliveredMicros)) {
+			return { outcome: 'invalid-evidence', row };
+		}
 		if (row.status === 'settled' && row.txHash === txHash && row.ledgerIndex === value.ledgerIndex &&
 			row.deliveredAmount === value.deliveredAmount) return { outcome: 'replay', row };
 		return { outcome: row.status === 'settled' ? 'mismatch' : 'invalid-state', row };

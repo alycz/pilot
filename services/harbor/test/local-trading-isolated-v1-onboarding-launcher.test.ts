@@ -56,7 +56,7 @@ describe("local trading isolated v1 onboarding launcher", () => {
       ".wrangler/harbor-local-trading-isolated-v1",
     );
     expect(LOCAL_TRADING_ISOLATED_V1_ONBOARDING_SECRET_FILE).toBe(
-      "/dev/null/pilot-disabled/harbor-local-trading-isolated-v1.env.local",
+      "/absolute/private/pilot/harbor-secrets/harbor-local-trading-isolated-v1.env.local",
     );
 
     const [catalog, migration, worker] = isolatedOnboardingCommands(repoRoot);
@@ -169,7 +169,7 @@ describe("local trading isolated v1 onboarding launcher", () => {
       },
       (commands: ReturnType<typeof isolatedOnboardingCommands>) => {
         commands[2].args[commands[2].args.indexOf("--env-file") + 1] =
-          "/dev/null/pilot-disabled/harbor-local-trading.env.local";
+          "/absolute/private/pilot/harbor-secrets/harbor-local-trading.env.local";
       },
       (commands: ReturnType<typeof isolatedOnboardingCommands>) => {
         commands[2].args.push("--remote");

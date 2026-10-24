@@ -15,12 +15,12 @@ npx vitest run scripts/quicknode
 node --experimental-transform-types scripts/quicknode/q1-coverage.ts \
   --mode mock \
   --fixture scripts/quicknode/fixtures/q1-coverage.mock.json \
-  --status ${HARBOR_PRIVATE_EVIDENCE_ROOT:?set HARBOR_PRIVATE_EVIDENCE_ROOT}/quicknode.md
+  --status status/H-qn.md
 
 node --experimental-transform-types scripts/quicknode/q2-submit.ts \
   --mode mock \
   --fixture scripts/quicknode/fixtures/q2-submit.mock.json \
-  --status ${HARBOR_PRIVATE_EVIDENCE_ROOT:?set HARBOR_PRIVATE_EVIDENCE_ROOT}/quicknode.md
+  --status status/H-qn.md
 
 node --experimental-transform-types scripts/quicknode/q3-webhook.ts \
   --mode mock \
@@ -28,12 +28,12 @@ node --experimental-transform-types scripts/quicknode/q3-webhook.ts \
   --standin-payload scripts/quicknode/fixtures/q3-wallet.mock.json \
   --execution scripts/quicknode/fixtures/q3-execution.mock.json \
   --output /tmp/q3-wallet.sanitized.json \
-  --status ${HARBOR_PRIVATE_EVIDENCE_ROOT:?set HARBOR_PRIVATE_EVIDENCE_ROOT}/quicknode.md
+  --status status/H-qn.md
 
 node --experimental-transform-types scripts/quicknode/q4-watchdog.ts \
   --mode mock \
   --proof scripts/quicknode/fixtures/q4-watchdog.mock.json \
-  --status ${HARBOR_PRIVATE_EVIDENCE_ROOT:?set HARBOR_PRIVATE_EVIDENCE_ROOT}/quicknode.md
+  --status status/H-qn.md
 
 node --experimental-transform-types scripts/quicknode/q5-facts.ts \
   --source stand-in \
@@ -41,7 +41,7 @@ node --experimental-transform-types scripts/quicknode/q5-facts.ts \
   --dataset Ledger \
   --webhook-delete-path '/webhooks/rest/v1/webhooks/{id}' \
   --output quicknode/facts.json \
-  --status ${HARBOR_PRIVATE_EVIDENCE_ROOT:?set HARBOR_PRIVATE_EVIDENCE_ROOT}/quicknode.md
+  --status status/H-qn.md
 ```
 
 The QN-6 provisioning tests exercise `up`, idempotent `up`, `status`, and
@@ -104,12 +104,12 @@ node --experimental-transform-types scripts/quicknode/q5-facts.ts \
   --dataset "$QN_STREAM_DATASET" \
   --webhook-delete-path "$QN_WEBHOOK_DELETE_PATH" \
   --output quicknode/facts.json \
-  --status ${HARBOR_PRIVATE_EVIDENCE_ROOT:?set HARBOR_PRIVATE_EVIDENCE_ROOT}/quicknode.md
+  --status status/H-qn.md
 
 node --experimental-transform-types scripts/quicknode/q1-coverage.ts \
   --mode live \
   --output src/quicknode/coverage.testnet.json \
-  --status ${HARBOR_PRIVATE_EVIDENCE_ROOT:?set HARBOR_PRIVATE_EVIDENCE_ROOT}/quicknode.md
+  --status status/H-qn.md
 ```
 
 The coverage probe reads the token-bearing endpoint only from
@@ -130,7 +130,7 @@ node --experimental-transform-types scripts/quicknode/q2-submit.ts \
   --mode live \
   --request "$QN_Q2_REQUEST_PATH" \
   --harbor-url "$HARBOR_PUBLIC_URL/" \
-  --status ${HARBOR_PRIVATE_EVIDENCE_ROOT:?set HARBOR_PRIVATE_EVIDENCE_ROOT}/quicknode.md
+  --status status/H-qn.md
 ```
 
 Pass only if the validated response says `route=quicknode` and records at
@@ -155,7 +155,7 @@ node --experimental-transform-types scripts/quicknode/provision.ts status --run 
 `xrplWalletFilter` webhook with `compression:"none"`, runs the materialized
 watchdog filter against all three ledgers, then creates or reuses the Stream
 with `end_range:-1` and no backfill. IDs are written only to
-`${HARBOR_PRIVATE_STATE_ROOT:?set HARBOR_PRIVATE_STATE_ROOT}/qn-state.event.json` with owner-only permissions.
+`/absolute/private/pilot/harbor-state/qn-state.event.json` with owner-only permissions.
 
 ### 4. Prove the webhook
 
@@ -176,7 +176,7 @@ node --experimental-transform-types scripts/quicknode/q3-webhook.ts \
   --standin-payload scripts/quicknode/fixtures/q3-wallet.mock.json \
   --execution "$QN_Q3_EXECUTION_PATH" \
   --output scripts/quicknode/fixtures/q3-wallet.sanitized.json \
-  --status ${HARBOR_PRIVATE_EVIDENCE_ROOT:?set HARBOR_PRIVATE_EVIDENCE_ROOT}/quicknode.md
+  --status status/H-qn.md
 ```
 
 It must fail with the authenticated-capture dependency; it is not a live pass.
@@ -192,7 +192,7 @@ receipt. The following command is the explicit stop check:
 node --experimental-transform-types scripts/quicknode/q4-watchdog.ts \
   --mode live \
   --proof "$QN_Q4_PROOF_PATH" \
-  --status ${HARBOR_PRIVATE_EVIDENCE_ROOT:?set HARBOR_PRIVATE_EVIDENCE_ROOT}/quicknode.md
+  --status status/H-qn.md
 ```
 
 It must fail with the missing-runner dependency; it is not a live pass. Once

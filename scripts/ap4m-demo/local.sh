@@ -81,14 +81,15 @@ MKTEMP_BIN=$(command -v mktemp)
 SAFE_PATH=$(dirname -- "$PNPM_BIN"):$(dirname -- "$NODE_BIN"):/usr/bin:/bin:/usr/sbin:/sbin
 
 PILOT_REPO=${PILOT_REPO:-$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P)}
-HARBOR_ROOT="$PILOT_REPO/services/harbor"
+HARBOR_REPO=${HARBOR_REPO:-}
+[ -n "$HARBOR_REPO" ] || fail "HARBOR_REPO must name the reviewed Harbor checkout"
 PILOT_REPO=$(CDPATH= cd -- "$PILOT_REPO" && pwd -P)
-HARBOR_ROOT=$(CDPATH= cd -- "$HARBOR_ROOT" && pwd -P)
+HARBOR_REPO=$(CDPATH= cd -- "$HARBOR_REPO" && pwd -P)
 
 require_repo_file "$PILOT_REPO" "apps/web/package.json" "Pilot"
 require_repo_file "$PILOT_REPO" "services/ap4m-merchants/pyproject.toml" "merchant"
-require_repo_file "$HARBOR_ROOT" "wrangler.ap4m-demo.jsonc" "Harbor"
-require_repo_file "$HARBOR_ROOT" "migrations/0010_ap4m_channel_purchase.sql" "Harbor"
+require_repo_file "$HARBOR_REPO" "wrangler.ap4m-demo.jsonc" "Harbor"
+require_repo_file "$HARBOR_REPO" "migrations/0010_ap4m_channel_purchase.sql" "Harbor"
 
 # Next and Wrangler automatically load these files. Refuse them instead of
 # trusting an incomplete secret-name denylist.
@@ -99,9 +100,9 @@ for path in \
   "$PILOT_REPO/apps/web/.env.development.local" \
   "$PILOT_REPO/services/ap4m-merchants/.env" \
   "$PILOT_REPO/services/ap4m-merchants/.env.local" \
-  "$HARBOR_ROOT/.dev.vars" \
-  "$HARBOR_ROOT/.env" \
-  "$HARBOR_ROOT/.env.local"
+  "$HARBOR_REPO/.dev.vars" \
+  "$HARBOR_REPO/.env" \
+  "$HARBOR_REPO/.env.local"
 do
   reject_profile_file "$path"
 done
@@ -181,19 +182,19 @@ start_process() {
 # pre-existing roots are impossible here, and no remote flag is accepted.
 /usr/bin/env -i \
   PATH="$SAFE_PATH" HOME="$STATE_ROOT/home" TMPDIR="$STATE_ROOT/tmp" \
-  "$PNPM_BIN" --dir "$HARBOR_ROOT" exec wrangler d1 migrations apply harbor-ap4m-demo-local-only \
+  "$PNPM_BIN" --dir "$HARBOR_REPO" exec wrangler d1 migrations apply harbor-ap4m-demo-local-only \
     --local \
     --persist-to "$STATE_ROOT/harbor" \
-    --config "$HARBOR_ROOT/wrangler.ap4m-demo.jsonc" >/dev/null
+    --config "$HARBOR_REPO/wrangler.ap4m-demo.jsonc" >/dev/null
 
 start_process harbor /usr/bin/env -i \
   PATH="$SAFE_PATH" HOME="$STATE_ROOT/home" TMPDIR="$STATE_ROOT/tmp" \
   HARBOR_MOCK=1 AP4M_PURCHASE_MODE=mock EXEC_NETWORK=testnet MAINNET_EXECUTION=false \
-  "$PNPM_BIN" --dir "$HARBOR_ROOT" exec wrangler dev \
+  "$PNPM_BIN" --dir "$HARBOR_REPO" exec wrangler dev \
     --local --ip "$HARBOR_HOST" --port "$HARBOR_PORT" \
     --persist-to "$STATE_ROOT/harbor" \
     --show-interactive-dev-session=false \
-    --config "$HARBOR_ROOT/wrangler.ap4m-demo.jsonc"
+    --config "$HARBOR_REPO/wrangler.ap4m-demo.jsonc"
 
 start_process pilot /usr/bin/env -i \
   PATH="$SAFE_PATH" HOME="$STATE_ROOT/home" TMPDIR="$STATE_ROOT/tmp" \

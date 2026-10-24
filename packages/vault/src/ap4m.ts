@@ -6,15 +6,120 @@ import {
   type McIntent,
 } from "@pilot/contracts";
 import matter from "gray-matter";
+import { z } from "zod";
 
 import { safeNoteName } from "./path";
 import { assertNoSensitiveContent } from "./security";
-import type { VaultNote } from "./types";
+import type { VaultNote, VaultReadSnapshotOptions, VaultScope } from "./types";
+import { vaultScopePrefix } from "./vault";
 
 const SHA256_HEX = /^[A-Fa-f0-9]{64}$/;
 const XRPL_OBJECT_ID = /^[A-Fa-f0-9]{64}$/;
 const DECIMAL = /^(?:0|[1-9]\d*)(?:\.\d+)?$/;
 const ISO_DATE_MAX_LENGTH = 35;
+const MAX_MANDATE_NOTES = 64;
+const MAX_MANDATE_NOTE_BYTES = 32 * 1024;
+const MAX_MANDATE_SCAN_ENTRIES = 1_024;
+
+export type ActiveAp4mMandateReference = {
+  mandate_id: string;
+  owner: string;
+};
+
+export type Ap4mMandateSnapshotSource = {
+  openReadSnapshot(options?: VaultReadSnapshotOptions): Promise<{
+    readonly revision: string | null;
+    list(prefix?: string): Promise<Array<{ path: string; size: number }>>;
+    read(path: string, maxBytes: number): Promise<string | null>;
+  }>;
+};
+
+const MandateNameSchema = z.string().trim().min(1).max(128)
+  .regex(/^[^\\/\0:\r\n]+$/)
+  .refine((value) => value !== "." && value !== "..", "invalid bounded name");
+const DigestSchema = z.string().regex(/^[A-Fa-f0-9]{64}$/);
+const DecimalSchema = z.string().max(80).regex(/^(?:0|[1-9]\d*)(?:\.\d+)?$/);
+const IsoDateSchema = z.string().max(ISO_DATE_MAX_LENGTH).refine(
+  (value) => !Number.isNaN(Date.parse(value)),
+  "invalid ISO-8601 date",
+);
+const MaskedLabelSchema = z.string().trim().min(1).max(80).regex(/[•*…]/u);
+const BalanceSnapshotSchema = z.object({
+  amount: DecimalSchema,
+  currency: z.string().trim().min(1).max(12).regex(/^[A-Za-z0-9]+$/),
+}).strict();
+const OpenFinanceEvidenceSchema = z.discriminatedUnion("mode", [
+  z.object({
+    label: z.literal("Mastercard Open Finance · mock"),
+    mode: z.literal("mock"),
+    owner_name_hash: DigestSchema,
+    masked_account_label: MaskedLabelSchema.optional(),
+    balance_snapshot: BalanceSnapshotSchema.optional(),
+  }).strict(),
+  z.object({
+    label: z.literal("Mastercard Open Finance · sandbox"),
+    mode: z.literal("sandbox"),
+    owner_name_hash: DigestSchema,
+    masked_account_label: MaskedLabelSchema.optional(),
+    balance_snapshot: BalanceSnapshotSchema.optional(),
+  }).strict(),
+]);
+const MandateNoteSchema = z.object({
+  type: z.literal("ap4m_mandate"),
+  version: z.literal(1),
+  mandate_id: MandateNameSchema,
+  network: z.literal("testnet"),
+  status: z.enum(["PENDING", "ACTIVE", "REVOKED", "EXPIRED"]),
+  execution_type: z.literal("DEFERRED"),
+  not_before: IsoDateSchema,
+  expires_at: IsoDateSchema,
+  constraints: z.object({
+    currency: z.literal("USD"),
+    per_payment_max: DecimalSchema,
+    daily_max: DecimalSchema,
+    total_max: DecimalSchema,
+    payees: z.array(MandateNameSchema).min(1).max(64),
+    skus: z.array(MandateNameSchema).max(64).optional(),
+  }).strict(),
+  evidence: z.object({
+    l1_digest: DigestSchema,
+    l2_digest: DigestSchema,
+    setup_transactions: z.array(z.object({
+      hash: DigestSchema,
+      explorer: z.string().max(256),
+    }).strict()).min(1).max(32),
+    channels: z.array(z.object({
+      merchant_id: MandateNameSchema,
+      channel_id: DigestSchema,
+      amount_drops: DecimalSchema,
+      explorer: z.string().max(256),
+    }).strict()).max(64),
+  }).strict(),
+  open_finance: OpenFinanceEvidenceSchema,
+  recorded_at: IsoDateSchema,
+}).strict().superRefine((note, context) => {
+  if (Date.parse(note.not_before) >= Date.parse(note.expires_at)) {
+    context.addIssue({ code: "custom", path: ["expires_at"], message: "mandate expiry must follow not-before" });
+  }
+  if (new Set(note.constraints.payees).size !== note.constraints.payees.length) {
+    context.addIssue({ code: "custom", path: ["constraints", "payees"], message: "mandate payees must be unique" });
+  }
+  if (note.constraints.skus && new Set(note.constraints.skus).size !== note.constraints.skus.length) {
+    context.addIssue({ code: "custom", path: ["constraints", "skus"], message: "mandate SKUs must be unique" });
+  }
+  for (const [index, transaction] of note.evidence.setup_transactions.entries()) {
+    const expected = `https://testnet.xrpl.org/transactions/${transaction.hash.toUpperCase()}`;
+    if (transaction.explorer !== expected) {
+      context.addIssue({ code: "custom", path: ["evidence", "setup_transactions", index, "explorer"], message: "setup explorer does not match its transaction hash" });
+    }
+  }
+  for (const [index, channel] of note.evidence.channels.entries()) {
+    const expected = `https://test.bithomp.com/explorer/${channel.channel_id.toUpperCase()}`;
+    if (channel.explorer !== expected) {
+      context.addIssue({ code: "custom", path: ["evidence", "channels", index, "explorer"], message: "channel explorer does not match its channel id" });
+    }
+  }
+});
 
 export type Ap4mOpenFinanceEvidence = {
   label: "Mastercard Open Finance · mock" | "Mastercard Open Finance · sandbox";
@@ -123,6 +228,82 @@ function frontmatterOnly(data: Record<string, unknown>): string {
   const content = matter.stringify("", data);
   assertNoSensitiveContent(content);
   return content;
+}
+
+/**
+ * Resolve one server-owned active mandate from an immutable wallet-scoped
+ * snapshot. Browser input never supplies a mandate id. Every note in the
+ * bounded Mandates subtree must be structurally valid; malformed or ambiguous
+ * state fails closed instead of being skipped.
+ */
+export async function resolveActiveAp4mMandate(
+  source: Ap4mMandateSnapshotSource,
+  scope: VaultScope,
+  now = new Date(),
+): Promise<ActiveAp4mMandateReference | undefined> {
+  if (scope.network !== "testnet") return undefined;
+  if (Number.isNaN(now.getTime())) throw new Error("AP4M mandate resolution requires a valid time");
+
+  const prefix = `${vaultScopePrefix(scope)}/Mandates`;
+  const snapshot = await source.openReadSnapshot({
+    prefix,
+    maxEntries: MAX_MANDATE_NOTES + 1,
+    maxScannedEntries: MAX_MANDATE_SCAN_ENTRIES,
+    suffix: ".md",
+  });
+  const entries = (await snapshot.list(prefix)).sort((left, right) =>
+    left.path.localeCompare(right.path));
+  if (entries.length > MAX_MANDATE_NOTES) {
+    throw new Error("AP4M mandate note limit exceeded");
+  }
+
+  const seen = new Set<string>();
+  const active: ActiveAp4mMandateReference[] = [];
+  for (const entry of entries) {
+    if (
+      !entry.path.startsWith(`${prefix}/`) ||
+      entry.path.slice(prefix.length + 1).includes("/") ||
+      !entry.path.endsWith(".md") ||
+      entry.path.includes("\\") ||
+      entry.path.includes("\0") ||
+      seen.has(entry.path) ||
+      !Number.isSafeInteger(entry.size) ||
+      entry.size < 0 ||
+      entry.size > MAX_MANDATE_NOTE_BYTES
+    ) {
+      throw new Error("AP4M mandate snapshot contains an invalid note entry");
+    }
+    seen.add(entry.path);
+    const content = await snapshot.read(entry.path, MAX_MANDATE_NOTE_BYTES);
+    if (content === null || Buffer.byteLength(content, "utf8") !== entry.size) {
+      throw new Error("AP4M mandate snapshot changed or reported an invalid note size");
+    }
+    let parsed: ReturnType<typeof matter>;
+    try {
+      parsed = matter(content);
+    } catch {
+      throw new Error("AP4M mandate note frontmatter is malformed");
+    }
+    if (parsed.content.trim() !== "") {
+      throw new Error("AP4M mandate notes must contain frontmatter only");
+    }
+    const note = MandateNoteSchema.parse(parsed.data);
+    const pathMandateId = entry.path.slice(prefix.length + 1, -".md".length);
+    if (note.mandate_id !== pathMandateId) {
+      throw new Error("AP4M mandate note id does not match its scoped path");
+    }
+    const nowMs = now.getTime();
+    if (
+      note.status === "ACTIVE" &&
+      Date.parse(note.not_before) <= nowMs &&
+      nowMs < Date.parse(note.expires_at)
+    ) {
+      active.push({ mandate_id: note.mandate_id, owner: scope.owner });
+    }
+  }
+
+  if (active.length > 1) throw new Error("AP4M mandate scope contains multiple active mandates");
+  return active[0];
 }
 
 /**

@@ -177,4 +177,135 @@ describe("fail-closed account-wide kill owner binding", () => {
         WHERE execution_id = 'execution:owner-scope'`).get()).toEqual({ state: "reserved" });
     } finally { database.close(); }
   });
+
+  it("does not partially approve a mandate if the global kill changes before activation", async () => {
+    const database = new Database();
+    try {
+      const store = new StrategyStore(d1(database), "tenant:activation-race");
+      const created = await store.createDraft(draft, now);
+      await store.setGlobalKill(ownerA, "testnet", false, "Owner enabled strategy", now);
+      const readKill = store.getGlobalKill.bind(store);
+      store.getGlobalKill = async (owner, network) => {
+        const result = await readKill(owner, network);
+        database.sqlite.prepare(`UPDATE strategy_global_controls SET kill_enabled = 1,
+          kill_reason = 'Concurrent emergency stop' WHERE principal = ? AND owner = ? AND network = ?`)
+          .run("tenant:activation-race", ownerA, "testnet");
+        return result;
+      };
+
+      await expect(store.authorizeAndActivate({
+        strategy_id: created.strategy_id,
+        mandate_version: created.mandate.version,
+        mandate_digest: created.mandate.digest,
+        authorization: {
+          authorization_id: "authorization:activation-race",
+          method: "wallet_action_proof_v1",
+          owner: ownerA,
+          mandate_digest: created.mandate.digest,
+          mandate_version: created.mandate.version,
+          approved_at: now.toISOString(),
+          expires_at: draft.expires_at,
+        },
+      }, now)).rejects.toThrow("strategy activation changed concurrently");
+
+      expect(database.sqlite.prepare(`SELECT status FROM strategy_mandates
+        WHERE id = ?`).get(created.mandate.mandate_id)).toEqual({ status: "draft" });
+      expect(database.sqlite.prepare(`SELECT lifecycle FROM strategies
+        WHERE id = ?`).get(created.strategy_id)).toEqual({ lifecycle: "draft" });
+    } finally { database.close(); }
+  });
+
+  it("does not activate a strategy if unresolved work appears after the initial check", async () => {
+    const database = new Database();
+    try {
+      const principal = "tenant:unresolved-activation-race";
+      const store = new StrategyStore(d1(database), principal);
+      const created = await store.createDraft(draft, now);
+      await store.setGlobalKill(ownerA, "testnet", false, "Owner enabled strategy", now);
+      const readUnresolved = store.getUnresolvedExecution.bind(store);
+      store.getUnresolvedExecution = async (strategyId) => {
+        const result = await readUnresolved(strategyId);
+        database.sqlite.prepare(`INSERT INTO strategy_executions(
+          id, principal, strategy_id, decision_id, idempotency_key,
+          submission_state, unresolved, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 'unknown', 1, ?, ?)`).run(
+          "execution:activation-race",
+          principal,
+          strategyId,
+          "decision:activation-race",
+          "strategy:activation-race",
+          now.toISOString(),
+          now.toISOString(),
+        );
+        return result;
+      };
+
+      await expect(store.authorizeAndActivate({
+        strategy_id: created.strategy_id,
+        mandate_version: created.mandate.version,
+        mandate_digest: created.mandate.digest,
+        authorization: {
+          authorization_id: "authorization:unresolved-activation-race",
+          method: "wallet_action_proof_v1",
+          owner: ownerA,
+          mandate_digest: created.mandate.digest,
+          mandate_version: created.mandate.version,
+          approved_at: now.toISOString(),
+          expires_at: draft.expires_at,
+        },
+      }, now)).rejects.toThrow("strategy activation changed concurrently");
+
+      expect(database.sqlite.prepare(`SELECT status FROM strategy_mandates
+        WHERE id = ?`).get(created.mandate.mandate_id)).toEqual({ status: "draft" });
+      expect(database.sqlite.prepare(`SELECT lifecycle FROM strategies
+        WHERE id = ?`).get(created.strategy_id)).toEqual({ lifecycle: "draft" });
+    } finally { database.close(); }
+  });
+
+  it("does not resume a strategy if unresolved work appears after the initial check", async () => {
+    const database = new Database();
+    try {
+      const principal = "tenant:unresolved-resume-race";
+      const store = new StrategyStore(d1(database), principal);
+      const created = await store.createDraft(draft, now);
+      await store.setGlobalKill(ownerA, "testnet", false, "Owner enabled strategy", now);
+      const active = await store.authorizeAndActivate({
+        strategy_id: created.strategy_id,
+        mandate_version: created.mandate.version,
+        mandate_digest: created.mandate.digest,
+        authorization: {
+          authorization_id: "authorization:unresolved-resume-race",
+          method: "wallet_action_proof_v1",
+          owner: ownerA,
+          mandate_digest: created.mandate.digest,
+          mandate_version: created.mandate.version,
+          approved_at: now.toISOString(),
+          expires_at: draft.expires_at,
+        },
+      }, now);
+      await store.pause(active.strategy_id, now);
+      const readUnresolved = store.getUnresolvedExecution.bind(store);
+      store.getUnresolvedExecution = async (strategyId) => {
+        const result = await readUnresolved(strategyId);
+        database.sqlite.prepare(`INSERT INTO strategy_executions(
+          id, principal, strategy_id, decision_id, idempotency_key,
+          submission_state, unresolved, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 'unknown', 1, ?, ?)`).run(
+          "execution:resume-race",
+          principal,
+          strategyId,
+          "decision:resume-race",
+          "strategy:resume-race",
+          now.toISOString(),
+          now.toISOString(),
+        );
+        return result;
+      };
+
+      await expect(store.resume(active.strategy_id, now))
+        .rejects.toThrow("strategy lifecycle changed concurrently");
+      expect(database.sqlite.prepare(`SELECT lifecycle FROM strategies
+        WHERE id = ?`).get(active.strategy_id)).toEqual({ lifecycle: "paused" });
+    } finally { database.close(); }
+  });
 });

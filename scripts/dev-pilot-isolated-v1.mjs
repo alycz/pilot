@@ -8,16 +8,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const ISOLATED_PILOT_PROFILE = "local-wallet-isolated-v1";
 export const ISOLATED_PILOT_BUILD_MARKER = "pilot-local-wallet-isolated-v1";
-export const PILOT_PRIVATE_SECRETS_ROOT_ENV = "PILOT_PRIVATE_SECRETS_ROOT";
-export const PILOT_PRIVATE_STATE_ROOT_ENV = "PILOT_PRIVATE_STATE_ROOT";
-
-export function requirePrivateRoot(environment, name) {
-  const value = environment[name];
-  if (typeof value !== "string" || !value.startsWith("/")) {
-    throw new Error(`${name} must be an explicit absolute path`);
-  }
-  return value;
-}
+export const ISOLATED_PILOT_CREDENTIAL_FILE =
+  "/absolute/private/pilot/pilot-secrets/pilot-isolated-v1.env.local";
+export const ISOLATED_PILOT_STATE_DIRECTORY =
+  "/absolute/private/pilot/pilot-state/p-live-isolated-v1";
 export const ISOLATED_PILOT_HARBOR_ORIGIN = "http://127.0.0.2:8791";
 
 const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url));
@@ -68,7 +62,7 @@ export function parseIsolatedCredentialFile(source) {
   return result;
 }
 
-export function createIsolatedChildEnvironment(environment, credentials, stateDirectory) {
+export function createIsolatedChildEnvironment(environment, credentials) {
   const child = {};
   for (const name of PASSTHROUGH_ENVIRONMENT) {
     if (environment[name] !== undefined) child[name] = environment[name];
@@ -85,7 +79,7 @@ export function createIsolatedChildEnvironment(environment, credentials, stateDi
     P_LIVE_HARBOR_FOK_DEPLOYED: "1",
     P_LIVE_HARBOR_OWNER_APPROVAL_DEPLOYED: "1",
     P_LIVE_HARBOR_EXECUTION_V2: "1",
-    P_LIVE_RLUSD_ACQUISITION_STATE_DIR: stateDirectory,
+    P_LIVE_RLUSD_ACQUISITION_STATE_DIR: ISOLATED_PILOT_STATE_DIRECTORY,
     HARBOR_API_KEY: credentials.HARBOR_API_KEY,
     SESSION_SECRET: credentials.SESSION_SECRET,
   };
@@ -121,15 +115,11 @@ export async function buildIsolatedLaunchPlan({
   if (argv.length !== 0) throw new Error("The isolated Pilot launcher accepts no arguments");
   for (const path of GENERIC_DOTENV_PATHS) await assertMissing(path);
 
-  const secretsRoot = requirePrivateRoot(environment, PILOT_PRIVATE_SECRETS_ROOT_ENV);
-  const stateRoot = requirePrivateRoot(environment, PILOT_PRIVATE_STATE_ROOT_ENV);
-  const credentialFile = resolve(secretsRoot, "pilot-isolated-v1.env.local");
-  const stateDirectory = resolve(stateRoot, "p-live-isolated-v1");
   const credentials = parseIsolatedCredentialFile(
-    await readCredentialFile(credentialFile),
+    await readCredentialFile(ISOLATED_PILOT_CREDENTIAL_FILE),
   );
 
-  const stateInfo = await lstatFile(stateDirectory);
+  const stateInfo = await lstatFile(ISOLATED_PILOT_STATE_DIRECTORY);
   assertPrivateOwned(stateInfo, "The isolated Pilot state directory", "isDirectory");
 
   return {
@@ -146,7 +136,7 @@ export async function buildIsolatedLaunchPlan({
       "3003",
     ],
     cwd: REPOSITORY_ROOT,
-    env: createIsolatedChildEnvironment(environment, credentials, stateDirectory),
+    env: createIsolatedChildEnvironment(environment, credentials),
   };
 }
 

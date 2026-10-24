@@ -53,7 +53,7 @@ export const LOCAL_X402_ISOLATED_V1_CONFIG =
 export const LOCAL_X402_ISOLATED_V1_STATE_DIRECTORY =
   ".wrangler/harbor-local-x402-isolated-v1";
 export const LOCAL_X402_ISOLATED_V1_SECRET_FILE =
-  (process.env.HARBOR_PRIVATE_SECRETS_ROOT ? resolve(process.env.HARBOR_PRIVATE_SECRETS_ROOT, "harbor-local-x402-isolated-v1.env.local") : "/dev/null/pilot-disabled/harbor-local-x402-isolated-v1.env.local");
+  "/absolute/private/pilot/harbor-secrets/harbor-local-x402-isolated-v1.env.local";
 export const LOCAL_X402_ISOLATED_V1_SIGNING_PROFILE =
   "reviewed-testnet-isolated-v1";
 export const LOCAL_X402_ISOLATED_V1_HOST = "127.0.0.2";

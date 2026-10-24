@@ -197,7 +197,7 @@ export function HarnessChatHost({ children }: { children: ReactNode }) {
           data-testid="harness-chat-toggle"
           aria-controls={PANEL_ID}
           aria-expanded={presentation.open}
-          aria-label={presentation.open ? "Minimize Pilot harness chat" : "Open Pilot harness chat"}
+          aria-label={presentation.open ? "Minimize workspace chat" : "Open workspace chat"}
           onClick={() => setRequestedOpen((open) => !open)}
           className={`harness-chat-toggle ${presentation.open ? "harness-chat-toggle--open" : ""}`}
         >
@@ -210,7 +210,7 @@ export function HarnessChatHost({ children }: { children: ReactNode }) {
         <button
           type="button"
           data-testid="harness-chat-backdrop"
-          aria-label="Close Pilot harness chat"
+          aria-label="Close workspace chat"
           className="harness-chat-backdrop"
           onClick={closeDrawer}
         />
@@ -221,7 +221,7 @@ export function HarnessChatHost({ children }: { children: ReactNode }) {
         id={PANEL_ID}
         data-testid="harness-chat-panel"
         role={presentation.role}
-        aria-label="Pilot harness chat"
+        aria-label="Workspace chat"
         aria-modal={presentation.modal || undefined}
         aria-hidden={!presentation.open}
         inert={presentation.open ? undefined : true}
@@ -232,12 +232,12 @@ export function HarnessChatHost({ children }: { children: ReactNode }) {
           <header className="harness-chat-header">
             <div>
               <p className="label-mono">Same conversation · every page</p>
-              <h2>Pilot harness</h2>
+              <h2>Workspace chat</h2>
             </div>
             <button
               ref={closeRef}
               type="button"
-              aria-label="Minimize Pilot harness chat"
+              aria-label="Minimize workspace chat"
               onClick={closeDrawer}
               className="harness-chat-close"
             >
@@ -250,7 +250,7 @@ export function HarnessChatHost({ children }: { children: ReactNode }) {
           {!shouldResolveSession ? (
             <div className="harness-chat-loading">Open the harness to start a conversation.</div>
           ) : conversationSession === undefined ? (
-            <div className="harness-chat-loading" role="status">Checking Pilot session…</div>
+            <div className="harness-chat-loading" role="status">Checking workspace session…</div>
           ) : (
             <HarnessWalletSessionProvider session={conversationSession.session}>
               <ChatView key={conversationSession.scope} />

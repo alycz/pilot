@@ -698,6 +698,11 @@ describe('Ap4mPurchaseStore settlement safety', () => {
 		).get('idem-1')).toEqual(merchantBytes);
 		expect((await store.get(MANDATE, 'idem-1'))?.merchantResponse).toEqual(merchantResponse());
 		expect((await store.markSettled(MANDATE, 'idem-1', {
+			hash: HASH, ledgerIndex: 49, deliveredAmount: '5.99', at: '2026-10-21T18:03:35.000Z',
+		})).outcome).toBe('invalid-evidence');
+		expect((await store.get(MANDATE, 'idem-1'))?.status).toBe('settlement_unknown');
+		expect(db.database.prepare('SELECT status FROM ap4m_spend').get()).toEqual({ status: 'reserved' });
+		expect((await store.markSettled(MANDATE, 'idem-1', {
 			hash: HASH, ledgerIndex: 49, deliveredAmount: '6', at: '2026-10-21T18:03:40.000Z',
 		})).outcome).toBe('transitioned');
 		expect(db.database.prepare('SELECT status FROM ap4m_spend').get()).toEqual({ status: 'committed' });

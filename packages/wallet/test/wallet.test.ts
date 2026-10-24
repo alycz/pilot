@@ -495,6 +495,35 @@ describe("xrpl-connect owner wallets", () => {
     expect(adapter.sign).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["TxnSignature", { TxnSignature: "DEADBEEF" }],
+    ["Signers", { Signers: [] }],
+    ["non-empty SigningPubKey", { SigningPubKey: "02".padEnd(66, "A") }],
+  ])(
+    "rejects a transaction carrying %s before prompting",
+    async (_label, signedFields) => {
+      const wallet = createWallet({ provider: "gemwallet", network: "testnet" });
+      const adapter = latestAdapter();
+      await wallet.connect();
+
+      await expect(
+        wallet.signOnly({ ...tx(), ...signedFields }),
+      ).rejects.toEqual(expectCode("INVALID_TRANSACTION"));
+      expect(adapter.sign).not.toHaveBeenCalled();
+    },
+  );
+
+  it("allows an explicitly empty SigningPubKey for the wallet to populate", async () => {
+    const wallet = createWallet({ provider: "gemwallet", network: "testnet" });
+    const adapter = latestAdapter();
+    await wallet.connect();
+
+    await expect(
+      wallet.signOnly({ ...tx(), SigningPubKey: "" }),
+    ).resolves.toBe("SIGNED_BLOB");
+    expect(adapter.sign).toHaveBeenCalledOnce();
+  });
+
   it("uses the lending devnet network configuration", async () => {
     const wallet = createWallet({
       provider: "crossmark",

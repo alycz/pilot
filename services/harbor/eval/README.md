@@ -17,13 +17,13 @@ read in golden mode:
 
 ```sh
 set -a
-. ${HARBOR_PRIVATE_SECRETS_ROOT:?set HARBOR_PRIVATE_SECRETS_ROOT}/h-safety.env.local
+. /absolute/private/pilot/harbor-secrets/h-safety.env.local
 set +a
 export HARBOR_EVAL_READ_ACCOUNT="$H_SAFETY_TEST_OWNER_TESTNET_ADDRESS"
 ```
 
 ```sh
-node eval/run.mjs --url <destination-mcp-url>
+node eval/run.mjs --url https://<worker>.workers.dev/mcp
 ```
 
 The standalone command assumes the configured principal already has an active
@@ -52,7 +52,7 @@ be printed, passed as command-line arguments, or uploaded as Worker secrets:
 
 ```sh
 set -a
-. ${HARBOR_PRIVATE_SECRETS_ROOT:?set HARBOR_PRIVATE_SECRETS_ROOT}/h-safety.env.local
+. /absolute/private/pilot/harbor-secrets/h-safety.env.local
 set +a
 export HARBOR_EVAL_OWNER_CONFIRM="$H_SAFETY_TEST_OWNER_TESTNET_ADDRESS"
 export HARBOR_EVAL_FRESH_ACCOUNT=true
@@ -88,7 +88,7 @@ Prerequisites and validated public order-book liquidity are checked before
 Then run:
 
 ```sh
-node eval/run.mjs --url <destination-mcp-url> --live
+node eval/run.mjs --url https://<worker>.workers.dev/mcp --live
 ```
 
 After the public prerequisites pass, the runner calls `account.link`, signs the
@@ -125,7 +125,7 @@ acknowledgement and `--revoke`:
 
 ```sh
 HARBOR_EVAL_REVOKE_ACTION=sign-revoke-and-submit \
-  node eval/run.mjs --url <destination-mcp-url> --live --revoke
+  node eval/run.mjs --url https://<worker>.workers.dev/mcp --live --revoke
 ```
 
 `--revoke` prepares an empty-permission `DelegateSet`, signs it locally,

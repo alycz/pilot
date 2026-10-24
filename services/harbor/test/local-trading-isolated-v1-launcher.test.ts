@@ -212,13 +212,13 @@ describe("local trading isolated v1 launcher", () => {
       FS_CONSTANTS.O_RDONLY | FS_CONSTANTS.O_NOFOLLOW,
     );
     expect(validateParent).toHaveBeenCalledWith(
-      "/dev/null/pilot-disabled",
+      "/absolute/private/pilot/harbor-secrets",
     );
     expect(handle.close).toHaveBeenCalledOnce();
 
     await expect(
       validateIsolatedTradingSecretFile(
-        "/dev/null/pilot-disabled/harbor-local-trading.env.local",
+        "/absolute/private/pilot/harbor-secrets/harbor-local-trading.env.local",
         { openFile, validateParent },
       ),
     ).rejects.toThrow("Local trading isolated v1 secret file is missing or unsafe");
@@ -266,7 +266,7 @@ describe("local trading isolated v1 launcher", () => {
       },
       (commands: ReturnType<typeof isolatedTradingCommands>) => {
         commands[2].args[commands[2].args.indexOf("--env-file") + 1] =
-          "/dev/null/pilot-disabled/harbor-local-trading.env.local";
+          "/absolute/private/pilot/harbor-secrets/harbor-local-trading.env.local";
       },
       (commands: ReturnType<typeof isolatedTradingCommands>) => {
         commands[2].args.push("--remote");

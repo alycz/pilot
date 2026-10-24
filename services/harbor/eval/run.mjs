@@ -51,9 +51,9 @@ const FALLBACK_READ_ACCOUNT = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
 function usage() {
   process.stdout.write(`Harbor MCP evaluation\n\n` +
     `Score the 30 non-submitting golden cases:\n` +
-    `  node eval/run.mjs --url <destination-mcp-url>\n\n` +
+    `  node eval/run.mjs --url https://<worker>.workers.dev/mcp\n\n` +
     `Run the explicitly opted-in delegated test-network workflow, then score all 30 cases:\n` +
-    `  node eval/run.mjs --url <destination-mcp-url> --live\n\n` +
+    `  node eval/run.mjs --url https://<worker>.workers.dev/mcp --live\n\n` +
     `Add --revoke to owner-sign and submit the prepared revocation after verification.\n`);
 }
 

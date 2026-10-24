@@ -505,10 +505,10 @@ describe('isolated x402 credential materialization', () => {
 
 	it('uses only new isolated destinations and never the legacy credential names', () => {
 		expect(LOCAL_X402_ISOLATED_SECRET_FILE).toBe(
-			'/dev/null/pilot-disabled/harbor-local-x402-isolated-v1.env.local',
+			'/absolute/private/pilot/harbor-secrets/harbor-local-x402-isolated-v1.env.local',
 		);
 		expect(PILOT_X402_ISOLATED_CAPABILITY_FILE).toBe(
-			'/dev/null/pilot-disabled/pilot-isolated-x402-capability-v1.env.local',
+			'/absolute/private/pilot/pilot-secrets/pilot-isolated-x402-capability-v1.env.local',
 		);
 		expect(LOCAL_X402_ISOLATED_SECRET_FILE).not.toMatch(/harbor-local-x402\.env/u);
 		expect(PILOT_X402_ISOLATED_CAPABILITY_FILE).not.toMatch(/pilot-isolated-v1\.env/u);

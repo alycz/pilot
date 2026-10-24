@@ -23,7 +23,7 @@ export const LOCAL_STATE_DIRECTORY = ".wrangler/harbor-local";
 export const LOCAL_X402_STATE_DIRECTORY = ".wrangler/harbor-local-x402";
 export const LOCAL_FILE_UMASK = 0o077;
 export const LOCAL_X402_SECRET_FILE =
-	(process.env.HARBOR_PRIVATE_SECRETS_ROOT ? resolve(process.env.HARBOR_PRIVATE_SECRETS_ROOT, "harbor-local-x402.env.local") : "/dev/null/pilot-disabled/harbor-local-x402.env.local");
+	"/absolute/private/pilot/harbor-secrets/harbor-local-x402.env.local";
 export const LOCAL_PROFILES = Object.freeze({
 	READ_ONLY: "read-only",
 	X402_SIGNING: "x402-signing",

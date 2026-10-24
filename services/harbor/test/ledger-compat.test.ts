@@ -208,6 +208,13 @@ function directSubmissionHarness(
         if (command === "ledger") {
           return { validated: true, ledger_index: 99_999_950 };
         }
+        if (command === "account_info") {
+          return {
+            validated: true,
+            ledger_index: 99_999_950,
+            account_data: { Account: owner, Flags: 0 },
+          };
+        }
         throw new Error(`unexpected XRPL command ${command}`);
       }),
     },

@@ -4,7 +4,6 @@ import boundedTestnetEvidence from "./fixtures/p-live-bounded-testnet.synthetic.
 
 import {
   actions,
-  resolvePLivePaths,
   acquisitionApprovalToken,
   acquisitionExecuteArgs,
   acquisitionQuoteExpiredState,
@@ -36,28 +35,6 @@ import {
 } from "./p-live-live.mjs";
 
 describe("P-live harness stages", () => {
-  it("resolves explicit private inputs and fails closed when absent", () => {
-    expect(resolvePLivePaths({
-      P_LIVE_SECRET_FILE: "/direct/p-live.env.local",
-      PILOT_ENV_FILE: "/direct/pilot.env.local",
-      P_LIVE_ACQUISITION_STATE_FILE: "/direct/acquisition.json",
-      PILOT_PRIVATE_SECRETS_ROOT: "/ignored-secrets",
-      PILOT_PRIVATE_STATE_ROOT: "/ignored-state",
-    })).toEqual({
-      secretFile: "/direct/p-live.env.local",
-      pilotEnvFile: "/direct/pilot.env.local",
-      acquisitionStateFile: "/direct/acquisition.json",
-    });
-    expect(resolvePLivePaths({
-      PILOT_PRIVATE_SECRETS_ROOT: "/private-secrets",
-      PILOT_PRIVATE_STATE_ROOT: "/private-state",
-    })).toEqual({
-      secretFile: "/private-secrets/p-live.env.local",
-      pilotEnvFile: "/private-secrets/pilot.env.local",
-      acquisitionStateFile: "/private-state/p-live-rlusd-acquisition.json",
-    });
-    expect(() => resolvePLivePaths({})).toThrow(/P_LIVE_SECRET_FILE.*required/);
-  });
   it("exposes the validated Devnet link, vault, and expiry acceptance stages", () => {
     expect(Object.keys(actions)).toEqual(expect.arrayContaining([
       "devnet-link",

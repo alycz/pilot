@@ -28,16 +28,14 @@ describe("AWS-6 g1 Guardrails probe", () => {
 
   it("writes only fixed aggregate evidence to an explicit status path", async () => {
     const root = await mkdtemp(join(tmpdir(), "aws6-g1-"));
-    const status = join(root, "evidence");
+    const status = join(root, "status");
     await mkdir(status);
-    const path = join(status, "aws.md");
+    const path = join(status, "H-aws.md");
     const previous = process.cwd();
     process.chdir(root);
-    const previousEvidenceRoot = process.env.HARBOR_PRIVATE_EVIDENCE_ROOT;
-    process.env.HARBOR_PRIVATE_EVIDENCE_ROOT = status;
     try {
       await runG1Guardrails({
-        statusPath: path,
+        statusPath: "status/H-aws.md",
         now: () => new Date("2026-10-21T20:30:00.000Z"),
       });
       const evidence = await readFile(path, "utf8");
@@ -49,24 +47,18 @@ describe("AWS-6 g1 Guardrails probe", () => {
       }
     } finally {
       process.chdir(previous);
-      if (previousEvidenceRoot === undefined) delete process.env.HARBOR_PRIVATE_EVIDENCE_ROOT;
-      else process.env.HARBOR_PRIVATE_EVIDENCE_ROOT = previousEvidenceRoot;
     }
   });
 
-  it("refuses to write evidence outside the private evidence root", async () => {
+  it("refuses to write evidence outside the direct status directory", async () => {
     const root = await mkdtemp(join(tmpdir(), "aws6-g1-"));
     const previous = process.cwd();
     process.chdir(root);
-    const previousEvidenceRoot = process.env.HARBOR_PRIVATE_EVIDENCE_ROOT;
-    process.env.HARBOR_PRIVATE_EVIDENCE_ROOT = join(root, "evidence");
     try {
       await expect(runG1Guardrails({ statusPath: join(root, "outside.md") }))
-        .rejects.toThrow(/directly under HARBOR_PRIVATE_EVIDENCE_ROOT/);
+        .rejects.toThrow(/directly under status/);
     } finally {
       process.chdir(previous);
-      if (previousEvidenceRoot === undefined) delete process.env.HARBOR_PRIVATE_EVIDENCE_ROOT;
-      else process.env.HARBOR_PRIVATE_EVIDENCE_ROOT = previousEvidenceRoot;
     }
   });
 });

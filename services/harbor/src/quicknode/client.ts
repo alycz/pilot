@@ -1,6 +1,8 @@
 import type { Network } from "../contracts";
 
 export const QUICKNODE_API_BASE = "https://api.quicknode.com/";
+const QUICKNODE_TIMEOUT_MS = 10_000;
+const QUICKNODE_MAX_RESPONSE_BYTES = 1_048_576;
 
 export type QuickNodeEnv = {
   QN_API_BASE?: string;
@@ -19,6 +21,8 @@ export type QnRestOptions = {
   /** True only for a request received through the local dev listener. */
   requestLocal: boolean;
   fetcher?: typeof fetch;
+  timeoutMs?: number;
+  maxResponseBytes?: number;
 };
 
 export type QuickNodeStartupContext = {
@@ -162,30 +166,96 @@ export async function qnRest(
     encodedBody = JSON.stringify(body);
   }
 
-  let response: Response;
-  try {
-    response = await (options.fetcher ?? fetch)(url, {
-      method,
-      headers,
-      body: encodedBody,
-    });
-  } catch {
-    throw new QuickNodeError("QN_TRANSPORT_ERROR", true);
+  const timeoutMs = options.timeoutMs ?? QUICKNODE_TIMEOUT_MS;
+  const maxResponseBytes = options.maxResponseBytes ?? QUICKNODE_MAX_RESPONSE_BYTES;
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new QuickNodeError("QN_INVALID_REQUEST");
+  }
+  if (!Number.isSafeInteger(maxResponseBytes) || maxResponseBytes <= 0) {
+    throw new QuickNodeError("QN_INVALID_REQUEST");
   }
 
-  let payload: unknown = null;
-  if (response.status !== 204) {
+  const controller = new AbortController();
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  let timedOut = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+      void reader?.cancel().catch(() => undefined);
+      reject(new QuickNodeError("QN_TRANSPORT_ERROR", true));
+    }, timeoutMs);
+  });
+  let response: Response;
+  try {
+    response = await Promise.race([
+      (options.fetcher ?? fetch)(url, {
+        method,
+        headers,
+        body: encodedBody,
+        redirect: "error",
+        signal: controller.signal,
+      }).catch(() => {
+        throw new QuickNodeError("QN_TRANSPORT_ERROR", true);
+      }),
+      timeout,
+    ]);
+    if (!response.ok) {
+      void response.body?.cancel().catch(() => undefined);
+      throw new QuickNodeError(
+        `QN_HTTP_${response.status}`,
+        response.status === 408 || response.status === 429 || response.status >= 500,
+      );
+    }
+    if (response.status === 204) return null;
+
+    const declaredLength = response.headers.get("content-length");
+    if (
+      declaredLength !== null &&
+      (!/^\d+$/.test(declaredLength) || Number(declaredLength) > maxResponseBytes)
+    ) {
+      void response.body?.cancel().catch(() => undefined);
+      throw new QuickNodeError("QN_MALFORMED_RESPONSE");
+    }
+    if (!response.body) throw new QuickNodeError("QN_MALFORMED_RESPONSE");
+    reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+    while (true) {
+      const { done, value } = await Promise.race([reader.read(), timeout]);
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxResponseBytes) {
+        void reader.cancel().catch(() => undefined);
+        throw new QuickNodeError("QN_MALFORMED_RESPONSE");
+      }
+      chunks.push(value);
+    }
+    if (timedOut) throw new QuickNodeError("QN_TRANSPORT_ERROR", true);
+    const bytes = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
     try {
-      payload = await response.json();
+      return JSON.parse(
+        new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes),
+      ) as unknown;
     } catch {
       throw new QuickNodeError("QN_MALFORMED_RESPONSE");
     }
+  } catch (error) {
+    if (error instanceof QuickNodeError) throw error;
+    throw new QuickNodeError("QN_TRANSPORT_ERROR", true);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    try {
+      reader?.releaseLock();
+    } catch {
+      // A timeout can race a pending body read. Cancellation owns cleanup;
+      // retain the normalized transport error instead of leaking a stream error.
+    }
   }
-  if (!response.ok) {
-    throw new QuickNodeError(
-      `QN_HTTP_${response.status}`,
-      response.status === 408 || response.status === 429 || response.status >= 500,
-    );
-  }
-  return payload;
 }

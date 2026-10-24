@@ -25,7 +25,7 @@ deploying.
 | Local D1 name | `harbor-local-trading-isolated-v1-only` |
 | Local D1 id | `22222222-2222-2222-2222-222222222222` |
 | Frozen migration directory | `migrations-profile-trading-isolated-v1` |
-| Credential file | `${HARBOR_PRIVATE_SECRETS_ROOT:?set HARBOR_PRIVATE_SECRETS_ROOT}/harbor-local-trading-isolated-v1.env.local` |
+| Credential file | `/absolute/private/pilot/harbor-secrets/harbor-local-trading-isolated-v1.env.local` |
 | Runtime enablement marker | `HARBOR_LOCAL_TRADING_ISOLATED_V1_RUNTIME_ENABLED=true` |
 | Signing-profile marker | `HARBOR_LOCAL_TRADING_ISOLATED_V1_SIGNING_PROFILE=local-wallet-isolated-v1` |
 | Durable build origin | `local-trading-isolated-v1` |
@@ -50,7 +50,7 @@ exact literals are part of the Pilot integration contract:
 | Shared local D1 name | `harbor-local-trading-isolated-v1-only` |
 | Shared local D1 id | `22222222-2222-2222-2222-222222222222` |
 | Shared frozen migration directory | `migrations-profile-trading-isolated-v1` |
-| Shared credential file | `${HARBOR_PRIVATE_SECRETS_ROOT:?set HARBOR_PRIVATE_SECRETS_ROOT}/harbor-local-trading-isolated-v1.env.local` |
+| Shared credential file | `/absolute/private/pilot/harbor-secrets/harbor-local-trading-isolated-v1.env.local` |
 | Runtime enablement marker | `HARBOR_LOCAL_TRADING_ISOLATED_V1_ONBOARDING_RUNTIME_ENABLED=true` |
 | Signing-profile marker | `HARBOR_LOCAL_TRADING_ISOLATED_V1_ONBOARDING_SIGNING_PROFILE=local-wallet-isolated-onboarding-v1` |
 | Durable build origin | `local-trading-isolated-onboarding-v1` |

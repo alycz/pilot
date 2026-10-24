@@ -14,7 +14,7 @@ import { DEFAULT_DELEGATED_PERMISSIONS } from './delegation.ts';
 import { X402ProvisioningError } from './x402-provisioner.ts';
 
 export const TRADING_DELEGATE_EVIDENCE_FILE =
-	(process.env.HARBOR_PRIVATE_EVIDENCE_ROOT ? `${process.env.HARBOR_PRIVATE_EVIDENCE_ROOT}/pilot-isolated-trading-delegate-v1.json` : "/dev/null/pilot-disabled/pilot-isolated-trading-delegate-v1.json");
+	'/absolute/private/pilot/evidence/pilot-isolated-trading-delegate-v1.json';
 export const TRADING_DELEGATE_EVIDENCE_MAX_BYTES = 64 * 1024;
 
 const TOP_KEYS = new Set(['account_status', 'onboarding_readiness']);

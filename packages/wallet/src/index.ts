@@ -45,6 +45,56 @@ export {
   type LedgerSigningMode,
 } from "./ledger/clear-sign.js";
 
+export {
+  ExactActionPolicyError,
+  LedgerApprovalTransitionError,
+  createLedgerApprovalState,
+  ledgerRuntimeProvenance,
+  transitionLedgerApproval,
+  validateExactLedgerAction,
+  verifyExactLedgerSignedBlob,
+  type ExactActionPolicyErrorCode,
+  type ExactActionValidationPhase,
+  type ExactLedgerActionExpectation,
+  type ExactLedgerActionReview,
+  type LedgerApprovalEvent,
+  type LedgerApprovalState,
+  type LedgerApprovalStatus,
+  type LedgerRuntime,
+  type LedgerRuntimeProvenance,
+  type VerifiedExactLedgerSignedBlob,
+} from "./ledger/exact-action.js";
+
+export {
+  IssuedAssetX402SigningRequestSchema,
+  IssuedPaymentPolicyError,
+  LedgerIssuedPaymentAppConfigSchema,
+  PILOT_ISSUED_PAYMENT_MAX_FEE_DROPS,
+  PILOT_ISSUED_PAYMENT_MAX_LEDGER_WINDOW,
+  PILOT_ISSUED_PAYMENT_MAX_QUOTE_TTL_MS,
+  PILOT_ISSUED_PAYMENT_XRP_APP_VERSION,
+  XRPL_TESTNET_CAIP2,
+  bindIssuedAssetX402SigningRequest,
+  issuedAssetX402ApprovalEnvelope,
+  issuedAssetX402AssetId,
+  verifyIssuedAssetX402SignedBlob,
+  type BoundIssuedAssetX402SigningRequest,
+  type IssuedAssetX402SigningRequest,
+  type IssuedPaymentPolicyErrorCode,
+  type LedgerIssuedPaymentAppConfig,
+  type VerifiedIssuedAssetX402SignedBlob,
+} from "./ledger/issued-payment.js";
+export {
+  X402_OWNER_APPROVAL_DOMAIN,
+  IssuedX402OwnerApprovalEnvelopeSchema,
+  X402ApprovalCommitmentError,
+  canonicalIssuedX402ApprovalEnvelope,
+  digestIssuedX402ApprovalEnvelope,
+  verifyIssuedX402ApprovalCommitment,
+  type IssuedX402OwnerApprovalEnvelope,
+  type X402ApprovalCommitmentErrorCode,
+} from "./ledger/x402-approval-envelope.js";
+
 export const WALLET_PROVIDERS = [
   "ledger",
   "gemwallet",

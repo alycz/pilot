@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_POLICY } from "@pilot/contracts";
+import { Wallet, type Payment } from "xrpl";
 import { sealWalletSession, WALLET_SESSION_COOKIE } from "../../../../lib/wallet-session";
 import { authorizeBrowserHarborOperation } from "../../../../lib/wallet-authorization";
 
@@ -28,6 +29,24 @@ const LOCAL_X402_ENVIRONMENT: HarborProxyEnvironment = {
   HARBOR_URL: "http://127.0.0.1:8791",
   NEXT_PUBLIC_DEV_SIGNER: "1",
   PILOT_DEPLOYMENT_PROFILE: "local-wallet",
+};
+const LOCAL_OWNER_REVIEW_ENVIRONMENT: HarborProxyEnvironment = {
+  ...LOCAL_X402_ENVIRONMENT,
+  HARBOR_MOCK: "1",
+  HARBOR_LOCAL_X402_OWNER_REVIEW_ENABLED: "true",
+  MAINNET_EXECUTION: "false",
+};
+const LOCAL_CAPABILITY_ENVIRONMENT: HarborProxyEnvironment = {
+  ...LOCAL_X402_ENVIRONMENT,
+  HARBOR_MOCK: "1",
+  HARBOR_LOCAL_CAPABILITY_RUNTIME_ENABLED: "true",
+  MAINNET_EXECUTION: "false",
+};
+const LOCAL_WORK_AGREEMENT_ENVIRONMENT: HarborProxyEnvironment = {
+  ...LOCAL_X402_ENVIRONMENT,
+  HARBOR_MOCK: "1",
+  HARBOR_LOCAL_WORK_AGREEMENT_ENABLED: "true",
+  MAINNET_EXECUTION: "false",
 };
 const ISOLATED_X402_ENVIRONMENT: HarborProxyEnvironment = {
   EXEC_NETWORK: "testnet",
@@ -107,6 +126,105 @@ function x402Request(body: string): Request {
     origin: "http://127.0.0.1:3003",
     url: "http://127.0.0.1:3003/api/harbor/x402.pay",
   });
+}
+
+function ownerReviewRequest(op: string, body: string, headers?: HeadersInit): Request {
+  return request(body, {
+    origin: "http://127.0.0.1:3003",
+    url: `http://127.0.0.1:3003/api/harbor/${op}`,
+    headers,
+  });
+}
+
+function capabilityRequest(op: string, body: string, headers?: HeadersInit): Request {
+  return request(body, {
+    origin: "http://127.0.0.1:3003",
+    url: `http://127.0.0.1:3003/api/harbor/${op}`,
+    headers,
+  });
+}
+
+function workAgreementRequest(op: string, body: string, headers?: HeadersInit): Request {
+  return request(body, {
+    origin: "http://127.0.0.1:3003",
+    url: `http://127.0.0.1:3003/api/harbor/${op}`,
+    headers,
+  });
+}
+
+function capabilityBodies(owner: Wallet) {
+  const scope = { account: owner.classicAddress, network: "testnet" } as const;
+  const capabilityRef = `cap_v1_${"A".repeat(32)}`;
+  const ownerProof = {
+    nonce: "N".repeat(32),
+    approved_at: "2026-10-24T12:00:00.000Z",
+    expires_at: "2026-10-24T12:01:00.000Z",
+    tx_blob: owner.sign({
+      TransactionType: "AccountSet",
+      Account: owner.classicAddress,
+      Sequence: 0,
+      Fee: "0",
+      LastLedgerSequence: 0,
+      Memos: [{ Memo: { MemoType: "70696C6F742D6361706162696C6974792D7631", MemoData: "AA" } }],
+    }).tx_blob,
+  };
+  return [
+    ["capability.prepare", {
+      ...scope,
+      service: "mock.catalog",
+      operation: "read",
+      amount: { unit: "request", value: "1" },
+      destination: "local-fixture-catalog",
+      not_before: "2026-10-24T12:00:00.000Z",
+      expires_at: "2026-10-24T12:05:00.000Z",
+      max_uses: 2,
+      rate_limit: { window_seconds: 60, max_calls: 1 },
+    }],
+    ["capability.activate", {
+      ...scope, capability_ref: capabilityRef, generation: 1,
+      approval_digest: "a".repeat(64), owner_proof: ownerProof,
+    }],
+    ["capability.status", { ...scope, capability_ref: capabilityRef }],
+    ["capability.prepareRevoke", {
+      ...scope, capability_ref: capabilityRef, request_id: "capability-revoke-request-1",
+    }],
+    ["capability.revoke", {
+      ...scope, capability_ref: capabilityRef, generation: 2,
+      approval_digest: "b".repeat(64), owner_proof: ownerProof,
+    }],
+    ["capability.invoke", {
+      ...scope,
+      capability_ref: capabilityRef,
+      generation: 1,
+      request_id: "capability-invoke-request-1",
+      service: "mock.catalog",
+      operation: "read",
+      amount: { unit: "request", value: "1" },
+      destination: "local-fixture-catalog",
+      input: { resource: "ledger-docs" },
+    }],
+  ] as const;
+}
+
+async function withLocalWalletProcessEnvironment<T>(run: () => Promise<T>): Promise<T> {
+  const priorEnvironment = {
+    EXEC_NETWORK: process.env.EXEC_NETWORK,
+    NEXT_PUBLIC_PILOT_BUILD_MARKER: process.env.NEXT_PUBLIC_PILOT_BUILD_MARKER,
+    PILOT_DEPLOYMENT_PROFILE: process.env.PILOT_DEPLOYMENT_PROFILE,
+    SESSION_SECRET: process.env.SESSION_SECRET,
+  };
+  try {
+    process.env.SESSION_SECRET = SESSION_SECRET;
+    process.env.EXEC_NETWORK = "testnet";
+    process.env.PILOT_DEPLOYMENT_PROFILE = "local-wallet";
+    delete process.env.NEXT_PUBLIC_PILOT_BUILD_MARKER;
+    return await run();
+  } finally {
+    for (const [name, value] of Object.entries(priorEnvironment)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
 }
 
 function isolatedX402Request(body: string, options: { headers?: HeadersInit } = {}): Request {
@@ -1022,8 +1140,12 @@ describe("POST /api/harbor/[op]", () => {
       fetch: fetchDependency(upstreamFetch),
     });
     const priorSecret = process.env.SESSION_SECRET;
+    const priorNetwork = process.env.EXEC_NETWORK;
+    const priorProfile = process.env.PILOT_DEPLOYMENT_PROFILE;
     try {
       process.env.SESSION_SECRET = SESSION_SECRET;
+      process.env.EXEC_NETWORK = "testnet";
+      process.env.PILOT_DEPLOYMENT_PROFILE = "local-wallet";
       const response = await handler(isolatedX402Request(JSON.stringify({
         owner: ACCOUNT,
         network: "testnet",
@@ -1043,7 +1165,418 @@ describe("POST /api/harbor/[op]", () => {
     } finally {
       if (priorSecret === undefined) delete process.env.SESSION_SECRET;
       else process.env.SESSION_SECRET = priorSecret;
+      if (priorNetwork === undefined) delete process.env.EXEC_NETWORK;
+      else process.env.EXEC_NETWORK = priorNetwork;
+      if (priorProfile === undefined) delete process.env.PILOT_DEPLOYMENT_PROFILE;
+      else process.env.PILOT_DEPLOYMENT_PROFILE = priorProfile;
     }
+  });
+
+  it("forwards default-off owner-review prepare only in the exact local mock profile", async () => {
+    const wallet = Wallet.generate();
+    const body = {
+      owner: wallet.classicAddress,
+      network: "testnet",
+      max_price_drops: "5000",
+      idempotency_key: "owner-review-operation-proxy-1",
+    };
+    const upstreamFetch = vi.fn(async () => Response.json({
+      ok: true,
+      data: { status: "awaiting_approval" },
+      asOf: "2026-10-24T12:00:00.000Z",
+      asOfBasis: "local-mock-owner-review",
+    }));
+    const handler = createHarborProxyHandler({
+      env: LOCAL_OWNER_REVIEW_ENVIRONMENT,
+      fetch: fetchDependency(upstreamFetch),
+    });
+    const response = await handler(
+      ownerReviewRequest("x402.ownerReviewPrepare", JSON.stringify(body)),
+      context("x402.ownerReviewPrepare"),
+    );
+    expect(response.status).toBe(200);
+    expect(upstreamFetch).toHaveBeenCalledTimes(1);
+    const [url, init] = upstreamFetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("http://127.0.0.1:8791/api/ops/x402.ownerReviewPrepare");
+    expect(JSON.parse(String(init.body))).toEqual(body);
+
+    const disabledFetch = vi.fn();
+    const disabled = createHarborProxyHandler({
+      env: { ...LOCAL_OWNER_REVIEW_ENVIRONMENT, HARBOR_LOCAL_X402_OWNER_REVIEW_ENABLED: "false" },
+      fetch: fetchDependency(disabledFetch),
+    });
+    const blocked = await disabled(
+      ownerReviewRequest("x402.ownerReviewPrepare", JSON.stringify(body)),
+      context("x402.ownerReviewPrepare"),
+    );
+    expect(blocked.status).toBe(403);
+    expect(disabledFetch).not.toHaveBeenCalled();
+  });
+
+  it("binds owner-review submission to the wallet session and signed Payment account", async () => {
+    const owner = Wallet.generate();
+    const impostor = Wallet.generate();
+    const session = sealWalletSession({
+      version: 1,
+      account: owner.classicAddress,
+      network: "testnet",
+      expiresAt: Date.now() + 60_000,
+    }, SESSION_SECRET, LOCAL_OWNER_REVIEW_ENVIRONMENT);
+    const payment = {
+      TransactionType: "Payment",
+      Account: owner.classicAddress,
+      Destination: X402_PAY_TO,
+      Amount: "5000",
+      Fee: "12",
+      Sequence: 1,
+      LastLedgerSequence: 1_015,
+    } satisfies Payment;
+    const base = {
+      owner: owner.classicAddress,
+      network: "testnet",
+      idempotency_key: "owner-review-operation-proxy-2",
+      approval_id: "owner-review-approval-proxy-2",
+      approval_digest: "A".repeat(64),
+    };
+    const upstreamFetch = vi.fn(async () => Response.json({
+      ok: true,
+      data: { status: "settlement_unknown" },
+      asOf: "2026-10-24T12:00:00.000Z",
+      asOfBasis: "local-mock-owner-review",
+    }));
+    const handler = createProductionHarborProxyHandler({
+      authorizeOperation: authorizeBrowserHarborOperation,
+      env: LOCAL_OWNER_REVIEW_ENVIRONMENT,
+      fetch: fetchDependency(upstreamFetch),
+    });
+    const priorEnvironment = {
+      EXEC_NETWORK: process.env.EXEC_NETWORK,
+      NEXT_PUBLIC_PILOT_BUILD_MARKER: process.env.NEXT_PUBLIC_PILOT_BUILD_MARKER,
+      PILOT_DEPLOYMENT_PROFILE: process.env.PILOT_DEPLOYMENT_PROFILE,
+      SESSION_SECRET: process.env.SESSION_SECRET,
+    };
+    try {
+      process.env.SESSION_SECRET = SESSION_SECRET;
+      process.env.EXEC_NETWORK = "testnet";
+      process.env.PILOT_DEPLOYMENT_PROFILE = "local-wallet";
+      delete process.env.NEXT_PUBLIC_PILOT_BUILD_MARKER;
+      for (const [blob, expected] of [
+        [impostor.sign({ ...payment, Account: impostor.classicAddress }).tx_blob, 401],
+        [owner.sign(payment).tx_blob, 200],
+      ] as const) {
+        const response = await handler(ownerReviewRequest(
+          "x402.ownerReviewSubmit",
+          JSON.stringify({ ...base, signed_blob: blob }),
+          { cookie: `${WALLET_SESSION_COOKIE}=${encodeURIComponent(session)}` },
+        ), context("x402.ownerReviewSubmit"));
+        expect(response.status).toBe(expected);
+      }
+      expect(upstreamFetch).toHaveBeenCalledTimes(1);
+    } finally {
+      for (const [name, value] of Object.entries(priorEnvironment)) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
+  });
+
+  it("forwards only the six exact local capability operations for the wallet session", async () => {
+    const owner = Wallet.generate();
+    const session = sealWalletSession({
+      version: 1,
+      account: owner.classicAddress,
+      network: "testnet",
+      expiresAt: Date.now() + 60_000,
+    }, SESSION_SECRET, LOCAL_CAPABILITY_ENVIRONMENT);
+    const operations = capabilityBodies(owner);
+    const upstreamFetch = vi.fn(async () => Response.json({ ok: true, data: { simulated: true } }));
+    const handler = createProductionHarborProxyHandler({
+      authorizeOperation: authorizeBrowserHarborOperation,
+      env: LOCAL_CAPABILITY_ENVIRONMENT,
+      fetch: fetchDependency(upstreamFetch),
+    });
+
+    await withLocalWalletProcessEnvironment(async () => {
+      for (const [op, body] of operations) {
+        const response = await handler(capabilityRequest(
+          op,
+          JSON.stringify(body),
+          { cookie: `${WALLET_SESSION_COOKIE}=${encodeURIComponent(session)}` },
+        ), context(op));
+        expect(response.status, op).toBe(200);
+      }
+    });
+
+    expect(upstreamFetch).toHaveBeenCalledTimes(operations.length);
+    for (const [index, [op, body]] of operations.entries()) {
+      const [url, init] = upstreamFetch.mock.calls[index] as unknown as [string, RequestInit];
+      expect(url).toBe(`http://127.0.0.1:8791/api/ops/${op}`);
+      expect(JSON.parse(String(init.body))).toEqual(body);
+    }
+  });
+
+  it.each([
+    ["account switch", "testnet", Wallet.generate().classicAddress],
+    ["network switch", "devnet", ACCOUNT],
+  ])("blocks a capability %s before Harbor forwarding", async (_label, sessionNetwork, requestAccount) => {
+    const session = sealWalletSession({
+      version: 1,
+      account: ACCOUNT,
+      network: sessionNetwork as "testnet" | "devnet",
+      expiresAt: Date.now() + 60_000,
+    }, SESSION_SECRET, LOCAL_CAPABILITY_ENVIRONMENT);
+    const upstreamFetch = vi.fn();
+    const handler = createProductionHarborProxyHandler({
+      authorizeOperation: authorizeBrowserHarborOperation,
+      env: LOCAL_CAPABILITY_ENVIRONMENT,
+      fetch: fetchDependency(upstreamFetch),
+    });
+
+    await withLocalWalletProcessEnvironment(async () => {
+      const response = await handler(capabilityRequest(
+        "capability.status",
+        JSON.stringify({
+          account: requestAccount,
+          network: "testnet",
+          capability_ref: `cap_v1_${"A".repeat(32)}`,
+        }),
+        { cookie: `${WALLET_SESSION_COOKIE}=${encodeURIComponent(session)}` },
+      ), context("capability.status"));
+      expect(response.status).toBe(401);
+    });
+    expect(upstreamFetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a capability owner proof from a switched account", async () => {
+    const owner = Wallet.generate();
+    const impostor = Wallet.generate();
+    const session = sealWalletSession({
+      version: 1,
+      account: owner.classicAddress,
+      network: "testnet",
+      expiresAt: Date.now() + 60_000,
+    }, SESSION_SECRET, LOCAL_CAPABILITY_ENVIRONMENT);
+    const impostorActivation = capabilityBodies(impostor)[1][1];
+    const upstreamFetch = vi.fn();
+    const handler = createProductionHarborProxyHandler({
+      authorizeOperation: authorizeBrowserHarborOperation,
+      env: LOCAL_CAPABILITY_ENVIRONMENT,
+      fetch: fetchDependency(upstreamFetch),
+    });
+    await withLocalWalletProcessEnvironment(async () => {
+      const response = await handler(capabilityRequest(
+        "capability.activate",
+        JSON.stringify({ ...impostorActivation, account: owner.classicAddress }),
+        { cookie: `${WALLET_SESSION_COOKIE}=${encodeURIComponent(session)}` },
+      ), context("capability.activate"));
+      expect(response.status).toBe(401);
+    });
+    expect(upstreamFetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects widened capability scope before authorization or forwarding", async () => {
+    const authorizeOperation = vi.fn(() => true);
+    const upstreamFetch = vi.fn();
+    const handler = createProductionHarborProxyHandler({
+      authorizeOperation,
+      env: LOCAL_CAPABILITY_ENVIRONMENT,
+      fetch: fetchDependency(upstreamFetch),
+    });
+    const body = capabilityBodies(Wallet.generate())[0][1];
+    const response = await handler(capabilityRequest(
+      "capability.prepare",
+      JSON.stringify({ ...body, service: "external.catalog", url: "http://127.0.0.1:9999" }),
+    ), context("capability.prepare"));
+    expect(response.status).toBe(400);
+    expect((await response.json()).error.code).toBe("HARBOR_PROXY_INVALID_ARGS");
+    expect(authorizeOperation).not.toHaveBeenCalled();
+    expect(upstreamFetch).not.toHaveBeenCalled();
+  });
+
+  it("fails closed for disabled and unsupported capability operations", async () => {
+    const body = JSON.stringify({
+      account: ACCOUNT,
+      network: "testnet",
+      capability_ref: `cap_v1_${"A".repeat(32)}`,
+    });
+    const upstreamFetch = vi.fn();
+    const disabled = createHarborProxyHandler({
+      env: { ...LOCAL_CAPABILITY_ENVIRONMENT, HARBOR_LOCAL_CAPABILITY_RUNTIME_ENABLED: "false" },
+      fetch: fetchDependency(upstreamFetch),
+    });
+    const disabledResponse = await disabled(
+      capabilityRequest("capability.status", body),
+      context("capability.status"),
+    );
+    expect(disabledResponse.status).toBe(403);
+    expect((await disabledResponse.json()).error.code)
+      .toBe("HARBOR_PROXY_CAPABILITY_LOCAL_TESTNET_REQUIRED");
+
+    const unsupported = await disabled(
+      capabilityRequest("capability.delete", body),
+      context("capability.delete"),
+    );
+    expect(unsupported.status).toBe(404);
+    expect(upstreamFetch).not.toHaveBeenCalled();
+  });
+
+  it("forwards only exact local work-agreement operations bound to the wallet session", async () => {
+    const owner = Wallet.generate();
+    const counterparty = Wallet.generate();
+    const session = sealWalletSession({
+      version: 1,
+      account: owner.classicAddress,
+      network: "testnet",
+      expiresAt: Date.now() + 60_000,
+    }, SESSION_SECRET, LOCAL_WORK_AGREEMENT_ENVIRONMENT);
+    const base = {
+      owner: owner.classicAddress,
+      network: "testnet",
+      agreement_id: "agreement-proxy-0001",
+    } as const;
+    const signedBlob = owner.sign({
+      TransactionType: "EscrowCreate",
+      Account: owner.classicAddress,
+      Destination: counterparty.classicAddress,
+      Amount: "2500000",
+      FinishAfter: 900_000_000,
+      CancelAfter: 900_000_600,
+      Fee: "12",
+      Sequence: 42,
+      LastLedgerSequence: 1_050,
+    }).tx_blob;
+    const operations = [
+      ["workAgreement.prepare", {
+        ...base,
+        action: "create",
+        idempotency_key: "agreement-idempotency-0001",
+        approval_expires_at: "2026-10-24T12:05:00.000Z",
+        terms: {
+          counterparty: counterparty.classicAddress,
+          amount_drops: "2500000",
+          finish_after: 900_000_000,
+          cancel_after: 900_000_600,
+        },
+      }],
+      ["workAgreement.submit", {
+        ...base,
+        approval_id: "agreement-approval-0001",
+        idempotency_key: "agreement-idempotency-0001",
+        attempt_id: "agreement-attempt-0001",
+        signed_blob: signedBlob,
+      }],
+      ["workAgreement.recover", {
+        ...base,
+        approval_id: "agreement-approval-0001",
+        idempotency_key: "agreement-idempotency-0001",
+      }],
+      ["workAgreement.reject", {
+        ...base,
+        approval_id: "agreement-approval-0001",
+        idempotency_key: "agreement-idempotency-0001",
+      }],
+      ["workAgreement.status", base],
+    ] as const;
+    const upstreamFetch = vi.fn(async () => Response.json({
+      ok: true,
+      data: { simulation: true, provenance: "local-mock-simulated-settlement" },
+    }));
+    const handler = createProductionHarborProxyHandler({
+      authorizeOperation: authorizeBrowserHarborOperation,
+      env: LOCAL_WORK_AGREEMENT_ENVIRONMENT,
+      fetch: fetchDependency(upstreamFetch),
+    });
+
+    await withLocalWalletProcessEnvironment(async () => {
+      for (const [op, body] of operations) {
+        const response = await handler(workAgreementRequest(
+          op,
+          JSON.stringify(body),
+          { cookie: `${WALLET_SESSION_COOKIE}=${encodeURIComponent(session)}` },
+        ), context(op));
+        expect(response.status, op).toBe(200);
+      }
+    });
+
+    expect(upstreamFetch).toHaveBeenCalledTimes(operations.length);
+    for (const [index, [op, body]] of operations.entries()) {
+      const [url, init] = upstreamFetch.mock.calls[index] as unknown as [string, RequestInit];
+      expect(url).toBe(`http://127.0.0.1:8791/api/ops/${op}`);
+      expect(JSON.parse(String(init.body))).toEqual(body);
+    }
+  });
+
+  it("rejects switched accounts, non-escrow blobs, widened fields, and disabled agreement mode", async () => {
+    const owner = Wallet.generate();
+    const counterparty = Wallet.generate();
+    const session = sealWalletSession({
+      version: 1,
+      account: owner.classicAddress,
+      network: "testnet",
+      expiresAt: Date.now() + 60_000,
+    }, SESSION_SECRET, LOCAL_WORK_AGREEMENT_ENVIRONMENT);
+    const base = {
+      owner: owner.classicAddress,
+      network: "testnet",
+      agreement_id: "agreement-proxy-0002",
+    } as const;
+    const paymentBlob = owner.sign({
+      TransactionType: "Payment",
+      Account: owner.classicAddress,
+      Destination: counterparty.classicAddress,
+      Amount: "2500000",
+      Fee: "12",
+      Sequence: 42,
+      LastLedgerSequence: 1_050,
+    }).tx_blob;
+    const upstreamFetch = vi.fn();
+    const handler = createProductionHarborProxyHandler({
+      authorizeOperation: authorizeBrowserHarborOperation,
+      env: LOCAL_WORK_AGREEMENT_ENVIRONMENT,
+      fetch: fetchDependency(upstreamFetch),
+    });
+
+    await withLocalWalletProcessEnvironment(async () => {
+      const nonEscrow = await handler(workAgreementRequest(
+        "workAgreement.submit",
+        JSON.stringify({
+          ...base,
+          approval_id: "agreement-approval-0002",
+          idempotency_key: "agreement-idempotency-0002",
+          attempt_id: "agreement-attempt-0002",
+          signed_blob: paymentBlob,
+        }),
+        { cookie: `${WALLET_SESSION_COOKIE}=${encodeURIComponent(session)}` },
+      ), context("workAgreement.submit"));
+      expect(nonEscrow.status).toBe(401);
+
+      const widened = await handler(workAgreementRequest(
+        "workAgreement.status",
+        JSON.stringify({ ...base, relay_url: "http://127.0.0.1:9999" }),
+        { cookie: `${WALLET_SESSION_COOKIE}=${encodeURIComponent(session)}` },
+      ), context("workAgreement.status"));
+      expect(widened.status).toBe(400);
+
+      const switched = await handler(workAgreementRequest(
+        "workAgreement.status",
+        JSON.stringify({ ...base, owner: counterparty.classicAddress }),
+        { cookie: `${WALLET_SESSION_COOKIE}=${encodeURIComponent(session)}` },
+      ), context("workAgreement.status"));
+      expect(switched.status).toBe(401);
+    });
+
+    const disabled = createHarborProxyHandler({
+      env: { ...LOCAL_WORK_AGREEMENT_ENVIRONMENT, HARBOR_LOCAL_WORK_AGREEMENT_ENABLED: "false" },
+      fetch: fetchDependency(upstreamFetch),
+    });
+    const blocked = await disabled(
+      workAgreementRequest("workAgreement.status", JSON.stringify(base)),
+      context("workAgreement.status"),
+    );
+    expect(blocked.status).toBe(403);
+    expect((await blocked.json()).error.code)
+      .toBe("HARBOR_PROXY_WORK_AGREEMENT_LOCAL_TESTNET_REQUIRED");
+    expect(upstreamFetch).not.toHaveBeenCalled();
   });
 
   it.each(["4999", "5001", "100000"])(

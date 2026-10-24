@@ -8,6 +8,7 @@ import {
   readBoundedResponseBytes,
   type HarborOpName,
 } from "@pilot/harbor-client";
+import { z } from "zod";
 
 import {
   resolveCredentialedHarborUpstream,
@@ -31,22 +32,209 @@ export interface HarborProxyEnvironment {
   HARBOR_X402_API_KEY?: string;
   HARBOR_X402_URL?: string;
   HARBOR_MOCK?: string;
+  HARBOR_LOCAL_CAPABILITY_RUNTIME_ENABLED?: string;
+  HARBOR_LOCAL_WORK_AGREEMENT_ENABLED?: string;
+  HARBOR_LOCAL_X402_OWNER_REVIEW_ENABLED?: string;
   HARBOR_URL?: string;
+  MAINNET_EXECUTION?: string;
   NEXT_PUBLIC_DEV_SIGNER?: string;
   NEXT_PUBLIC_PILOT_BUILD_MARKER?: string;
   PILOT_DEPLOYMENT_PROFILE?: string;
   PILOT_PUBLIC_ORIGIN?: string;
 }
 
+export const OWNER_REVIEW_PROXY_OPS = [
+  "x402.ownerReviewPrepare",
+  "x402.ownerReviewReject",
+  "x402.ownerReviewSubmit",
+  "x402.ownerReviewRecover",
+] as const;
+export type OwnerReviewProxyOp = (typeof OWNER_REVIEW_PROXY_OPS)[number];
+export const CAPABILITY_PROXY_OPS = [
+  "capability.prepare",
+  "capability.activate",
+  "capability.status",
+  "capability.prepareRevoke",
+  "capability.revoke",
+  "capability.invoke",
+] as const;
+export type CapabilityProxyOp = (typeof CAPABILITY_PROXY_OPS)[number];
+export const WORK_AGREEMENT_PROXY_OPS = [
+  "workAgreement.prepare",
+  "workAgreement.submit",
+  "workAgreement.recover",
+  "workAgreement.reject",
+  "workAgreement.status",
+] as const;
+export type WorkAgreementProxyOp = (typeof WORK_AGREEMENT_PROXY_OPS)[number];
+export type HarborProxyOpName = HarborOpName | OwnerReviewProxyOp | CapabilityProxyOp | WorkAgreementProxyOp;
+
+const OwnerReviewIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{7,199}$/);
+const OwnerReviewBaseSchema = z.object({
+  owner: z.string().regex(/^r[1-9A-HJ-NP-Za-km-z]{24,34}$/),
+  network: z.literal("testnet"),
+  idempotency_key: OwnerReviewIdSchema,
+}).strict();
+const OwnerReviewProxySchemas = Object.freeze({
+  "x402.ownerReviewPrepare": OwnerReviewBaseSchema.extend({
+    max_price_drops: z.literal("5000"),
+  }).strict(),
+  "x402.ownerReviewReject": OwnerReviewBaseSchema.extend({ approval_id: OwnerReviewIdSchema }).strict(),
+  "x402.ownerReviewRecover": OwnerReviewBaseSchema.extend({ approval_id: OwnerReviewIdSchema }).strict(),
+  "x402.ownerReviewSubmit": OwnerReviewBaseSchema.extend({
+    approval_id: OwnerReviewIdSchema,
+    approval_digest: z.string().regex(/^[A-F0-9]{64}$/),
+    signed_blob: z.string().min(2).max(200_000).regex(/^[A-Fa-f0-9]+$/),
+  }).strict(),
+});
+
+const CapabilityReferenceSchema = z.string().regex(/^cap_v1_[A-Za-z0-9_-]{32,128}$/);
+const CapabilityDigestSchema = z.string().regex(/^[a-f0-9]{64}$/);
+const CapabilityRequestIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/);
+const CapabilityScopeSchema = z.object({
+  account: z.string().regex(/^r[1-9A-HJ-NP-Za-km-z]{24,34}$/),
+  network: z.literal("testnet"),
+}).strict();
+const CapabilityAmountSchema = z.object({
+  unit: z.literal("request"),
+  value: z.literal("1"),
+}).strict();
+const CapabilityOwnerProofSchema = z.object({
+  nonce: z.string().regex(/^[A-Za-z0-9_-]{32,128}$/),
+  approved_at: z.string().datetime(),
+  expires_at: z.string().datetime(),
+  tx_blob: z.string().min(2).max(16_384).regex(/^[A-Fa-f0-9]+$/),
+}).strict();
+const CapabilityProxySchemas = Object.freeze({
+  "capability.prepare": CapabilityScopeSchema.extend({
+    service: z.literal("mock.catalog"),
+    operation: z.literal("read"),
+    amount: CapabilityAmountSchema,
+    destination: z.literal("local-fixture-catalog"),
+    not_before: z.string().datetime(),
+    expires_at: z.string().datetime(),
+    max_uses: z.number().int().min(1).max(100),
+    rate_limit: z.object({
+      window_seconds: z.number().int().min(1).max(3_600),
+      max_calls: z.number().int().min(1).max(100),
+    }).strict(),
+  }).strict(),
+  "capability.activate": CapabilityScopeSchema.extend({
+    capability_ref: CapabilityReferenceSchema,
+    generation: z.literal(1),
+    approval_digest: CapabilityDigestSchema,
+    owner_proof: CapabilityOwnerProofSchema,
+  }).strict(),
+  "capability.status": CapabilityScopeSchema.extend({
+    capability_ref: CapabilityReferenceSchema,
+  }).strict(),
+  "capability.prepareRevoke": CapabilityScopeSchema.extend({
+    capability_ref: CapabilityReferenceSchema,
+    request_id: CapabilityRequestIdSchema,
+  }).strict(),
+  "capability.revoke": CapabilityScopeSchema.extend({
+    capability_ref: CapabilityReferenceSchema,
+    generation: z.number().int().min(2),
+    approval_digest: CapabilityDigestSchema,
+    owner_proof: CapabilityOwnerProofSchema,
+  }).strict(),
+  "capability.invoke": CapabilityScopeSchema.extend({
+    capability_ref: CapabilityReferenceSchema,
+    generation: z.number().int().min(1),
+    request_id: CapabilityRequestIdSchema,
+    service: z.literal("mock.catalog"),
+    operation: z.literal("read"),
+    amount: CapabilityAmountSchema,
+    destination: z.literal("local-fixture-catalog"),
+    input: z.object({
+      resource: z.enum(["ledger-docs", "market-fixture"]),
+    }).strict(),
+  }).strict(),
+});
+
+const WorkAgreementIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{7,199}$/);
+const WorkAgreementBaseSchema = z.object({
+  owner: z.string().regex(/^r[1-9A-HJ-NP-Za-km-z]{24,34}$/),
+  network: z.literal("testnet"),
+  agreement_id: WorkAgreementIdSchema,
+}).strict();
+const WorkAgreementHexSchema = z.string().max(1_024).regex(/^(?:[A-Fa-f0-9]{2})+$/);
+const WorkAgreementTermsSchema = z.object({
+  counterparty: z.string().regex(/^r[1-9A-HJ-NP-Za-km-z]{24,34}$/),
+  amount_drops: z.string().regex(/^[1-9][0-9]{0,15}$/),
+  finish_after: z.number().int().min(1).max(0xffff_ffff).optional(),
+  cancel_after: z.number().int().min(1).max(0xffff_ffff).optional(),
+  condition: WorkAgreementHexSchema.max(512).optional(),
+}).strict().superRefine((terms, context) => {
+  if (terms.finish_after === undefined && terms.cancel_after === undefined) {
+    context.addIssue({ code: "custom", message: "An escrow time bound is required." });
+  }
+  if (terms.finish_after !== undefined && terms.cancel_after !== undefined &&
+    terms.finish_after >= terms.cancel_after) {
+    context.addIssue({ code: "custom", message: "finish_after must precede cancel_after." });
+  }
+  if (terms.condition !== undefined && terms.cancel_after === undefined) {
+    context.addIssue({ code: "custom", message: "Conditioned escrow requires cancel_after." });
+  }
+});
+const WorkAgreementProxySchemas = Object.freeze({
+  "workAgreement.prepare": WorkAgreementBaseSchema.extend({
+    action: z.enum(["create", "release", "cancel"]),
+    idempotency_key: WorkAgreementIdSchema,
+    approval_expires_at: z.string().datetime(),
+    terms: WorkAgreementTermsSchema,
+    fulfillment: WorkAgreementHexSchema.optional(),
+  }).strict().superRefine((request, context) => {
+    if (request.action !== "release" && request.fulfillment !== undefined) {
+      context.addIssue({ code: "custom", message: "Only release can include fulfillment." });
+    }
+    if (request.action === "release" && request.terms.condition !== undefined &&
+      request.fulfillment === undefined) {
+      context.addIssue({ code: "custom", message: "Conditioned release requires fulfillment." });
+    }
+    if (request.action === "release" && request.terms.condition === undefined &&
+      request.fulfillment !== undefined) {
+      context.addIssue({ code: "custom", message: "Time-based release cannot include fulfillment." });
+    }
+  }),
+  "workAgreement.submit": WorkAgreementBaseSchema.extend({
+    approval_id: WorkAgreementIdSchema,
+    idempotency_key: WorkAgreementIdSchema,
+    attempt_id: WorkAgreementIdSchema,
+    signed_blob: z.string().min(2).max(200_000).regex(/^[A-Fa-f0-9]+$/),
+  }).strict(),
+  "workAgreement.recover": WorkAgreementBaseSchema.extend({
+    approval_id: WorkAgreementIdSchema,
+    idempotency_key: WorkAgreementIdSchema,
+  }).strict(),
+  "workAgreement.reject": WorkAgreementBaseSchema.extend({
+    approval_id: WorkAgreementIdSchema,
+    idempotency_key: WorkAgreementIdSchema,
+  }).strict(),
+  "workAgreement.status": WorkAgreementBaseSchema,
+});
+
+function isOwnerReviewProxyOp(op: string): op is OwnerReviewProxyOp {
+  return (OWNER_REVIEW_PROXY_OPS as readonly string[]).includes(op);
+}
+
+function isCapabilityProxyOp(op: string): op is CapabilityProxyOp {
+  return (CAPABILITY_PROXY_OPS as readonly string[]).includes(op);
+}
+
+function isWorkAgreementProxyOp(op: string): op is WorkAgreementProxyOp {
+  return (WORK_AGREEMENT_PROXY_OPS as readonly string[]).includes(op);
+}
+
 export interface HarborProxyDependencies {
   authorizeOperation: (
     request: Request,
-    op: HarborOpName,
+    op: HarborProxyOpName,
     args: Record<string, unknown>,
   ) => boolean;
   operationResponseHeaders: (
     request: Request,
-    op: HarborOpName,
+    op: HarborProxyOpName,
     args: Record<string, unknown>,
     body: ArrayBuffer,
     status: number,
@@ -75,7 +263,9 @@ type ProxyErrorCode =
   | "HARBOR_PROXY_TIMEOUT"
   | "HARBOR_PROXY_UNSUPPORTED_MEDIA_TYPE"
   | "HARBOR_PROXY_UPSTREAM_UNAVAILABLE"
-  | "HARBOR_PROXY_X402_LOCAL_TESTNET_REQUIRED";
+  | "HARBOR_PROXY_X402_LOCAL_TESTNET_REQUIRED"
+  | "HARBOR_PROXY_CAPABILITY_LOCAL_TESTNET_REQUIRED"
+  | "HARBOR_PROXY_WORK_AGREEMENT_LOCAL_TESTNET_REQUIRED";
 
 function errorResponse(status: number, code: ProxyErrorCode, message: string): Response {
   return Response.json(
@@ -111,8 +301,9 @@ function isAllowedOrigin(request: Request, expectedOrigin: string): boolean {
   return request.headers.get("origin") === expectedOrigin;
 }
 
-function isHarborOpName(value: string): value is HarborOpName {
-  return Object.prototype.hasOwnProperty.call(HarborArgsSchemas, value);
+function isHarborOpName(value: string): value is HarborProxyOpName {
+  return isOwnerReviewProxyOp(value) || isCapabilityProxyOp(value) || isWorkAgreementProxyOp(value) ||
+    Object.prototype.hasOwnProperty.call(HarborArgsSchemas, value);
 }
 
 const SPONSOR_MUTATION_OPS = new Set<string>([
@@ -127,22 +318,58 @@ const SPONSOR_MUTATION_OPS = new Set<string>([
   "quicknode.test.registerLink",
 ]);
 
-function isMutation(op: string): boolean {
+function isMutation(op: HarborProxyOpName): boolean {
   return (
     op === "account.link" ||
     op === "account.revoke" ||
     op === "policy.set" ||
     op === "x402.pay" ||
     SPONSOR_MUTATION_OPS.has(op) ||
+    isOwnerReviewProxyOp(op) ||
+    isCapabilityProxyOp(op) ||
+    (isWorkAgreementProxyOp(op) && op !== "workAgreement.status") ||
     (op.startsWith("tx.") && op !== "tx.status")
   );
 }
 
-function isApprovedLocalX402(
-  op: HarborOpName,
+function isApprovedLocalCapability(
+  op: HarborProxyOpName,
   args: Record<string, unknown>,
   env: HarborProxyEnvironment,
 ): boolean {
+  if (!isCapabilityProxyOp(op)) return true;
+  return args.network === "testnet" && env.EXEC_NETWORK?.trim() === "testnet" &&
+    env.HARBOR_MOCK === "1" && env.MAINNET_EXECUTION === "false" &&
+    env.HARBOR_LOCAL_CAPABILITY_RUNTIME_ENABLED === "true" &&
+    resolvePilotDeploymentProfile(env) === "local-wallet" &&
+    isExactLocalX402HarborUrl(env.HARBOR_URL);
+}
+
+function isApprovedLocalWorkAgreement(
+  op: HarborProxyOpName,
+  args: Record<string, unknown>,
+  env: HarborProxyEnvironment,
+): boolean {
+  if (!isWorkAgreementProxyOp(op)) return true;
+  return args.network === "testnet" && env.EXEC_NETWORK?.trim() === "testnet" &&
+    env.HARBOR_MOCK === "1" && env.MAINNET_EXECUTION === "false" &&
+    env.HARBOR_LOCAL_WORK_AGREEMENT_ENABLED === "true" &&
+    resolvePilotDeploymentProfile(env) === "local-wallet" &&
+    isExactLocalX402HarborUrl(env.HARBOR_URL);
+}
+
+function isApprovedLocalX402(
+  op: HarborProxyOpName,
+  args: Record<string, unknown>,
+  env: HarborProxyEnvironment,
+): boolean {
+  if (isOwnerReviewProxyOp(op)) {
+    return args.network === "testnet" && env.EXEC_NETWORK?.trim() === "testnet" &&
+      env.HARBOR_MOCK === "1" && env.MAINNET_EXECUTION === "false" &&
+      env.HARBOR_LOCAL_X402_OWNER_REVIEW_ENABLED === "true" &&
+      resolvePilotDeploymentProfile(env) === "local-wallet" &&
+      isExactLocalX402HarborUrl(env.HARBOR_URL);
+  }
   if (op !== "x402.pay") return true;
   if (args.network !== "testnet" || env.EXEC_NETWORK?.trim() !== "testnet") return false;
   if (resolvePilotDeploymentProfile(env) === "local-wallet-isolated-v1") {
@@ -151,13 +378,14 @@ function isApprovedLocalX402(
   return isExactLocalX402HarborUrl(env.HARBOR_URL);
 }
 
-function requiresWalletBinding(op: HarborOpName): boolean {
-  return isMutation(op) || op === "onboarding.readiness" || op === "account.status" ||
+function requiresWalletBinding(op: HarborProxyOpName): boolean {
+  return isMutation(op) || isWorkAgreementProxyOp(op) ||
+    op === "onboarding.readiness" || op === "account.status" ||
     op === "policy.get" || op === "tx.status";
 }
 
 function isBlockedMainnetMutation(
-  op: HarborOpName,
+  op: HarborProxyOpName,
   args: Record<string, unknown>,
   env: HarborProxyEnvironment,
 ): boolean {
@@ -401,7 +629,14 @@ export function createHarborProxyHandler(
       );
     }
 
-    const parsedArgs = HarborArgsSchemas[op].safeParse(args);
+    const argsSchema = isOwnerReviewProxyOp(op)
+      ? OwnerReviewProxySchemas[op]
+      : isCapabilityProxyOp(op)
+        ? CapabilityProxySchemas[op]
+        : isWorkAgreementProxyOp(op)
+          ? WorkAgreementProxySchemas[op]
+          : HarborArgsSchemas[op];
+    const parsedArgs = argsSchema.safeParse(args);
     if (!parsedArgs.success) {
       return errorResponse(
         400,
@@ -435,8 +670,31 @@ export function createHarborProxyHandler(
         "x402.pay is restricted to the approved local Testnet Harbor mode.",
       );
     }
+    if (!isApprovedLocalCapability(op, validatedArgs, dependencies.env)) {
+      return errorResponse(
+        403,
+        "HARBOR_PROXY_CAPABILITY_LOCAL_TESTNET_REQUIRED",
+        "Capability operations are restricted to the approved local Testnet mock mode.",
+      );
+    }
+    if (!isApprovedLocalWorkAgreement(op, validatedArgs, dependencies.env)) {
+      return errorResponse(
+        403,
+        "HARBOR_PROXY_WORK_AGREEMENT_LOCAL_TESTNET_REQUIRED",
+        "Work-agreement operations are restricted to the approved local Testnet mock mode.",
+      );
+    }
 
-    if (dependencies.env.HARBOR_MOCK !== "0") {
+    const localOwnerReviewMock = isOwnerReviewProxyOp(op) &&
+      dependencies.env.HARBOR_MOCK === "1" &&
+      dependencies.env.HARBOR_LOCAL_X402_OWNER_REVIEW_ENABLED === "true";
+    const localCapabilityMock = isCapabilityProxyOp(op) &&
+      dependencies.env.HARBOR_MOCK === "1" &&
+      dependencies.env.HARBOR_LOCAL_CAPABILITY_RUNTIME_ENABLED === "true";
+    const localWorkAgreementMock = isWorkAgreementProxyOp(op) &&
+      dependencies.env.HARBOR_MOCK === "1" &&
+      dependencies.env.HARBOR_LOCAL_WORK_AGREEMENT_ENABLED === "true";
+    if (dependencies.env.HARBOR_MOCK !== "0" && !localOwnerReviewMock && !localCapabilityMock && !localWorkAgreementMock) {
       return errorResponse(
         503,
         dependencies.env.HARBOR_MOCK === "1"
@@ -492,7 +750,9 @@ export function createHarborProxyHandler(
       );
       const bytes = await readBoundedResponseBytes(
         upstream,
-        op === "x402.pay" ? MAX_X402_RESPONSE_BYTES : MAX_HARBOR_RESPONSE_BYTES,
+        op === "x402.pay" || isOwnerReviewProxyOp(op)
+          ? MAX_X402_RESPONSE_BYTES
+          : MAX_HARBOR_RESPONSE_BYTES,
       );
       const body = bytes.buffer.slice(
         bytes.byteOffset,

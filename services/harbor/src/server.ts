@@ -13,6 +13,7 @@ import {
 	type Ap4mRuntimeAdapter,
 } from "./exec/ap4m-runtime";
 import type { Ap4mPurchaseServices } from "./ops/ap4m";
+import { CAPABILITY_OPERATION_NAMES } from "./ops/capability";
 import type { X402Service } from "./x402-contract";
 import {
 	LOCAL_HARBOR_ORIGIN,
@@ -46,6 +47,14 @@ import type {
 } from "./quicknode/watchdog";
 import { KmsKekError, validateKmsConfig } from "./aws/kms";
 import { handleDemoModelQuotaRoute } from "./demo-model-quota-route";
+import {
+	OWNER_REVIEW_OPERATION_NAMES,
+	handleOwnerReviewX402Route,
+} from "./x402-owner-review-route";
+import {
+	WORK_AGREEMENT_OPERATION_NAMES,
+	handleWorkAgreementRoute,
+} from "./work-agreement-route";
 
 export interface Env {
 	DB: D1Database;
@@ -76,10 +85,13 @@ export interface Env {
 	HARBOR_LOCAL_READ_ONLY?: string;
 	HARBOR_LOCAL_AUTH_REQUIRED?: string;
 	HARBOR_LOCAL_CRON_DISABLED?: string;
+	HARBOR_LOCAL_CAPABILITY_RUNTIME_ENABLED?: string;
+	HARBOR_LOCAL_WORK_AGREEMENT_ENABLED?: string;
 	HARBOR_LOCAL_X402?: string;
 	HARBOR_LOCAL_X402_MERCHANT_PAY_TO?: string;
 	HARBOR_LOCAL_X402_RUNTIME_ENABLED?: string;
 	HARBOR_LOCAL_X402_SIGNING_PROFILE?: string;
+	HARBOR_LOCAL_X402_OWNER_REVIEW_ENABLED?: string;
 	HARBOR_LOCAL_X402_ISOLATED_V1_RUNTIME_ENABLED?: string;
 	HARBOR_LOCAL_X402_ISOLATED_V1_SIGNING_PROFILE?: string;
 	HARBOR_LOCAL_AP4M_X402_COMBINED_V1_RUNTIME_ENABLED?: string;
@@ -125,8 +137,23 @@ export type AuthResult =
 	| { ok: false; response: Response };
 
 const LOCAL_ONLY_OPERATION_NAMES = new Set([
+	...CAPABILITY_OPERATION_NAMES,
 	"quicknode.test.registerLink",
 	"quicknode.test.deleteLink",
+]);
+const OWNER_REVIEW_ROUTE_PATHS = new Set(
+	OWNER_REVIEW_OPERATION_NAMES.map((name) => `/api/ops/${name}`),
+);
+export const CAPABILITY_ROUTE_PATHS = Object.freeze(
+	CAPABILITY_OPERATION_NAMES.map((name) => `/api/ops/${name}`),
+);
+export const WORK_AGREEMENT_ROUTE_PATHS = Object.freeze(
+	WORK_AGREEMENT_OPERATION_NAMES.map((name) => `/api/ops/${name}`),
+);
+const LOCAL_BEARER_REQUIRED_ROUTE_PATHS = new Set([
+	...OWNER_REVIEW_ROUTE_PATHS,
+	...CAPABILITY_ROUTE_PATHS,
+	...WORK_AGREEMENT_ROUTE_PATHS,
 ]);
 
 const productionAppRegistry = new OpRegistry(
@@ -239,6 +266,7 @@ function authenticateWithLocalCapability(
 	localDevRequest: boolean,
 ): AuthResult {
 	if (
+		!LOCAL_BEARER_REQUIRED_ROUTE_PATHS.has(new URL(request.url).pathname) &&
 		isLegacyLocalDevRequest(request, env) &&
 		!localTradingSafetyMarkersPresent(env) &&
 		(!targetsLocalX402Origin(request) ||
@@ -476,6 +504,22 @@ export function createWorker(
 				environment: env,
 			});
 			if (demoQuotaResponse) return demoQuotaResponse;
+
+			const ownerReviewResponse = await handleOwnerReviewX402Route(request, {
+				principal: auth.principal,
+				localDevRequest,
+				db: env.DB,
+				env,
+			});
+			if (ownerReviewResponse) return ownerReviewResponse;
+
+			const workAgreementResponse = await handleWorkAgreementRoute(request, {
+				principal: auth.principal,
+				localDevRequest,
+				db: env.DB,
+				env,
+			});
+			if (workAgreementResponse) return workAgreementResponse;
 
 			let ap4mServices: Ap4mPurchaseServices | undefined;
 			try {

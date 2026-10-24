@@ -2,6 +2,13 @@ import { EnvelopeSchema } from "@pilot/contracts";
 import { HarborResultSchemas, type HarborOpName } from "@pilot/harbor-client";
 import { hashes } from "xrpl";
 
+import type {
+  CapabilityProxyOp,
+  HarborProxyOpName,
+  OwnerReviewProxyOp,
+  WorkAgreementProxyOp,
+} from "../app/api/harbor/[op]/handler";
+
 import {
   hasWalletExecutionCapability,
   hasWalletSubmissionCapability,
@@ -25,6 +32,30 @@ const OFFICIAL_TESTNET_RLUSD = {
   currency: "524C555344000000000000000000000000000000",
   issuer: "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV",
 } as const;
+
+function isOwnerReviewProxyOp(op: HarborProxyOpName): op is OwnerReviewProxyOp {
+  return op === "x402.ownerReviewPrepare" ||
+    op === "x402.ownerReviewReject" ||
+    op === "x402.ownerReviewSubmit" ||
+    op === "x402.ownerReviewRecover";
+}
+
+function isCapabilityProxyOp(op: HarborProxyOpName): op is CapabilityProxyOp {
+  return op === "capability.prepare" ||
+    op === "capability.activate" ||
+    op === "capability.status" ||
+    op === "capability.prepareRevoke" ||
+    op === "capability.revoke" ||
+    op === "capability.invoke";
+}
+
+function isWorkAgreementProxyOp(op: HarborProxyOpName): op is WorkAgreementProxyOp {
+  return op === "workAgreement.prepare" ||
+    op === "workAgreement.submit" ||
+    op === "workAgreement.recover" ||
+    op === "workAgreement.reject" ||
+    op === "workAgreement.status";
+}
 
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
@@ -99,7 +130,7 @@ export function authorizeWalletResource(
  */
 export function authorizeWalletHarborOperation(
   request: Request,
-  op: HarborOpName,
+  op: HarborProxyOpName,
   args: Record<string, unknown>,
   environment: AuthEnvironment = process.env,
 ): boolean {
@@ -125,6 +156,38 @@ export function authorizeWalletHarborOperation(
     op === "credential.payerAccept" ||
     op === "ap4m.purchase"
   ) return false;
+
+  if (isOwnerReviewProxyOp(op)) {
+    if (op === "x402.ownerReviewSubmit") {
+      const signed = verifiedSignedBlobTransaction(args.signed_blob);
+      return signed?.TransactionType === "Payment" && signed.Account === session.account;
+    }
+    return op === "x402.ownerReviewPrepare" ||
+      op === "x402.ownerReviewReject" ||
+      op === "x402.ownerReviewRecover";
+  }
+
+  if (isCapabilityProxyOp(op)) {
+    if (op === "capability.activate" || op === "capability.revoke") {
+      const proof = args.owner_proof;
+      if (!proof || typeof proof !== "object" || Array.isArray(proof)) return false;
+      const signed = verifiedSignedBlobTransaction(
+        (proof as Record<string, unknown>).tx_blob,
+      );
+      return signed?.TransactionType === "AccountSet" && signed.Account === session.account;
+    }
+    return true;
+  }
+
+  if (isWorkAgreementProxyOp(op)) {
+    if (op !== "workAgreement.submit") return true;
+    const signed = verifiedSignedBlobTransaction(args.signed_blob);
+    return signed?.Account === session.account && (
+      signed.TransactionType === "EscrowCreate" ||
+      signed.TransactionType === "EscrowFinish" ||
+      signed.TransactionType === "EscrowCancel"
+    );
+  }
 
   if (op === "tx.execute") {
     return hasWalletExecutionCapability(
@@ -172,7 +235,7 @@ export function authorizeWalletHarborOperation(
 
 export function authorizeBrowserHarborOperation(
   request: Request,
-  op: HarborOpName,
+  op: HarborProxyOpName,
   args: Record<string, unknown>,
 ): boolean {
   // /api/chat verifies the fresh single-use proof. The browser Harbor proxy
@@ -183,13 +246,16 @@ export function authorizeBrowserHarborOperation(
 
 export function walletHarborResponseHeaders(
   request: Request,
-  op: HarborOpName,
+  op: HarborProxyOpName,
   args: Record<string, unknown>,
   body: ArrayBuffer,
   status: number,
 ): Record<string, string> {
   if (status < 200 || status >= 300 || body.byteLength === 0) return {};
   try {
+    if (isOwnerReviewProxyOp(op) || isCapabilityProxyOp(op) || isWorkAgreementProxyOp(op)) {
+      return {};
+    }
     const schema = EnvelopeSchema(HarborResultSchemas[op]);
     const parsed = schema.safeParse(JSON.parse(new TextDecoder().decode(body)));
     if (!parsed.success || !parsed.data.ok) return {};

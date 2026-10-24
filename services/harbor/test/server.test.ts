@@ -7,6 +7,7 @@ import { LOCAL_X402_OPERATION_DISABLED } from "../src/executor/providers";
 import { LOCAL_X402_ISOLATED_V1_MERCHANT_PAY_TO } from "../src/local-x402-isolated-v1";
 import { X402_SIGNING_PROFILE } from "../src/ops/x402";
 import {
+	CAPABILITY_ROUTE_PATHS,
 	createWorker,
 	selectRuntimeRegistry,
 	type Env,
@@ -99,6 +100,52 @@ describe("Worker routes and identity", () => {
 		expect(response.status).toBe(401);
 	});
 
+	it("requires named Bearer authentication for every exact local capability route", async () => {
+		const worker = createWorker();
+		const localEnv: Env = {
+			...env("named-local:correct-secret"),
+			HARBOR_LOCAL_DEV: "true",
+			HARBOR_LOCAL_CAPABILITY_RUNTIME_ENABLED: "true",
+			HARBOR_MOCK: "1",
+			EXEC_NETWORK: "testnet",
+			MAINNET_EXECUTION: "false",
+		};
+		for (const path of CAPABILITY_ROUTE_PATHS) {
+			const response = await worker.fetch!(
+				new Request(`http://127.0.0.1:8791${path}`, {
+					method: "POST",
+					headers: { "content-type": "application/json" },
+					body: "{}",
+				}),
+				localEnv,
+				{} as ExecutionContext,
+			);
+			expect(response.status, path).toBe(401);
+			await expect(response.json()).resolves.toMatchObject({
+				ok: false,
+				error: { code: "UNAUTHORIZED" },
+			});
+		}
+
+		const authenticated = await worker.fetch!(
+			new Request("http://127.0.0.1:8791/api/ops/capability.status", {
+				method: "POST",
+				headers: {
+					authorization: "Bearer named-local:correct-secret",
+					"content-type": "application/json",
+				},
+				body: "not-json",
+			}),
+			localEnv,
+			{} as ExecutionContext,
+		);
+		expect(authenticated.status).toBe(400);
+		await expect(authenticated.json()).resolves.toMatchObject({
+			ok: false,
+			error: { code: "INVALID_JSON" },
+		});
+	});
+
 	it("preserves legacy loopback auth on localhost, IPv4, IPv6, and arbitrary ports", async () => {
 		const request = new Request("http://127.0.0.1:8791/mcp", {
 			method: "POST",
@@ -182,8 +229,14 @@ describe("Worker routes and identity", () => {
 		expect(unknown.status).toBe(404);
 	});
 
-	it("keeps QuickNode test operations out of deployed registries and exposes them only in exact local development", async () => {
+	it("keeps local-only operations out of deployed registries and exposes them only in exact local development", async () => {
 		const localOnlyNames = [
+			"capability.activate",
+			"capability.invoke",
+			"capability.prepare",
+			"capability.prepareRevoke",
+			"capability.revoke",
+			"capability.status",
 			"quicknode.test.registerLink",
 			"quicknode.test.deleteLink",
 		] as const;

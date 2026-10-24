@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -21,6 +22,7 @@ import {
 const OWNER = "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59";
 const OTHER = "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe";
 const REF = `cap_v1_${"A".repeat(43)}`;
+const viewSource = readFileSync(new URL("./ledger-capability-view.tsx", import.meta.url), "utf8");
 
 function grant(overrides: Partial<CapabilityGrant> = {}): CapabilityGrant {
   return {
@@ -51,6 +53,12 @@ describe("Ledger capability workspace", () => {
     expect(html).toContain("Grant a scope, never an API key");
     expect(html).toContain("Prepare bounded grant");
     expect(html).toContain("not a physical Ledger");
+    expect(html).toContain("font-serif");
+    expect(html).toContain("min-h-11");
+    expect(html).toContain("focus-visible:ring-2");
+    expect(viewSource).not.toMatch(
+      /(?:slate|amber|emerald|red)-|bg-white|bg-slate-950|#(?:f3f1ea|171814|235a52)/,
+    );
   });
 
   it("keeps recovery records account-scoped across wallet switches", () => {

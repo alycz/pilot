@@ -126,9 +126,9 @@ export function LedgerCapabilityApprovalModal(props: Readonly<{
         <header className="flex items-start justify-between gap-4 border-b border-border px-5 py-5">
           <div>
             <p className="label-mono text-approval">Ledger capability proof</p>
-            <h2 className="mt-2 text-lg font-medium">{verb}</h2>
+            <h2 className="mt-2 font-serif text-lg font-medium">{verb}</h2>
           </div>
-          <button aria-label="Reject capability review" disabled={busy} onClick={() => props.onClose(state !== "complete")} type="button">
+          <button aria-label="Reject capability review" className="grid min-h-11 min-w-11 place-items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background" disabled={busy} onClick={() => props.onClose(state !== "complete")} type="button">
             <X className="size-4" />
           </button>
         </header>
@@ -147,13 +147,13 @@ export function LedgerCapabilityApprovalModal(props: Readonly<{
             <div className="bg-card p-3"><dt className="label-mono">Review expires</dt><dd className="mt-1 break-all font-mono text-[10px]">{review.expires_at}</dd></div>
           </dl>
 
-          <dl className="space-y-2 border border-slate-300 bg-white p-3 text-slate-900">
+          <dl className="space-y-2 rounded-xl border border-border bg-background p-3 text-foreground">
             <div><dt className="label-mono">Capability reference</dt><dd className="mt-1 break-all font-mono text-[10px]">{review.capability_ref}</dd></div>
             <div><dt className="label-mono">Approval digest</dt><dd className="mt-1 break-all font-mono text-[10px]">{review.approval_digest}</dd></div>
             <div><dt className="label-mono">Nonce</dt><dd className="mt-1 break-all font-mono text-[10px]">{review.nonce}</dd></div>
           </dl>
 
-          <p className="border border-amber-500/40 bg-amber-50 p-3 text-xs leading-5 text-amber-950">
+          <p className="rounded-xl border border-warning/35 bg-warning/[0.06] p-3 text-xs leading-5 text-warning">
             Ledger signs a zero-fee, sequence-zero AccountSet proof containing the exact scope digest. It is never broadcast. The signature proves control of the account key only; it does not prove a physical Ledger, and Speculos remains simulation. If the device requests blind signing, reject it—there is no fallback.
           </p>
 
@@ -166,11 +166,11 @@ export function LedgerCapabilityApprovalModal(props: Readonly<{
         </div>
 
         <footer className="flex justify-end gap-2 border-t border-border px-5 py-4">
-          <button className="border border-border px-4 py-2 text-xs" disabled={busy} onClick={() => props.onClose(state !== "complete")} type="button">
+          <button className="min-h-11 rounded-md border border-border px-4 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background" disabled={busy} onClick={() => props.onClose(state !== "complete")} type="button">
             {state === "complete" ? "Done" : "Reject"}
           </button>
           {state !== "complete" ? (
-            <button className="inline-flex items-center gap-2 bg-approval px-4 py-2 text-xs font-semibold text-approval-foreground disabled:opacity-45" disabled={busy || expired || !props.deviceReady} onClick={() => void submit()} type="button">
+            <button className="inline-flex min-h-11 items-center gap-2 rounded-md bg-approval px-4 text-xs font-semibold text-approval-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-45" disabled={busy || expired || !props.deviceReady} onClick={() => void submit()} type="button">
               {busy ? <LoaderCircle className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
               {state === "error" && signedBlob ? "Retry exact proof" : verb}
             </button>

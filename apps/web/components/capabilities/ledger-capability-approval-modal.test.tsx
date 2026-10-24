@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -15,6 +16,10 @@ import {
 
 const OWNER = "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59";
 const REF = `cap_v1_${"A".repeat(43)}`;
+const modalSource = readFileSync(
+  new URL("./ledger-capability-approval-modal.tsx", import.meta.url),
+  "utf8",
+);
 
 function grant(): CapabilityGrant {
   return {
@@ -93,6 +98,12 @@ describe("Ledger capability approval", () => {
     expect(html).toContain("does not prove a physical Ledger");
     expect(html).toContain("no fallback");
     expect(html).toContain("Reject capability review");
+    expect(html).toContain("font-serif");
+    expect(html).toContain("min-h-11");
+    expect(html).toContain("focus-visible:ring-2");
+    expect(modalSource).not.toMatch(
+      /(?:slate|amber|emerald|red)-|bg-white|bg-slate-950|#(?:f3f1ea|171814|235a52)/,
+    );
   });
 
   it("reuses one in-memory signature after an uncertain activation response", async () => {

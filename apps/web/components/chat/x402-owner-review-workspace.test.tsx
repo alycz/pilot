@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -12,6 +13,7 @@ import { OwnerReviewRequestError } from "./x402-owner-review-client";
 import { X402_APPROVED_RECEIVER } from "./x402-operation-state";
 
 const OWNER = "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59";
+const viewSource = readFileSync(new URL("./x402-owner-review-view.tsx", import.meta.url), "utf8");
 
 describe("owner-reviewed x402 workspace", () => {
   it("mounts an honest default-off native-XRP review surface", () => {
@@ -23,6 +25,12 @@ describe("owner-reviewed x402 workspace", () => {
     expect(html).toContain(X402_APPROVED_RECEIVER);
     expect(html).toContain("Default off");
     expect(html).toContain("Speculos is simulation");
+    expect(html).toContain("font-serif");
+    expect(html).toContain("min-h-11");
+    expect(html).toContain("focus-visible:ring-2");
+    expect(viewSource).not.toMatch(
+      /(?:slate|amber|emerald|red)-|bg-white|bg-slate-950|#(?:f3f1ea|171814|235a52)/,
+    );
   });
 
   it("converts only an awaiting exact approval", () => {

@@ -119,6 +119,10 @@ export const UNTRUSTED_FIELD_RULES: Readonly<
       path: ["merchant", "body", "comparison", "*"],
     },
   ],
+  "x402.payIssuedFixture": [
+    { kind: "merchant-response", path: ["merchant_invoice_id"] },
+    { kind: "merchant-response", path: ["merchant_body", "**"] },
+  ],
 });
 
 /**
@@ -243,6 +247,7 @@ export const OP_SCREENING_CLASSIFICATION: Readonly<
   "venues.get": "trusted",
   "venues.list": "trusted",
   "x402.pay": "untrusted",
+  "x402.payIssuedFixture": "untrusted",
   "yield.options": "trusted",
 });
 

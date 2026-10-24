@@ -117,7 +117,7 @@ class InvoiceStore:
                 issued_at REAL NOT NULL,
                 expires_at REAL NOT NULL,
                 first_ledger_sequence INTEGER,
-                state TEXT NOT NULL CHECK(state IN ('pending', 'verifying', 'settling', 'delivered', 'not_included')),
+                state TEXT NOT NULL CHECK(state IN ('pending', 'verifying', 'settling', 'delivered', 'not_included', 'rejected')),
                 signature_hash TEXT,
                 claimed_at REAL,
                 claim_generation INTEGER NOT NULL DEFAULT 0,
@@ -152,7 +152,11 @@ class InvoiceStore:
                 "terminal_ledger_index",
                 "first_ledger_sequence",
             }
-            if "'not_included'" not in table_sql_row["sql"] or not required.issubset(columns):
+            if (
+                "'not_included'" not in table_sql_row["sql"]
+                or "'rejected'" not in table_sql_row["sql"]
+                or not required.issubset(columns)
+            ):
                 claimed = "claimed_at" if "claimed_at" in columns else "NULL"
                 generation = "claim_generation" if "claim_generation" in columns else "0"
                 verified = (
@@ -354,6 +358,8 @@ class InvoiceStore:
             invoice = self._decode(self._select(connection, invoice_id))
             if invoice.state == "delivered":
                 outcome = "cached" if invoice.signature_hash == signature_hash else "conflict"
+            elif invoice.state == "rejected":
+                outcome = "rejected" if invoice.signature_hash == signature_hash else "conflict"
             elif invoice.state == "not_included":
                 outcome = (
                     "not_included"
@@ -470,6 +476,52 @@ class InvoiceStore:
                 outcome = "claim_lost"
             connection.execute("COMMIT")
         return TransitionResult(outcome=outcome, invoice=invoice)
+
+    def mark_rejected(
+        self,
+        invoice_id: str,
+        signature_hash: str,
+        transaction_hash: str,
+        response_body: Mapping[str, Any],
+    ) -> Invoice:
+        """Persist a terminal failure proven to have occurred before submission."""
+
+        response_json = json.dumps(
+            response_body, separators=(",", ":"), sort_keys=True
+        )
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            current = self._decode(self._select(connection, invoice_id))
+            if (
+                current.state == "rejected"
+                and current.signature_hash == signature_hash
+                and current.response_body == response_body
+            ):
+                connection.execute("COMMIT")
+                return current
+            if (
+                current.state != "settling"
+                or current.signature_hash != signature_hash
+                or current.verified_receipt is None
+                or current.verified_receipt.transaction != transaction_hash
+            ):
+                connection.execute("ROLLBACK")
+                raise RuntimeError("invoice rejection transition rejected")
+            cursor = connection.execute(
+                """
+                UPDATE x402_invoices
+                SET state = 'rejected', response_json = ?
+                WHERE invoice_id = ? AND state = 'settling'
+                  AND signature_hash = ?
+                """,
+                (response_json, invoice_id, signature_hash),
+            )
+            if cursor.rowcount != 1:
+                connection.execute("ROLLBACK")
+                raise RuntimeError("invoice rejection transition rejected")
+            rejected = self._decode(self._select(connection, invoice_id))
+            connection.execute("COMMIT")
+        return rejected
 
     def mark_not_included(
         self,

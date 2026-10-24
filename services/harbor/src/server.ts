@@ -9,6 +9,10 @@ import { scheduled as runScheduled } from "./cron";
 import { createHarborProvider } from "./executor/providers";
 import { createLocalX402Service } from "./exec/x402-runtime";
 import {
+	createLocalIssuedX402FixtureService,
+	type LocalIssuedX402RuntimeAdapter,
+} from "./exec/x402-issued-runtime";
+import {
 	createAp4mRuntimeServices,
 	type Ap4mRuntimeAdapter,
 } from "./exec/ap4m-runtime";
@@ -20,6 +24,10 @@ import {
 	isLocalDevRequest,
 	probeLocalX402,
 } from "./local-x402";
+import {
+	isLocalX402IssuedFixtureRequest,
+	localX402IssuedFixtureMarkersPresent,
+} from "./local-x402-issued-fixture";
 import {
 	isLocalX402IsolatedV1Request,
 	localX402IsolatedV1MarkersPresent,
@@ -94,6 +102,9 @@ export interface Env {
 	HARBOR_LOCAL_X402_OWNER_REVIEW_ENABLED?: string;
 	HARBOR_LOCAL_X402_ISOLATED_V1_RUNTIME_ENABLED?: string;
 	HARBOR_LOCAL_X402_ISOLATED_V1_SIGNING_PROFILE?: string;
+	HARBOR_LOCAL_X402_ISSUED_FIXTURE_ENABLED?: string;
+	HARBOR_LOCAL_X402_ISSUED_FIXTURE_PROFILE?: string;
+	HARBOR_LOCAL_X402_ISSUED_RUNTIME_ADAPTER?: LocalIssuedX402RuntimeAdapter;
 	HARBOR_LOCAL_AP4M_X402_COMBINED_V1_RUNTIME_ENABLED?: string;
 	HARBOR_LOCAL_AP4M_X402_COMBINED_V1_SIGNING_PROFILE?: string;
 	HARBOR_LOCAL_TRADING_RUNTIME_ENABLED?: string;
@@ -195,6 +206,7 @@ export class HarborRpc extends WorkerEntrypoint<Env, HarborRpcProps> {
 				return ap4mConfigurationEnvelope();
 			}
 		}
+		const issuedFixtureService = await createLocalIssuedX402FixtureService(this.env);
 		const provider = createHarborProvider(
 			selectRuntimeRegistry(this.env, this.ctx.props.localDevRequest === true),
 			{
@@ -203,6 +215,9 @@ export class HarborRpc extends WorkerEntrypoint<Env, HarborRpcProps> {
 				db: this.env.DB,
 				env: this.env,
 				x402Service: createLocalX402Service(this.env),
+				...(issuedFixtureService === undefined
+					? {}
+					: { x402IssuedFixtureService: issuedFixtureService }),
 				...(ap4mServices === undefined ? {} : { ap4mServices }),
 			},
 		);
@@ -248,6 +263,9 @@ function targetsLocalX402Origin(request: Request): boolean {
 }
 
 function deriveLocalDevRequest(request: Request, env: Env): boolean {
+	if (localX402IssuedFixtureMarkersPresent(env)) {
+		return isLocalX402IssuedFixtureRequest(request, env);
+	}
 	if (localX402IsolatedV1MarkersPresent(env)) {
 		return isLocalX402IsolatedV1Request(request, env);
 	}
@@ -269,6 +287,7 @@ function authenticateWithLocalCapability(
 		!LOCAL_BEARER_REQUIRED_ROUTE_PATHS.has(new URL(request.url).pathname) &&
 		isLegacyLocalDevRequest(request, env) &&
 		!localTradingSafetyMarkersPresent(env) &&
+		!localX402IssuedFixtureMarkersPresent(env) &&
 		(!targetsLocalX402Origin(request) ||
 			(localDevRequest && env.HARBOR_LOCAL_X402_RUNTIME_ENABLED !== "true"))
 	) {
@@ -529,6 +548,7 @@ export function createWorker(
 					return ap4mConfigurationFailure();
 				}
 			}
+			const issuedFixtureService = await createLocalIssuedX402FixtureService(env);
 			const ctx = {
 				principal: auth.principal,
 				localDevRequest,
@@ -536,6 +556,9 @@ export function createWorker(
 				env,
 				request,
 				x402Service: localX402Service(env),
+				...(issuedFixtureService === undefined
+					? {}
+					: { x402IssuedFixtureService: issuedFixtureService }),
 				...(ap4mServices === undefined ? {} : { ap4mServices }),
 			};
 			if (url.pathname.startsWith("/api/ops/")) {

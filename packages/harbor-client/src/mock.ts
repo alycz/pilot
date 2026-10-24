@@ -1136,6 +1136,12 @@ export class MockHarborClient implements HarborClient {
     if (name === "x402.pay") {
       return this.x402Pay(validArgs as ArgsFor<"x402.pay">) as Envelope<ResultFor<K>>;
     }
+    if (name === "x402.payIssuedFixture") {
+      return errorEnvelope(
+        "X402_ISSUED_FIXTURE_DISABLED",
+        "Mock Harbor does not fabricate issued-currency payment evidence.",
+      ) as Envelope<ResultFor<K>>;
+    }
     if (name === "strategy.validate") {
       return this.validateStrategy(validArgs as ArgsFor<"strategy.validate">) as Envelope<ResultFor<K>>;
     }

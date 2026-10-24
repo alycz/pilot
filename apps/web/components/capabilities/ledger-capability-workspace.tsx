@@ -43,6 +43,51 @@ import { LedgerCapabilityView } from "./ledger-capability-view";
 
 const IDLE_DEVICE: LedgerDeviceState = Object.freeze({ interaction: "none", busy: false });
 
+export type CapabilityOperationContext = Readonly<{
+  generation: number;
+  owner: string;
+}>;
+
+export class StaleCapabilityOperationError extends Error {
+  constructor() {
+    super("The wallet session changed while the capability operation was running.");
+    this.name = "StaleCapabilityOperationError";
+  }
+}
+
+export function assertCapabilityOperationContext(
+  context: CapabilityOperationContext,
+  currentGeneration: number,
+  currentSession: WalletSessionStatus | null | undefined,
+): void {
+  if (context.generation !== currentGeneration || !currentSession?.authenticated ||
+      currentSession.network !== "testnet" || currentSession.account !== context.owner) {
+    throw new StaleCapabilityOperationError();
+  }
+}
+
+export class CapabilityAttemptGate {
+  private activeToken: number | undefined;
+  private nextToken = 0;
+
+  acquire(): number | undefined {
+    if (this.activeToken !== undefined) return undefined;
+    const token = ++this.nextToken;
+    this.activeToken = token;
+    return token;
+  }
+
+  invalidate(): void {
+    this.activeToken = undefined;
+  }
+
+  release(token: number): boolean {
+    if (this.activeToken !== token) return false;
+    this.activeToken = undefined;
+    return true;
+  }
+}
+
 export function capabilityRemainingUses(grant: CapabilityGrant): number {
   return Math.max(0, grant.maxUses - grant.uses);
 }
@@ -82,29 +127,45 @@ export function LedgerCapabilityWorkspace() {
   const [notice, setNotice] = useState<string>();
   const [error, setError] = useState<string>();
   const [now, setNow] = useState(() => Date.now());
-  const busyRef = useRef(false);
+  const attemptGateRef = useRef(new CapabilityAttemptGate());
   const disconnectRef = useRef<(() => void) | undefined>(undefined);
+  const sessionGenerationRef = useRef(0);
+  const sessionLoadRef = useRef(0);
+  const verifiedWalletRef = useRef<Readonly<{
+    generation: number;
+    owner: string;
+    wallet: PilotWallet;
+  }> | undefined>(undefined);
 
   useEffect(() => {
     let active = true;
     const load = async () => {
-      const [nextConfig, nextSession] = await Promise.all([
-        loadPublicPilotConfig(),
-        loadWalletSessionStatus(),
-      ]);
-      if (!active) return;
-      setConfig(nextConfig);
-      setSession(nextSession);
+      const requestId = ++sessionLoadRef.current;
+      try {
+        const [nextConfig, nextSession] = await Promise.all([
+          loadPublicPilotConfig(),
+          loadWalletSessionStatus(),
+        ]);
+        if (!active || requestId !== sessionLoadRef.current) return;
+        setConfig(nextConfig);
+        setSession(nextSession);
+      } catch {
+        if (!active || requestId !== sessionLoadRef.current) return;
+        setConfig(null);
+        setSession(null);
+      }
     };
-    void load().catch(() => {
-      if (!active) return;
-      setConfig(null);
-      setSession(null);
-    });
+    void load();
     const onSessionChanged = () => {
+      sessionGenerationRef.current += 1;
+      const requestId = ++sessionLoadRef.current;
       void loadWalletSessionStatus()
-        .then((next) => { if (active) setSession(next); })
-        .catch(() => { if (active) setSession(null); });
+        .then((next) => {
+          if (active && requestId === sessionLoadRef.current) setSession(next);
+        })
+        .catch(() => {
+          if (active && requestId === sessionLoadRef.current) setSession(null);
+        });
     };
     globalThis.addEventListener?.(WALLET_SESSION_CHANGED_EVENT, onSessionChanged);
     return () => {
@@ -116,8 +177,10 @@ export function LedgerCapabilityWorkspace() {
 
   useEffect(() => {
     let active = true;
+    const generation = ++sessionGenerationRef.current;
     disconnectRef.current?.();
     disconnectRef.current = undefined;
+    verifiedWalletRef.current = undefined;
     setWallet(undefined);
     setDeviceReady(false);
     setDeviceState(IDLE_DEVICE);
@@ -127,6 +190,8 @@ export function LedgerCapabilityWorkspace() {
     setRecovery(undefined);
     setError(undefined);
     setNotice(undefined);
+    attemptGateRef.current.invalidate();
+    setBusy(false);
     if (!session?.authenticated || session.network !== "testnet") return () => { active = false; };
     const saved = parseCapabilityRecovery(
       localStorage.getItem(capabilityRecoveryKey(session.account)),
@@ -142,7 +207,8 @@ export function LedgerCapabilityWorkspace() {
     }
     void readCapability(session.account, reference)
       .then((recovered) => {
-        if (!active) return;
+        if (!active || generation !== sessionGenerationRef.current ||
+            !capabilityMatchesSession(recovered, session)) return;
         setGrant(recovered);
         setNotice(saved?.phase === "invoke_pending" || saved?.phase === "invoke_unknown"
           ? "Recovered a pending invocation tuple. Reconcile only that exact request id."
@@ -151,7 +217,7 @@ export function LedgerCapabilityWorkspace() {
             : "Recovered the account-bound capability from Harbor.");
       })
       .catch((cause) => {
-        if (!active) return;
+        if (!active || generation !== sessionGenerationRef.current) return;
         setError(cause instanceof Error ? cause.message : "Capability recovery failed. Retry the stored reference before preparing another grant.");
       });
     return () => { active = false; };
@@ -176,22 +242,40 @@ export function LedgerCapabilityWorkspace() {
     setRecovery(next);
   };
 
-  const requireCurrentSession = async (expectedOwner: string) => {
+  const operationContext = (expectedOwner: string): CapabilityOperationContext => ({
+    generation: sessionGenerationRef.current,
+    owner: expectedOwner,
+  });
+
+  const requireCurrentSession = async (context: CapabilityOperationContext) => {
+    assertCapabilityOperationContext(context, sessionGenerationRef.current, session);
     const current = await loadWalletSessionStatus();
-    if (!current.authenticated || current.network !== "testnet" || current.account !== expectedOwner) {
-      throw new Error("The wallet session account or network changed. Reconnect the reviewed Testnet account.");
+    try {
+      assertCapabilityOperationContext(context, sessionGenerationRef.current, current);
+    } catch (cause) {
+      sessionGenerationRef.current += 1;
+      verifiedWalletRef.current = undefined;
+      setSession(current);
+      throw cause;
     }
-    setSession(current);
+    return current;
   };
 
-  const connectLedger = async (): Promise<PilotWallet> => {
+  const connectLedger = async (context: CapabilityOperationContext): Promise<PilotWallet> => {
+    await requireCurrentSession(context);
+    const verified = verifiedWalletRef.current;
+    if (wallet && verified?.wallet === wallet && verified.owner === context.owner &&
+        verified.generation === context.generation && wallet.network === "testnet" &&
+        wallet.address() === context.owner) {
+      return wallet;
+    }
     if (wallet) {
-      if (owner && wallet.network === "testnet" && wallet.address() === owner) return wallet;
       await wallet.disconnect().catch(() => undefined);
+      verifiedWalletRef.current = undefined;
       setWallet(undefined);
       setDeviceReady(false);
     }
-    if (!config || config.network !== "testnet" || !owner) {
+    if (!config || config.network !== "testnet") {
       throw new Error("A wallet-bound local Testnet session is required.");
     }
     const configured = configuredWalletMetadata(sessionStorage.getItem("pilot:wallet"), config);
@@ -200,7 +284,7 @@ export function LedgerCapabilityWorkspace() {
     }
     const candidate = createWallet(configuredWalletOptions(configured, "testnet"));
     const connected = await candidate.connect();
-    if (connected !== owner || candidate.address() !== owner) {
+    if (connected !== context.owner || candidate.address() !== context.owner) {
       await candidate.disconnect().catch(() => undefined);
       throw new Error("The connected Ledger account changed.");
     }
@@ -208,7 +292,13 @@ export function LedgerCapabilityWorkspace() {
       await candidate.disconnect().catch(() => undefined);
       throw new Error("This Ledger transport cannot verify the owner address.");
     }
-    await candidate.verifyAddressOnDevice();
+    try {
+      await candidate.verifyAddressOnDevice();
+      await requireCurrentSession(context);
+    } catch (cause) {
+      await candidate.disconnect().catch(() => undefined);
+      throw cause;
+    }
     disconnectRef.current?.();
     const unsubscribe = candidate.onDeviceState?.(setDeviceState);
     disconnectRef.current = () => {
@@ -216,74 +306,94 @@ export function LedgerCapabilityWorkspace() {
       void candidate.disconnect();
     };
     setAccountIndex(configured.ledger.accountIndex);
+    verifiedWalletRef.current = { generation: context.generation, owner: context.owner, wallet: candidate };
     setWallet(candidate);
     setDeviceReady(true);
     return candidate;
   };
 
-  const run = async (operation: () => Promise<void>) => {
-    if (busyRef.current) return;
-    busyRef.current = true;
+  const run = async (operation: (context: CapabilityOperationContext) => Promise<void>) => {
+    const attemptToken = attemptGateRef.current.acquire();
+    if (attemptToken === undefined) return;
+    if (!owner) {
+      setError("A wallet-bound local Testnet session is required.");
+      attemptGateRef.current.release(attemptToken);
+      return;
+    }
+    const context = operationContext(owner);
     setBusy(true);
     setError(undefined);
     try {
-      await operation();
+      await operation(context);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The capability operation failed.");
+      try {
+        await requireCurrentSession(context);
+      } catch (sessionCause) {
+        if (context.generation === sessionGenerationRef.current) {
+          setError(sessionCause instanceof Error ? sessionCause.message : "The wallet session could not be revalidated.");
+        }
+        return;
+      }
+      if (context.generation === sessionGenerationRef.current) {
+        setError(cause instanceof Error ? cause.message : "The capability operation failed.");
+      }
     } finally {
-      busyRef.current = false;
-      setBusy(false);
+      if (attemptGateRef.current.release(attemptToken)) setBusy(false);
     }
   };
 
-  const prepare = () => run(async () => {
-    if (!owner) throw new Error("A wallet-bound local Testnet session is required.");
+  const prepare = () => run(async (context) => {
     if (recovery !== undefined) throw new Error("Resolve the saved capability state before preparing another grant.");
-    await requireCurrentSession(owner);
-    await connectLedger();
-    await requireCurrentSession(owner);
+    await connectLedger(context);
+    await requireCurrentSession(context);
     const startedAt = new Date().toISOString();
-    saveRecovery({ version: 1, owner, network: "testnet", phase: "prepare_pending", started_at: startedAt });
+    saveRecovery({ version: 1, owner: context.owner, network: "testnet", phase: "prepare_pending", started_at: startedAt });
     let prepared: Awaited<ReturnType<typeof prepareCapability>>;
     try {
-      prepared = await prepareCapability(owner);
+      prepared = await prepareCapability(context.owner);
     } catch (cause) {
-      saveRecovery({ version: 1, owner, network: "testnet", phase: "prepare_unknown", started_at: startedAt });
+      await requireCurrentSession(context);
+      saveRecovery({ version: 1, owner: context.owner, network: "testnet", phase: "prepare_unknown", started_at: startedAt });
       throw cause;
     }
+    await requireCurrentSession(context);
+    const nextBoundReview = await bindCapabilityOwnerReview(prepared.owner_review, prepared.grant);
+    await requireCurrentSession(context);
     saveRecovery({
       version: 1,
-      owner,
+      owner: context.owner,
       network: "testnet",
       phase: "tracking",
       capability_ref: prepared.grant.capabilityRef,
     });
     setGrant(prepared.grant);
-    setBoundReview(await bindCapabilityOwnerReview(prepared.owner_review, prepared.grant));
+    setBoundReview(nextBoundReview);
     setLastInvocation(undefined);
     setNotice("Prepared an inactive, bounded grant. It cannot be used until the exact owner proof is signed.");
   });
 
-  const refresh = () => run(async () => {
+  const refresh = () => run(async (context) => {
     const reference = grant?.capabilityRef ?? trackedCapabilityReference(recovery);
-    if (!owner || !reference) throw new Error("No recoverable capability reference is available.");
-    await requireCurrentSession(owner);
-    const refreshed = await readCapability(owner, reference);
+    if (!reference) throw new Error("No recoverable capability reference is available.");
+    await requireCurrentSession(context);
+    const refreshed = await readCapability(context.owner, reference);
+    await requireCurrentSession(context);
+    if (!capabilityMatchesSession(refreshed, session)) throw new StaleCapabilityOperationError();
     setGrant(refreshed);
     if (!invocationRecovery && !revocationRecovery) {
-      saveRecovery({ version: 1, owner, network: "testnet", phase: "tracking", capability_ref: reference });
+      saveRecovery({ version: 1, owner: context.owner, network: "testnet", phase: "tracking", capability_ref: reference });
       setNotice("Capability status refreshed from Harbor.");
     } else {
       setNotice("Capability status refreshed. The pending operation remains locked to its exact request id until reconciled.");
     }
   });
 
-  const invoke = (requestId?: string) => run(async () => {
+  const invoke = (requestId?: string) => run(async (context) => {
     const exactRecovery = requestId !== undefined && invocationRecovery?.requestId === requestId;
-    if (!owner || !grant || !bound || (!exactRecovery && effectiveCapabilityState(grant) !== "active")) {
+    if (!grant || !bound || (!exactRecovery && effectiveCapabilityState(grant) !== "active")) {
       throw new Error("Only the bound active capability can invoke the fixed mock service.");
     }
-    await requireCurrentSession(owner);
+    await requireCurrentSession(context);
     const id = requestId ?? invocationRecovery?.requestId ?? `capability-invoke-${crypto.randomUUID()}`;
     const invocationGeneration = invocationRecovery?.requestId === id
       ? invocationRecovery.generation
@@ -293,7 +403,7 @@ export function LedgerCapabilityWorkspace() {
       : grant.capabilityRef;
     saveRecovery({
       version: 1,
-      owner,
+      owner: context.owner,
       network: "testnet",
       phase: "invoke_pending",
       capability_ref: invocationRef,
@@ -301,12 +411,13 @@ export function LedgerCapabilityWorkspace() {
       request_id: id,
       resource: "ledger-docs",
     });
-    const result = await invokeCapability(owner, invocationRef, invocationGeneration, id);
+    const result = await invokeCapability(context.owner, invocationRef, invocationGeneration, id);
+    await requireCurrentSession(context);
     setLastInvocation(result);
     if (result.status === "unknown") {
       saveRecovery({
         version: 1,
-        owner,
+        owner: context.owner,
         network: "testnet",
         phase: "invoke_unknown",
         capability_ref: invocationRef,
@@ -315,9 +426,12 @@ export function LedgerCapabilityWorkspace() {
         resource: "ledger-docs",
       });
     } else {
-      saveRecovery({ version: 1, owner, network: "testnet", phase: "tracking", capability_ref: invocationRef });
+      saveRecovery({ version: 1, owner: context.owner, network: "testnet", phase: "tracking", capability_ref: invocationRef });
     }
-    setGrant(await readCapability(owner, invocationRef));
+    const refreshed = await readCapability(context.owner, invocationRef);
+    await requireCurrentSession(context);
+    if (!capabilityMatchesSession(refreshed, session)) throw new StaleCapabilityOperationError();
+    setGrant(refreshed);
     setNotice(result.replayed
       ? "Recovered the exact prior invocation; Harbor did not dispatch it again."
       : result.status === "completed"
@@ -325,8 +439,8 @@ export function LedgerCapabilityWorkspace() {
         : "Invocation outcome is unknown. Recover only with the same request id.");
   });
 
-  const prepareRevoke = (recoveryRequestId?: string) => run(async () => {
-    if (!owner || !grant || !bound || effectiveCapabilityState(grant) !== "active") {
+  const prepareRevoke = (recoveryRequestId?: string) => run(async (context) => {
+    if (!grant || !bound || effectiveCapabilityState(grant) !== "active") {
       throw new Error("Only the bound active capability can be revoked.");
     }
     if (recoveryRequestId && (
@@ -334,13 +448,12 @@ export function LedgerCapabilityWorkspace() {
       revocationRecovery.generation !== grant.generation ||
       revocationRecovery.requestId !== recoveryRequestId
     )) throw new Error("The saved revocation recovery tuple no longer matches this capability.");
-    await requireCurrentSession(owner);
-    await connectLedger();
-    await requireCurrentSession(owner);
+    await connectLedger(context);
+    await requireCurrentSession(context);
     const requestId = recoveryRequestId ?? `capability-revoke-${crypto.randomUUID()}`;
     saveRecovery({
       version: 1,
-      owner,
+      owner: context.owner,
       network: "testnet",
       phase: "revoke_prepare_pending",
       capability_ref: grant.capabilityRef,
@@ -348,31 +461,38 @@ export function LedgerCapabilityWorkspace() {
       request_id: requestId,
     });
     const prepared = await prepareCapabilityRevocation(
-      owner,
+      context.owner,
       grant.capabilityRef,
       requestId,
     );
-    setBoundReview(await bindCapabilityOwnerReview(prepared.owner_review, grant));
-    saveRecovery({ version: 1, owner, network: "testnet", phase: "tracking", capability_ref: grant.capabilityRef });
+    await requireCurrentSession(context);
+    const nextBoundReview = await bindCapabilityOwnerReview(prepared.owner_review, grant);
+    await requireCurrentSession(context);
+    setBoundReview(nextBoundReview);
+    saveRecovery({ version: 1, owner: context.owner, network: "testnet", phase: "tracking", capability_ref: grant.capabilityRef });
     setNotice("Prepared an exact revocation proof. The capability remains active until that proof is verified.");
   });
 
   const submitProof = async (proof: CapabilityOwnerProof, currentReview: CapabilityOwnerReview) => {
     if (!owner || !grant || !bound) throw new Error("The capability is not bound to the current wallet session.");
-    await requireCurrentSession(owner);
+    const context = operationContext(owner);
+    await requireCurrentSession(context);
     if (currentReview.action === "activate") {
-      const activated = await activateCapability(owner, currentReview, proof);
+      const activated = await activateCapability(context.owner, currentReview, proof);
+      await requireCurrentSession(context);
+      if (!capabilityMatchesSession(activated, session)) throw new StaleCapabilityOperationError();
       setGrant(activated);
-      saveRecovery({ version: 1, owner, network: "testnet", phase: "tracking", capability_ref: activated.capabilityRef });
+      saveRecovery({ version: 1, owner: context.owner, network: "testnet", phase: "tracking", capability_ref: activated.capabilityRef });
       setBoundReview(undefined);
       setNotice("Capability activated. The signature proved owner-key control; it did not prove a physical Ledger.");
       return;
     }
-    const revoked = await revokeCapability(owner, currentReview, proof);
+    const revoked = await revokeCapability(context.owner, currentReview, proof);
+    await requireCurrentSession(context);
     let denied = false;
     try {
       await invokeCapability(
-        owner,
+        context.owner,
         revoked.capabilityRef,
         revoked.generation,
         `capability-post-revoke-${crypto.randomUUID()}`,
@@ -381,12 +501,15 @@ export function LedgerCapabilityWorkspace() {
       denied = cause instanceof CapabilityRequestError;
       if (!denied) throw cause;
     }
-    const confirmed = await readCapability(owner, revoked.capabilityRef);
+    await requireCurrentSession(context);
+    const confirmed = await readCapability(context.owner, revoked.capabilityRef);
+    await requireCurrentSession(context);
+    if (!capabilityMatchesSession(confirmed, session)) throw new StaleCapabilityOperationError();
     if (!denied || confirmed.state !== "revoked") {
       throw new Error("Capability revocation could not be confirmed.");
     }
     setGrant(confirmed);
-    saveRecovery({ version: 1, owner, network: "testnet", phase: "tracking", capability_ref: confirmed.capabilityRef });
+    saveRecovery({ version: 1, owner: context.owner, network: "testnet", phase: "tracking", capability_ref: confirmed.capabilityRef });
     setBoundReview(undefined);
     setNotice("Revocation confirmed. A new post-revoke invocation was denied by Harbor.");
   };
@@ -440,7 +563,9 @@ export function LedgerCapabilityWorkspace() {
       {boundReview && wallet ? (
         <LedgerCapabilityApprovalModal
           accountIndex={accountIndex}
-          beforeSign={() => requireCurrentSession(boundReview.grant.account)}
+          beforeSign={async () => {
+            await requireCurrentSession(operationContext(boundReview.grant.account));
+          }}
           bound={boundReview}
           deviceReady={deviceReady && !deviceState.busy}
           deviceState={deviceState}

@@ -7,6 +7,8 @@ import type { WalletSessionStatus } from "../../lib/harbor-browser";
 import type { CapabilityGrant } from "./ledger-capability-client";
 import {
   LedgerCapabilityWorkspace,
+  CapabilityAttemptGate,
+  assertCapabilityOperationContext,
   capabilityMatchesSession,
   capabilityRejectionNotice,
   capabilityRemainingUses,
@@ -134,5 +136,43 @@ describe("Ledger capability workspace", () => {
   it("keeps owner rejection fail-closed", () => {
     expect(capabilityRejectionNotice("activate")).toContain("remains inactive");
     expect(capabilityRejectionNotice("revoke")).toContain("remains unchanged");
+  });
+
+  it("rejects delayed responses after an account or network generation change", async () => {
+    const context = { generation: 4, owner: OWNER } as const;
+    const matching: WalletSessionStatus = { authenticated: true, account: OWNER, network: "testnet" };
+    assertCapabilityOperationContext(context, 4, matching);
+
+    let release!: () => void;
+    const delayed = new Promise<void>((resolve) => { release = resolve; });
+    release();
+    await delayed;
+
+    expect(() => assertCapabilityOperationContext(context, 5, matching)).toThrow(/session changed/i);
+    expect(() => assertCapabilityOperationContext(context, 4, {
+      authenticated: true,
+      account: OTHER,
+      network: "testnet",
+    })).toThrow(/session changed/i);
+    expect(() => assertCapabilityOperationContext(context, 4, {
+      authenticated: true,
+      account: OWNER,
+      network: "devnet",
+    })).toThrow(/session changed/i);
+  });
+
+  it("does not let an old generation release a newer operation gate", () => {
+    const gate = new CapabilityAttemptGate();
+    const oldToken = gate.acquire();
+    expect(oldToken).toBeTypeOf("number");
+    expect(gate.acquire()).toBeUndefined();
+
+    gate.invalidate();
+    const newToken = gate.acquire();
+    expect(newToken).toBeTypeOf("number");
+    expect(gate.release(oldToken!)).toBe(false);
+    expect(gate.acquire()).toBeUndefined();
+    expect(gate.release(newToken!)).toBe(true);
+    expect(gate.acquire()).toBeTypeOf("number");
   });
 });

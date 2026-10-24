@@ -1,0 +1,44 @@
+{
+  "harbor_search": {
+    "ok": true,
+    "data": [
+      { "name": "venues.list", "family": "venues", "summary": "List known XRPL execution and discovery venues.", "signature": "venues.list({})", "example": "return await harbor.venues.list({});" },
+      { "name": "venues.get", "family": "venues", "summary": "Get one venue card by ID.", "signature": "venues.get({id})", "example": "return await harbor.venues.get({id:'xrpl-amm'});" },
+      { "name": "venues.compare", "family": "venues", "summary": "Compare order-book, AMM, and payment-path routes.", "signature": "venues.compare({network,sell,buy,amount,side})", "example": "return await harbor.venues.compare({network:'testnet',sell:{currency:'RLUSD'},buy:{currency:'XRP'},amount:'100',side:'sell'});" },
+      { "name": "ledger.account.info", "family": "ledger", "summary": "Read normalized XRPL account data.", "signature": "ledger.account.info({account,network})", "example": "return await harbor.ledger.account.info({account:'r...',network:'testnet'});" },
+      { "name": "ledger.account.lines", "family": "ledger", "summary": "Read account trust lines.", "signature": "ledger.account.lines({account,network})", "example": "return await harbor.ledger.account.lines({account:'r...',network:'testnet'});" },
+      { "name": "ledger.account.objects", "family": "ledger", "summary": "Read account-owned ledger objects.", "signature": "ledger.account.objects({account,network})", "example": "return await harbor.ledger.account.objects({account:'r...',network:'testnet'});" },
+      { "name": "ledger.account.tx", "family": "ledger", "summary": "Read account transaction history.", "signature": "ledger.account.tx({account,network})", "example": "return await harbor.ledger.account.tx({account:'r...',network:'testnet'});" },
+      { "name": "dex.book", "family": "dex", "summary": "Read funded DEX order-book offers.", "signature": "dex.book({network,taker_gets,taker_pays})", "example": "return await harbor.dex.book({network:'testnet',taker_gets:{currency:'XRP'},taker_pays:{currency:'RLUSD',issuer:'r...'}});" },
+      { "name": "amm.info", "family": "amm", "summary": "Read one XRPL AMM pool.", "signature": "amm.info({network,asset,asset2})", "example": "return await harbor.amm.info({network:'testnet',asset:{currency:'XRP'},asset2:{currency:'RLUSD',issuer:'r...'}});" },
+      { "name": "tokens.lookup", "family": "tokens", "summary": "Resolve token metadata and on-ledger issuer flags.", "signature": "tokens.lookup({network,asset})", "example": "return await harbor.tokens.lookup({network:'testnet',asset:{currency:'RLUSD',issuer:'r...'}});" },
+      { "name": "yield.options", "family": "yield", "summary": "List AMM, vault, and protocol yield options.", "signature": "yield.options({network,asset,amount?})", "example": "return await harbor.yield.options({network:'testnet',asset:{currency:'RLUSD',issuer:'r...'},amount:'500'});" },
+      { "name": "account.link", "family": "account", "summary": "Prepare an unsigned DelegateSet for account linking.", "signature": "account.link({owner,network,permissions?})", "example": "return await harbor.account.link({owner:'r...',network:'testnet'});" },
+      { "name": "account.status", "family": "account", "summary": "Read the delegation link status.", "signature": "account.status({owner,network})", "example": "return await harbor.account.status({owner:'r...',network:'testnet'});" },
+      { "name": "account.revoke", "family": "account", "summary": "Prepare an unsigned DelegateSet with empty permissions.", "signature": "account.revoke({owner,network})", "example": "return await harbor.account.revoke({owner:'r...',network:'testnet'});" },
+      { "name": "policy.get", "family": "policy", "summary": "Read the principal-scoped execution policy.", "signature": "policy.get({owner,network})", "example": "return await harbor.policy.get({owner:'r...',network:'testnet'});" },
+      { "name": "policy.set", "family": "policy", "summary": "Validate and store an execution policy.", "signature": "policy.set({owner,network,policy})", "example": "return await harbor.policy.set({owner:'r...',network:'testnet',policy:{max_per_tx_usd:2000,daily_cap_usd:5000,execute_under_usd:250,max_slippage_bps:100,allowed_tx_types:['OfferCreate'],issuer_allowlist:['RLUSD'],block_requireauth_issuers:true,networks:['testnet'],x402_max_per_call_drops:'10000',x402_daily_cap_drops:'1000000'}});" },
+      { "name": "tx.swap", "family": "tx", "summary": "Build and simulate an immediate-or-cancel swap.", "signature": "tx.swap({account,network,sell,buy,amount,side,max_slippage_bps})", "example": "return await harbor.tx.swap({account:'r...',network:'testnet',sell:{currency:'RLUSD',issuer:'r...'},buy:{currency:'XRP'},amount:'100',side:'sell',max_slippage_bps:100});" },
+      { "name": "tx.offer", "family": "tx", "summary": "Build and simulate a limit offer.", "signature": "tx.offer({account,network,sell,buy,sell_amount,buy_amount})", "example": "return await harbor.tx.offer({account:'r...',network:'testnet',sell:{currency:'XRP'},buy:{currency:'RLUSD',issuer:'r...'},sell_amount:'200',buy_amount:'104'});" },
+      { "name": "tx.offerCancel", "family": "tx", "summary": "Build and simulate an offer cancellation.", "signature": "tx.offerCancel({account,network,offer_sequence})", "example": "return await harbor.tx.offerCancel({account:'r...',network:'testnet',offer_sequence:41});" },
+      { "name": "tx.payment", "family": "tx", "summary": "Build and simulate an owner-approved payment.", "signature": "tx.payment({account,network,to,asset,amount})", "example": "return await harbor.tx.payment({account:'r...',network:'testnet',to:'r...',asset:{currency:'XRP'},amount:'25'});" },
+      { "name": "tx.trustSet", "family": "tx", "summary": "Build and simulate a trust line change.", "signature": "tx.trustSet({account,network,asset,limit})", "example": "return await harbor.tx.trustSet({account:'r...',network:'testnet',asset:{currency:'RLUSD',issuer:'r...'},limit:'10000'});" },
+      { "name": "tx.ammDeposit", "family": "tx", "summary": "Build and simulate an AMM deposit.", "signature": "tx.ammDeposit({account,network,asset,asset2,amount,amount2?})", "example": "return await harbor.tx.ammDeposit({account:'r...',network:'testnet',asset:{currency:'XRP'},asset2:{currency:'RLUSD',issuer:'r...'},amount:'390.625',amount2:'200'});" },
+      { "name": "tx.ammWithdraw", "family": "tx", "summary": "Build and simulate an AMM withdrawal.", "signature": "tx.ammWithdraw({account,network,asset,asset2,amount,amount2?})", "example": "return await harbor.tx.ammWithdraw({account:'r...',network:'testnet',asset:{currency:'XRP'},asset2:{currency:'RLUSD',issuer:'r...'},amount:'100'});" },
+      { "name": "tx.vaultDeposit", "family": "tx", "summary": "Build and simulate a non-delegable vault deposit.", "signature": "tx.vaultDeposit({account,network,vault_id,asset,amount})", "example": "return await harbor.tx.vaultDeposit({account:'r...',network:'devnet',vault_id:'B...',asset:{currency:'XRP'},amount:'100'});" },
+      { "name": "tx.vaultWithdraw", "family": "tx", "summary": "Build and simulate a non-delegable vault withdrawal.", "signature": "tx.vaultWithdraw({account,network,vault_id,asset,amount})", "example": "return await harbor.tx.vaultWithdraw({account:'r...',network:'devnet',vault_id:'B...',asset:{currency:'XRP'},amount:'50'});" },
+      { "name": "tx.simulate", "family": "tx", "summary": "Simulate an unsigned transaction without applying it.", "signature": "tx.simulate({account,network,tx_json})", "example": "return await harbor.tx.simulate({account:'r...',network:'testnet',tx_json:{TransactionType:'OfferCreate'}});" },
+      { "name": "tx.execute", "family": "tx", "summary": "Evaluate policy and execute, request approval, block, or fail.", "signature": "tx.execute({build_id,idempotency_key})", "example": "return await harbor.tx.execute({build_id:'build-swap-001',idempotency_key:'intent-001'});" },
+      { "name": "tx.submit", "family": "tx", "summary": "Relay a client-signed transaction blob.", "signature": "tx.submit({tx_blob,approval_id?})", "example": "return await harbor.tx.submit({tx_blob:'1200...'});" },
+      { "name": "tx.status", "family": "tx", "summary": "Read submission validation status by hash.", "signature": "tx.status({hash})", "example": "return await harbor.tx.status({hash:'C1...'});" }
+    ],
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock Harbor operation catalog"
+  },
+  "harbor_execute": {
+    "ok": true,
+    "data": { "mode": "delegate-to-fixture-op", "max_calls": 30, "supported": true },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock MCP executor configuration"
+  }
+}

@@ -1,0 +1,26 @@
+# Dependencies and package-manager state
+node_modules/
+.pnpm-store/
+
+# Framework and build output
+.next/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Test output
+playwright-report/
+test-results/
+
+# Local configuration and secrets
+.env*
+!.env.example
+
+# Runtime vault contents (the tracked template lives in vault-template/)
+/vault/
+
+# Deployment and editor state
+.vercel/
+.DS_Store
+*.log

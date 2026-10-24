@@ -1,0 +1,53 @@
+{
+  "tx.execute": {
+    "ok": true,
+    "data": { "status": "executed", "hash": "C100000000000000000000000000000000000000000000000000000000000001", "ledger_index": 9345211, "result": "filled", "signed_by": "delegate" },
+    "asOf": "2026-10-18T00:00:01.000Z",
+    "asOfBasis": "mock testnet validated ledger 9345211"
+  },
+  "tx.execute.executed": {
+    "ok": true,
+    "data": { "status": "executed", "hash": "C100000000000000000000000000000000000000000000000000000000000001", "ledger_index": 9345211, "result": "filled", "signed_by": "delegate" },
+    "asOf": "2026-10-18T00:00:01.000Z",
+    "asOfBasis": "mock testnet validated ledger 9345211"
+  },
+  "tx.execute.needs_approval": {
+    "ok": true,
+    "data": {
+      "status": "needs_approval",
+      "approval_id": "approval-swap-001",
+      "tx_json": { "TransactionType": "OfferCreate", "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "TakerGets": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV", "value": "500" }, "TakerPays": "976562500", "Flags": 131072, "Fee": "12", "Sequence": 42, "LastLedgerSequence": 9345230, "SourceTag": 20261017, "Memos": [{ "Memo": { "MemoType": "70696C6F742F696E74656E74", "MemoData": "696E74656E742D737761702D617070726F76616C" } }] },
+      "expires_at": "2026-10-18T00:10:00.000Z",
+      "policy": { "verdict": "needs_approval", "reasons": [{ "rule": "link_active", "pass": true, "detail": "Delegation link is active." }, { "rule": "execute_under_usd", "pass": false, "detail": "500.00 USD is not below the 250.00 USD autonomous limit." }, { "rule": "max_per_tx_usd", "pass": true, "detail": "500.00 USD is within the 2000.00 USD per-transaction limit." }] }
+    },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock policy evaluation"
+  },
+  "tx.execute.blocked": {
+    "ok": true,
+    "data": {
+      "status": "blocked",
+      "policy": { "verdict": "block", "reasons": [{ "rule": "issuer_allowlist", "pass": false, "detail": "FREEMONEY issuer is not allowlisted." }, { "rule": "max_per_tx_usd", "pass": false, "detail": "5000.00 USD exceeds the 2000.00 USD per-transaction limit." }, { "rule": "preflight", "pass": false, "detail": "No trusted line exists for the requested issued asset." }] }
+    },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock policy evaluation"
+  },
+  "tx.execute.failed": {
+    "ok": true,
+    "data": { "status": "failed", "engine_result": "tecUNFUNDED_OFFER", "detail": "The mock account balance cannot fund the offer." },
+    "asOf": "2026-10-18T00:00:01.000Z",
+    "asOfBasis": "mock testnet submission result"
+  },
+  "tx.submit": {
+    "ok": true,
+    "data": { "status": "validated", "hash": "C100000000000000000000000000000000000000000000000000000000000002", "ledger_index": 9345212, "engine_result": "tesSUCCESS", "result": "success", "signed_by": "owner" },
+    "asOf": "2026-10-18T00:00:02.000Z",
+    "asOfBasis": "mock testnet validated ledger 9345212"
+  },
+  "tx.status": {
+    "ok": true,
+    "data": { "status": "validated", "hash": "C100000000000000000000000000000000000000000000000000000000000002", "ledger_index": 9345212, "engine_result": "tesSUCCESS", "result": "success" },
+    "asOf": "2026-10-18T00:00:02.000Z",
+    "asOfBasis": "mock testnet validated ledger 9345212"
+  }
+}

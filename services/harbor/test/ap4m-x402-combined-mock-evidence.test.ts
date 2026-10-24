@@ -17,6 +17,7 @@ import {
 import {
   createAp4mRuntimeServices,
 } from "../src/exec/ap4m-runtime";
+import { viDigest } from "../src/exec/mandate-vi";
 import {
   xrplCurrencyCodeForAp4m,
   type ValidatedAp4mX402Challenge,
@@ -392,7 +393,12 @@ describe("combined AP4M + x402 mock-only evidence", () => {
         store: ap4mStore as any,
         sequenceAuthority: () => authority,
         getMerchant: (id) => getCatalogMerchant(id),
-        getMandate: async () => mandate(),
+        getMandate: async () => {
+          const stored = mandate();
+          stored.mandate.l1_digest = await viDigest(fixture.vi.l1);
+          stored.mandate.l2_digest = await viDigest(fixture.vi.l2);
+          return stored;
+        },
         getPolicy: async () => ({ ...DEFAULT_POLICY, ap4m_enabled: true, issuer_allowlist: ["RLUSD"] }),
         getDailySpentUsd: async () => "0",
         getBaseDailySpentUsd: async () => 0,

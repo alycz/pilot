@@ -7,6 +7,7 @@ import {
   BedrockDailyTurnLimitError,
   filterToolCallingModels,
   getModelAccess,
+  resetBedrockTurnBucketsForTest,
   requireAccountModel,
   requireDemoModel,
 } from "./model-access";
@@ -28,10 +29,11 @@ let stateDirectory: string;
 
 function modelRequest(
   session: { mode: "demo"; model: string } | { mode: "oauth"; model: string; apiKey: string },
+  account = ACCOUNT,
 ): Request {
   const wallet: WalletSession = {
     version: 1,
-    account: ACCOUNT,
+    account,
     network: "testnet",
     expiresAt: Date.now() + 60 * 60 * 1_000,
   };
@@ -51,6 +53,7 @@ function modelRequest(
 
 describe("getModelAccess", () => {
   beforeEach(() => {
+    resetBedrockTurnBucketsForTest();
     stateDirectory = mkdtempSync(join(tmpdir(), "pilot-model-access-"));
     chmodSync(stateDirectory, 0o700);
     process.env.SESSION_SECRET = SECRET;
@@ -181,7 +184,7 @@ describe("getModelAccess", () => {
     },
   );
 
-  it("enforces the process-local Bedrock daily turn cap per OAuth user", () => {
+  it("enforces the process-local Bedrock daily turn cap per signed-in wallet", () => {
     process.env.BEDROCK_MODE = "mock";
     process.env.BEDROCK_DAILY_TURN_CAP = "1";
     const request = modelRequest({
@@ -198,22 +201,40 @@ describe("getModelAccess", () => {
     expect(() => getModelAccess(request)).toThrow(BedrockDailyTurnLimitError);
   });
 
-  it("isolates Bedrock turn caps between OAuth users", () => {
+  it("isolates Bedrock turn caps between signed-in wallets", () => {
     process.env.BEDROCK_MODE = "mock";
     process.env.BEDROCK_DAILY_TURN_CAP = "1";
-    const requestFor = (apiKey: string) => {
+    const requestFor = (apiKey: string, walletAccount: string) => {
       return modelRequest({
         mode: "oauth",
         model: "amazon.nova-lite-v1:0",
         apiKey,
-      });
+      }, walletAccount);
     };
-    const firstUser = requestFor("oauth-isolation-user-a");
-    const secondUser = requestFor("oauth-isolation-user-b");
+    const firstUser = requestFor("oauth-isolation-user-a", ACCOUNT);
+    const secondUser = requestFor(
+      "oauth-isolation-user-b",
+      "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV",
+    );
 
     expect(getModelAccess(firstUser).provider).toBe("bedrock");
     expect(() => getModelAccess(firstUser)).toThrow(BedrockDailyTurnLimitError);
     expect(getModelAccess(secondUser).provider).toBe("bedrock");
+  });
+
+  it("does not reset a wallet's Bedrock cap when its OAuth key rotates", () => {
+    process.env.BEDROCK_MODE = "mock";
+    process.env.BEDROCK_DAILY_TURN_CAP = "1";
+    expect(getModelAccess(modelRequest({
+      mode: "oauth",
+      model: "amazon.nova-lite-v1:0",
+      apiKey: "oauth-before-rotation",
+    })).provider).toBe("bedrock");
+    expect(() => getModelAccess(modelRequest({
+      mode: "oauth",
+      model: "amazon.nova-lite-v1:0",
+      apiKey: "oauth-after-rotation",
+    }))).toThrow(BedrockDailyTurnLimitError);
   });
 
   it("resets a Bedrock user's fixed window after 24 hours", () => {

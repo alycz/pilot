@@ -150,7 +150,8 @@ function adapter(options: {
     },
     async execute() {
       calls.execute += 1;
-      return options.outcome ?? { status: "executed", txHash: "AB".repeat(32) };
+      return options.outcome ?? { status: "executed", txHash: "AB".repeat(32), network: "testnet",
+        ledgerIndex: 101, validated: true, engineResult: "tesSUCCESS", result: "success" };
     },
     async reconcile() {
       calls.reconcile += 1;
@@ -223,7 +224,9 @@ describe("autonomous strategy runner restart and safety boundaries", () => {
             : { TakerGets: { currency, issuer, value: "1" }, TakerPays: "1000000" }] };
         }
         if (command === "fee") return { drops: { open_ledger_fee: "10" } };
-        if (command === "server_info") return { info: { validated_ledger: { reserve_base_xrp: "10", reserve_inc_xrp: "2" } } };
+        if (command === "server_info") return { info: { validated_ledger: {
+          reserve_base_xrp: "10", reserve_inc_xrp: "2", seq: 100, age: 1,
+        } } };
         throw new Error(`unexpected RPC ${command}`);
       } };
       const observationDb = { prepare: (sql: string) => ({ bind: () => ({ first: async () =>
@@ -319,7 +322,8 @@ describe("autonomous strategy runner restart and safety boundaries", () => {
       const reconciledAt = new Date(dueAt.getTime() + 60_000);
       const secondAdapter = adapter({
         observation: observation(reconciledAt, "10000000", "90"),
-        reconcile: { status: "validated", evidence: { tx_hash: "CD".repeat(32), ledger_index: 110 } },
+        reconcile: { status: "validated", evidence: { tx_hash: "CD".repeat(32), network: "testnet",
+          ledger_index: 110, validated: true, engine_result: "tesSUCCESS", result: "success" } },
         calls,
       });
       await run(database, secondAdapter, reconciledAt, "runner:reconcile");
@@ -328,6 +332,48 @@ describe("autonomous strategy runner restart and safety boundaries", () => {
       expect(calls.execute).toBe(1);
       expect(database.sqlite.prepare("SELECT submission_state, unresolved FROM strategy_executions").get())
         .toEqual({ submission_state: "validated", unresolved: 0 });
+    } finally { database.close(); }
+  });
+
+  it("keeps an incomplete executed response unresolved instead of claiming ledger success", async () => {
+    const database = new Database();
+    try {
+      await activeStrategy(database);
+      const calls = { observe: 0, build: 0, execute: 0, reconcile: 0 };
+      const malformed = { status: "executed", txHash: "ab".repeat(32) } as unknown as
+        Awaited<ReturnType<StrategyExecutionAdapter["execute"]>>;
+      const result = await run(database, adapter({
+        observation: observation(dueAt, "10000000", "90"),
+        outcome: malformed,
+        calls,
+      }));
+      expect(result).toMatchObject({ executed: 0, blocked: 1 });
+      expect(database.sqlite.prepare(`SELECT submission_state, unresolved
+        FROM strategy_executions`).get()).toEqual({ submission_state: "unknown", unresolved: 1 });
+    } finally { database.close(); }
+  });
+
+  it("keeps malformed reconciliation evidence unresolved", async () => {
+    const database = new Database();
+    try {
+      await activeStrategy(database);
+      const calls = { observe: 0, build: 0, execute: 0, reconcile: 0 };
+      await run(database, adapter({
+        observation: observation(dueAt, "10000000", "90"),
+        outcome: { status: "pending_reconciliation", txHash: "CD".repeat(32) },
+        calls,
+      }));
+      const reconciledAt = new Date(dueAt.getTime() + 60_000);
+      const result = await run(database, adapter({
+        observation: observation(reconciledAt, "10000000", "90"),
+        reconcile: { status: "validated", evidence: {
+          tx_hash: "CD".repeat(32), ledger_index: 110,
+        } },
+        calls,
+      }), reconciledAt, "runner:malformed-reconcile");
+      expect(result).toMatchObject({ executed: 0, blocked: 1 });
+      expect(database.sqlite.prepare(`SELECT submission_state, unresolved
+        FROM strategy_executions`).get()).toEqual({ submission_state: "unknown", unresolved: 1 });
     } finally { database.close(); }
   });
 

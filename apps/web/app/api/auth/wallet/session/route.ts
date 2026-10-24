@@ -6,13 +6,14 @@ import {
 import {
   readWalletSession,
   sealWalletSession,
-  verifyWalletChallenge,
+  verifyWalletChallengeForConsumption,
   WALLET_CHALLENGE_COOKIE,
   WALLET_CHALLENGE_COOKIE_OPTIONS,
   WALLET_SESSION_COOKIE,
   WALLET_SESSION_COOKIE_OPTIONS,
   WALLET_SUBMISSIONS_COOKIE,
 } from "../../../../../lib/wallet-session";
+import { FileWalletActionProofConsumer } from "../../../../../lib/wallet-action-proof";
 import {
   OAUTH_COOKIE_OPTIONS,
   OPENROUTER_PENDING_SESSION_COOKIE,
@@ -97,10 +98,36 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "A signed wallet authorization proof is required." }, { status: 400 });
   }
   try {
-    const session = verifyWalletChallenge(
+    const now = Date.now();
+    const verified = verifyWalletChallengeForConsumption(
       readCookie(request, WALLET_CHALLENGE_COOKIE),
       body.tx_blob,
+      { now },
     );
+    const consumer = new FileWalletActionProofConsumer(
+      process.env.P_LIVE_RLUSD_ACQUISITION_STATE_DIR,
+      "wallet-auth-proofs-v1",
+    );
+    let consumed: boolean;
+    try {
+      consumed = await consumer.consume(
+        `wallet-auth:${verified.nonce}`,
+        verified.challengeExpiresAt,
+        now,
+      );
+    } catch {
+      return NextResponse.json(
+        { error: "Wallet authorization replay protection is unavailable." },
+        { status: 503, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+    if (!consumed) {
+      throw new Error("The wallet authorization proof was already used.");
+    }
+    if (Date.now() >= verified.challengeExpiresAt) {
+      throw new Error("The wallet authorization challenge expired during verification.");
+    }
+    const session = verified.session;
     const response = NextResponse.json({
       authenticated: true,
       account: session.account,

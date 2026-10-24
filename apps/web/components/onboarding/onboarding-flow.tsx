@@ -64,6 +64,7 @@ import {
   createBrowserHarborClient,
   loadPublicPilotConfig,
   loadWalletSessionStatus,
+  WALLET_SESSION_CHANGED_EVENT,
   type PublicPilotConfig,
   type WalletSessionStatus,
 } from "../../lib/harbor-browser";
@@ -2228,6 +2229,7 @@ export function OnboardingFlow({
   const [models, setModels] = useState<ModelChoice[]>([]);
   const [model, setModel] = useState(DEFAULT_MODEL);
   const [aiMode, setAiMode] = useState<"demo" | "openrouter">("demo");
+  const [modelAccessReady, setModelAccessReady] = useState(false);
   const [oauthConnected, setOauthConnected] = useState(false);
   const [demoCatalog, setDemoCatalog] = useState<DemoCatalogState>({ status: "idle" });
   const [demoLimits, setDemoLimits] = useState<{
@@ -2236,6 +2238,8 @@ export function OnboardingFlow({
     maxSteps?: number;
   }>();
   const [walletSessionReady, setWalletSessionReady] = useState(false);
+  const [walletSessionStatusUnavailable, setWalletSessionStatusUnavailable] = useState(false);
+  const [modelSessionStatusUnavailable, setModelSessionStatusUnavailable] = useState(false);
   const [walletViewportState, setWalletViewportState] = useState<WalletViewportState>("checking");
   const [provider, setProvider] = useState<WalletProvider>("gemwallet");
   const [availableExtension, setAvailableExtension] = useState<ExtensionWalletProvider>();
@@ -2288,6 +2292,14 @@ export function OnboardingFlow({
   const liveDevAcquisition = Boolean(
     network && publicConfig && shouldUseLiveDevAcquisition(provider, network, publicConfig.mockMode),
   );
+  const tradingStepLocked = walletSessionStatusUnavailable && [
+    "fund",
+    "acquire",
+    "delegate",
+    "verify",
+    "mandate",
+    "ready",
+  ].includes(step);
   const devRevocationRequired = requiresDevRevocationBeforeExit(provider, link);
   const externalRevocationAvailable = provider !== "dev" && pending === undefined &&
     !persistedPendingExitGuard && hasVerifiedRevocationContext({
@@ -2535,11 +2547,71 @@ export function OnboardingFlow({
     if (sessionStorage.getItem("pilot:onboarding")) return;
     const controller = new AbortController();
     loadWalletSessionStatus(fetch, controller.signal)
-      .then((session) => {
+      .then(async (session) => {
         if (session.authenticated && !storedWallet) {
           setWalletNotice(
             "Pilot found a server session, but this tab has no wallet metadata. Reconnect the exact wallet before choosing a model or enabling trading.",
           );
+          return;
+        }
+        if (storedWallet && session.authenticated) {
+          let configured: ReturnType<typeof walletFirstSessionMetadata>;
+          try {
+            configured = walletFirstSessionMetadata(
+              session,
+              storedWallet,
+              publicConfig,
+            );
+          } catch {
+            setWalletSessionReady(false);
+            setWalletNotice(
+              "Pilot could not match this tab to the authenticated wallet session. Reconnect the exact wallet to continue.",
+            );
+            return;
+          }
+          walletIdentityRestoredRef.current = true;
+          setProvider(configured.provider as WalletProvider);
+          setAccount(configured.account);
+          setWallet(undefined);
+          setWalletSessionReady(true);
+          setWalletSessionStatusUnavailable(false);
+          try {
+            const modelResponse = await fetch("/api/auth/openrouter/session", {
+              cache: "no-store",
+              credentials: "same-origin",
+              signal: controller.signal,
+            });
+            if (!modelResponse.ok) throw new Error("model session unavailable");
+            const modelSession = await modelResponse.json() as {
+              connected?: boolean;
+              mode?: "demo" | "oauth";
+              model?: string;
+              selected?: boolean;
+            };
+            if (modelSession.model) setModel(modelSession.model);
+            setOauthConnected(
+              modelSession.selected === true &&
+              modelSession.mode === "oauth" &&
+              modelSession.connected === true,
+            );
+            if (modelSession.selected === true && modelSession.mode) {
+              setAiMode(modelSession.mode === "oauth" ? "openrouter" : "demo");
+            }
+            setModelAccessReady(modelSession.selected === true);
+            setModelSessionStatusUnavailable(false);
+            setWalletNotice(
+              "Pilot restored this wallet-authenticated account session. Reconnect the exact wallet only when a later action needs a fresh signature.",
+            );
+          } catch (cause) {
+            if (cause instanceof DOMException && cause.name === "AbortError") return;
+            setOauthConnected(false);
+            setModelAccessReady(false);
+            setModelSessionStatusUnavailable(true);
+            setWalletNotice(
+              "Pilot restored this wallet-authenticated account, but could not check its model session. Model changes are locked until that session can be checked or cleared.",
+            );
+          }
+          setStep(nextStepAfterWalletAuthentication());
           return;
         }
         if (
@@ -2557,6 +2629,102 @@ export function OnboardingFlow({
       });
     return () => controller.abort();
   }, [publicConfig, restorationSuppressed]);
+
+  useEffect(() => {
+    if (!walletSessionReady) return;
+    let active = true;
+    let checking = false;
+    const revalidate = async () => {
+      if (!active || checking) return;
+      checking = true;
+      let session: WalletSessionStatus;
+      try {
+        session = await loadWalletSessionStatus();
+      } catch {
+        if (!active) return;
+        setWalletSessionStatusUnavailable(true);
+        setWalletNotice(
+          "Pilot could not revalidate this wallet session. The known account remains visible, but wallet-bound model and trading changes are locked until revalidation succeeds.",
+        );
+        checking = false;
+        return;
+      }
+      try {
+        if (!active) return;
+        const storedWallet = sessionStorage.getItem("pilot:wallet");
+        if (!publicConfig || !storedWallet) throw new Error("wallet metadata unavailable");
+        walletFirstSessionMetadata(session, storedWallet, publicConfig);
+        setWalletSessionStatusUnavailable(false);
+        if (modelSessionStatusUnavailable) {
+          try {
+            const modelResponse = await fetch("/api/auth/openrouter/session", {
+              cache: "no-store",
+              credentials: "same-origin",
+            });
+            if (!modelResponse.ok) throw new Error("model session unavailable");
+            const modelSession = await modelResponse.json() as {
+              connected?: boolean;
+              mode?: "demo" | "oauth";
+              model?: string;
+              selected?: boolean;
+            };
+            if (modelSession.model) setModel(modelSession.model);
+            setOauthConnected(
+              modelSession.selected === true &&
+              modelSession.mode === "oauth" &&
+              modelSession.connected === true,
+            );
+            if (modelSession.selected === true && modelSession.mode) {
+              setAiMode(modelSession.mode === "oauth" ? "openrouter" : "demo");
+            }
+            setModelAccessReady(modelSession.selected === true);
+            setModelSessionStatusUnavailable(false);
+            setWalletNotice(
+              "Pilot revalidated this wallet and its model session. Reconnect the exact wallet only when a later action needs a fresh signature.",
+            );
+          } catch {
+            setModelSessionStatusUnavailable(true);
+            setWalletNotice(
+              "Pilot revalidated this wallet account, but could not check its model session. Model changes remain locked until that session can be checked or cleared.",
+            );
+          }
+        }
+      } catch {
+        if (!active) return;
+        setWallet(undefined);
+        setAccount(undefined);
+        setWalletSessionReady(false);
+        setWalletSessionStatusUnavailable(false);
+        setModelSessionStatusUnavailable(false);
+        setOauthConnected(false);
+        setModelAccessReady(false);
+        setModels([]);
+        setDemoCatalog({ status: "idle" });
+        setDemoLimits(undefined);
+        setStep("wallet");
+        setWalletNotice(
+          "The Pilot wallet session is no longer valid. Reconnect the exact wallet and sign a fresh non-broadcast authentication proof.",
+        );
+      } finally {
+        checking = false;
+      }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void revalidate();
+    };
+    const onFocus = () => void revalidate();
+    const interval = window.setInterval(() => void revalidate(), 30_000);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener(WALLET_SESSION_CHANGED_EVENT, onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener(WALLET_SESSION_CHANGED_EVENT, onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [modelSessionStatusUnavailable, publicConfig, walletSessionReady]);
 
   useEffect(() => {
     if (!shouldLoadOnboardingModels(step, walletSessionReady)) return;
@@ -2630,47 +2798,63 @@ export function OnboardingFlow({
   useEffect(() => {
     if (!publicConfig) return;
     if (new URLSearchParams(window.location.search).get("openrouter") !== "connected") return;
-    Promise.all([
-      loadWalletSessionStatus(),
-      fetch("/api/auth/openrouter/session"),
-    ])
-      .then(async ([walletSession, response]) => {
-        if (!response.ok) throw new Error("session unavailable");
-        const configured = walletFirstSessionMetadata(
+    void (async () => {
+      let configured: ReturnType<typeof walletFirstSessionMetadata>;
+      try {
+        const walletSession = await loadWalletSessionStatus();
+        configured = walletFirstSessionMetadata(
           walletSession,
           sessionStorage.getItem("pilot:wallet"),
           publicConfig,
         );
+        if (configured.provider === "xaman") throw new Error(XAMAN_UNAVAILABLE_REASON);
+      } catch (cause) {
+        setWalletSessionReady(false);
+        setWalletSessionStatusUnavailable(false);
+        setModelSessionStatusUnavailable(false);
+        setStep("wallet");
+        setError(cause instanceof Error
+          ? cause.message
+          : "OpenRouter connected, but the wallet-bound session could not be verified.");
+        return;
+      }
+      walletIdentityRestoredRef.current = true;
+      setProvider(configured.provider as WalletProvider);
+      setAccount(configured.account);
+      setWalletSessionReady(true);
+      setWalletSessionStatusUnavailable(false);
+      if (configured.ledger) {
+        setLedgerTransport(configured.ledger.transport);
+        setLedgerAccountIndex(defaultLedgerAccountIndex(configured.ledger.accountIndex));
+        setLedgerAccounts({
+          [defaultLedgerAccountIndex(configured.ledger.accountIndex)]: configured.account,
+        });
+      }
+      try {
+        const response = await fetch("/api/auth/openrouter/session");
+        if (!response.ok) throw new Error("session unavailable");
         const session = await response.json() as {
           connected?: boolean;
           model?: string;
           mode?: "demo" | "openrouter";
         };
         if (!session.connected) throw new Error("OpenRouter did not confirm a connected session.");
-        if (configured.provider === "xaman") throw new Error(XAMAN_UNAVAILABLE_REASON);
-        walletIdentityRestoredRef.current = true;
-        setProvider(configured.provider as WalletProvider);
-        setAccount(configured.account);
-        if (configured.ledger) {
-          setLedgerTransport(configured.ledger.transport);
-          setLedgerAccountIndex(defaultLedgerAccountIndex(configured.ledger.accountIndex));
-          setLedgerAccounts({
-            [defaultLedgerAccountIndex(configured.ledger.accountIndex)]: configured.account,
-          });
-        }
         if (session.model) setModel(session.model);
         setAiMode("openrouter");
         setOauthConnected(true);
-        setWalletSessionReady(true);
+        setModelAccessReady(true);
+        setModelSessionStatusUnavailable(false);
         setStep(nextStepAfterWalletAuthentication());
-      })
-      .catch((cause: unknown) => {
-        setWalletSessionReady(false);
-        setStep("wallet");
-        setError(cause instanceof Error
-          ? cause.message
-          : "OpenRouter connected, but the wallet-bound session could not be verified.");
-      });
+      } catch {
+        setOauthConnected(false);
+        setModelAccessReady(false);
+        setModelSessionStatusUnavailable(true);
+        setStep(nextStepAfterWalletAuthentication());
+        setError(
+          "Pilot verified the wallet account but could not confirm the OpenRouter callback session. Model changes are locked until that session can be checked or cleared.",
+        );
+      }
+    })();
   }, [publicConfig]);
 
   useEffect(() => {
@@ -2688,11 +2872,15 @@ export function OnboardingFlow({
         setProvider(configured.provider as WalletProvider);
         setAccount(configured.account);
         setWalletSessionReady(true);
+        setWalletSessionStatusUnavailable(false);
+        setModelSessionStatusUnavailable(false);
         setStep("ai");
         setError("OpenRouter connection was not completed. No provider credential was saved; retry when ready or use the configured free demo.");
       })
       .catch((cause: unknown) => {
         setWalletSessionReady(false);
+        setWalletSessionStatusUnavailable(false);
+        setModelSessionStatusUnavailable(false);
         setStep("wallet");
         setError(cause instanceof Error
           ? cause.message
@@ -2837,12 +3025,19 @@ export function OnboardingFlow({
     setWallet(restoredWallet);
     setAccount(restoredAccount);
     setWalletSessionReady(true);
+    setWalletSessionStatusUnavailable(false);
   };
 
   const startDemo = () =>
     run(async () => {
       if (!walletSessionReady || !account) {
         throw new Error("Connect and authenticate the budget wallet before using the free demo.");
+      }
+      if (walletSessionStatusUnavailable) {
+        throw new Error("Pilot must revalidate this wallet session before changing model access.");
+      }
+      if (modelSessionStatusUnavailable) {
+        throw new Error("Pilot must check or clear the existing model session before changing model access.");
       }
       if (demoCatalog.status !== "available") {
         throw new Error(
@@ -2867,12 +3062,19 @@ export function OnboardingFlow({
       }
       setAiMode("demo");
       setOauthConnected(false);
+      setModelAccessReady(true);
       setStep(nextStepAfterModelAccess());
     });
 
   const continueOpenRouter = () =>
     run(async () => {
       if (!oauthConnected) throw new Error("Sign in with OpenRouter before continuing.");
+      if (walletSessionStatusUnavailable) {
+        throw new Error("Pilot must revalidate this wallet session before changing model access.");
+      }
+      if (modelSessionStatusUnavailable) {
+        throw new Error("Pilot must check or clear the existing model session before changing model access.");
+      }
       const response = await fetch("/api/auth/openrouter/session", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -2881,6 +3083,27 @@ export function OnboardingFlow({
       if (!response.ok) throw new Error("The selected OpenRouter model could not be saved.");
       await restoreWalletFacadeAfterOAuth();
       setAiMode("openrouter");
+      setModelAccessReady(true);
+      setStep(nextStepAfterModelAccess());
+    });
+
+  const skipModelAccess = () =>
+    run(async () => {
+      const response = await fetch("/api/auth/openrouter/session", {
+        method: "DELETE",
+        headers: { accept: "application/json" },
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      if (!response.ok) {
+        throw new Error("Pilot could not clear the existing model session. Model setup was not skipped.");
+      }
+      setOauthConnected(false);
+      setModelAccessReady(false);
+      setModelSessionStatusUnavailable(false);
+      setModels([]);
+      setDemoCatalog({ status: "idle" });
+      setDemoLimits(undefined);
       setStep(nextStepAfterModelAccess());
     });
 
@@ -2902,6 +3125,12 @@ export function OnboardingFlow({
     if (choice === provider) return;
     const previousWallet = wallet;
     void run(async () => {
+      // Identity replacement starts by clearing the old server authority and
+      // wallet-bound model cookies. A rejected connection or proof for the new
+      // provider must never leave an invisible prior account authenticated.
+      if (walletSessionReady || sessionStorage.getItem("pilot:wallet")) {
+        await signOutPilotWallet();
+      }
       try {
         if (provider === "ledger") {
           await resetLedgerDiscovery();
@@ -2914,6 +3143,13 @@ export function OnboardingFlow({
         setWallet(undefined);
         setAccount(undefined);
         setWalletSessionReady(false);
+        setWalletSessionStatusUnavailable(false);
+        setModelSessionStatusUnavailable(false);
+        setOauthConnected(false);
+        setModelAccessReady(false);
+        setModels([]);
+        setDemoCatalog({ status: "idle" });
+        setDemoLimits(undefined);
         setWalletNotice(undefined);
         setProvider(choice);
       }
@@ -2941,6 +3177,8 @@ export function OnboardingFlow({
       setWallet(candidate);
       setAccount(undefined);
       setWalletSessionReady(false);
+      setWalletSessionStatusUnavailable(false);
+      setModelSessionStatusUnavailable(false);
       setWalletNotice(
         `${provider === "gemwallet" ? "GemWallet" : "Crossmark"} is available. Connect the Testnet account next; Pilot will ask for the separate non-broadcast authentication signature only after the account and network are shown.`,
       );
@@ -3075,6 +3313,8 @@ export function OnboardingFlow({
             setAccount(nextAccount);
             setConnectedExtension(provider);
             setWalletSessionReady(false);
+            setWalletSessionStatusUnavailable(false);
+            setModelSessionStatusUnavailable(false);
             setWalletNotice(
               `${provider === "gemwallet" ? "GemWallet" : "Crossmark"} account ${nextAccount} is connected on ${network}. Pilot has not issued its wallet challenge or requested the AccountSet authentication proof yet. Account connection may show the extension's own access or SignIn prompt. Review the next action, then sign the separate non-broadcast Pilot authentication proof.`,
             );
@@ -3087,6 +3327,8 @@ export function OnboardingFlow({
       setWallet(nextWallet);
       setAccount(nextAccount);
       setWalletSessionReady(true);
+      setWalletSessionStatusUnavailable(false);
+      setModelSessionStatusUnavailable(false);
       if (isExtensionWalletProvider(provider)) setConnectedExtension(provider);
       setLedgerRestoredWithoutDevice(false);
       sessionStorage.setItem("pilot:wallet", JSON.stringify(storedOnboardingWalletSession(
@@ -3225,6 +3467,8 @@ export function OnboardingFlow({
           setWallet(undefined);
           setAccount(undefined);
           setWalletSessionReady(false);
+          setWalletSessionStatusUnavailable(false);
+          setModelSessionStatusUnavailable(false);
           setConnectedExtension(undefined);
           setAvailableExtension(undefined);
           setLedgerRestoredWithoutDevice(false);
@@ -4155,6 +4399,8 @@ export function OnboardingFlow({
           setWallet(undefined);
           setAccount(undefined);
           setWalletSessionReady(false);
+          setWalletSessionStatusUnavailable(false);
+          setModelSessionStatusUnavailable(false);
           setConnectedExtension(undefined);
           setAvailableExtension(undefined);
           setLedgerRestoredWithoutDevice(false);
@@ -4405,9 +4651,12 @@ export function OnboardingFlow({
       setWallet(undefined);
       setAccount(undefined);
       setWalletSessionReady(false);
+      setWalletSessionStatusUnavailable(false);
+      setModelSessionStatusUnavailable(false);
       setAvailableExtension(undefined);
       setConnectedExtension(undefined);
       setOauthConnected(false);
+      setModelAccessReady(false);
       setModels([]);
       setModel(DEFAULT_MODEL);
       setAiMode("demo");
@@ -4459,22 +4708,44 @@ export function OnboardingFlow({
         <section className="min-w-0 p-6 sm:p-9 lg:p-12">
           {step === "ai" ? (
             <div className="space-y-6">
-              <div><p className="label-mono">Step 2 of 3</p><h2 className="mt-2 text-xl font-normal tracking-[-0.02em]">Choose model access</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Try Pilot&apos;s quota-limited free demo when verified and configured, or connect your own OpenRouter account. Provider credentials stay encrypted on Pilot&apos;s server and never reach the browser.</p></div>
+              <div><p className="label-mono">Step 2 of 3 · wallet account ready</p><h2 className="mt-2 text-xl font-normal tracking-[-0.02em]">Choose model access <span className="text-muted-foreground">(optional)</span></h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Your wallet ownership proof created this signed-in Pilot session. Continue with Pilot&apos;s quota-limited free demo when verified and configured, connect your own OpenRouter account, or skip model setup for now. Provider credentials stay encrypted on Pilot&apos;s server and never reach the browser.</p></div>
               <ModelPicker
                 {...{
                   bedrockMode: oauthConnected ? bedrockMode : "off",
                   bedrockModels,
                 }}
-                disabled={busy}
+                disabled={busy || walletSessionStatusUnavailable || modelSessionStatusUnavailable}
                 models={models}
                 onChange={(choice) => setModel(choice.id)}
                 value={model}
               />
+              {walletSessionStatusUnavailable ? (
+                <div className="space-y-3">
+                  <p className="border border-approval/35 bg-approval/10 px-3 py-2 text-xs leading-5 text-approval" role="status">
+                    Pilot could not revalidate this wallet session. The known account remains visible, but model and trading changes are locked until the session can be checked again.
+                  </p>
+                  <AccountPanel account={account} network={network} />
+                </div>
+              ) : null}
+              {!walletSessionStatusUnavailable && modelSessionStatusUnavailable ? (
+                <div className="space-y-3">
+                  <p className="border border-approval/35 bg-approval/10 px-3 py-2 text-xs leading-5 text-approval" role="status">
+                    Pilot verified this wallet account but could not check its existing model session. Model changes are locked; retry when connectivity returns or use “Skip model setup” to clear the server session first.
+                  </p>
+                  <AccountPanel account={account} network={network} />
+                </div>
+              ) : null}
               <div className="grid gap-3 sm:grid-cols-2">
-                <a className="bracket bracket-light inline-flex h-11 items-center justify-center gap-2 border border-border bg-white/[0.03] px-4 font-mono text-[11px] font-medium uppercase tracking-wide transition hover:bg-white/[0.06]" href="/api/auth/openrouter/start?returnTo=%2Fonboarding%3Fopenrouter%3Dconnected" onClick={() => setAiMode("openrouter")}>
-                  <ExternalLink className="size-4" /> {oauthConnected ? "Reconnect OpenRouter" : "Connect OpenRouter"}
-                </a>
-                <button className="inline-flex h-11 items-center justify-center gap-2 bg-foreground px-4 font-mono text-[11px] font-medium uppercase tracking-wide text-background transition hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-45" disabled={busy || (!oauthConnected && demoCatalog.status !== "available")} onClick={oauthConnected ? continueOpenRouter : startDemo} type="button">
+                {walletSessionStatusUnavailable || modelSessionStatusUnavailable ? (
+                  <span aria-disabled="true" className="bracket bracket-light inline-flex h-11 cursor-not-allowed items-center justify-center gap-2 border border-border bg-white/[0.03] px-4 font-mono text-[11px] font-medium uppercase tracking-wide opacity-45">
+                    <ExternalLink className="size-4" /> {oauthConnected ? "Reconnect OpenRouter" : "Connect OpenRouter"}
+                  </span>
+                ) : (
+                  <a className="bracket bracket-light inline-flex h-11 items-center justify-center gap-2 border border-border bg-white/[0.03] px-4 font-mono text-[11px] font-medium uppercase tracking-wide transition hover:bg-white/[0.06]" href="/api/auth/openrouter/start?returnTo=%2Fonboarding%3Fopenrouter%3Dconnected" onClick={() => setAiMode("openrouter")}>
+                    <ExternalLink className="size-4" /> {oauthConnected ? "Reconnect OpenRouter" : "Connect OpenRouter"}
+                  </a>
+                )}
+                <button className="inline-flex h-11 items-center justify-center gap-2 bg-foreground px-4 font-mono text-[11px] font-medium uppercase tracking-wide text-background transition hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-45" disabled={busy || walletSessionStatusUnavailable || modelSessionStatusUnavailable || (!oauthConnected && demoCatalog.status !== "available")} onClick={oauthConnected ? continueOpenRouter : startDemo} type="button">
                   {busy || (!oauthConnected && demoCatalog.status === "loading") ? <LoaderCircle className="size-4 animate-spin" /> : oauthConnected ? <ArrowRight className="size-4" /> : <Bot className="size-4" />} {oauthConnected ? "Continue with OpenRouter" : demoCatalog.status === "loading" ? "Checking free demo" : demoCatalog.status === "unavailable" ? "Free demo unavailable" : "Try free demo"}
                 </button>
               </div>
@@ -4484,7 +4755,10 @@ export function OnboardingFlow({
                 </p>
               ) : null}
               <p className="text-xs leading-5 text-muted-foreground">Demo access is server-gated, finite, text-only, and limited to an exact allowlist of tool-capable <code className="font-mono text-foreground/80">:free</code> models. It stays unavailable until the operator verifies the zero-paid policy and configures every quota. Selecting demo does not reserve capacity: on each chat request Pilot atomically checks shared, wallet-daily, rate, token, and concurrency quotas, then rechecks current zero pricing before model access.{demoLimits ? ` Current request caps: ${demoLimits.maxInputBytes ?? "—"} bytes input, ${demoLimits.maxOutputTokens ?? "—"} output tokens total, and ${demoLimits.maxSteps ?? "—"} model steps.` : ""}</p>
-              <BackButton onClick={() => setStep("wallet")} />
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
+                <button className="bracket bracket-light inline-flex h-11 items-center justify-center gap-2 border border-border bg-white/[0.03] px-4 font-mono text-[11px] font-medium uppercase tracking-wide transition hover:bg-white/[0.06] disabled:opacity-50" disabled={busy} onClick={() => void signOutWalletAccess()} type="button"><WalletCards className="size-4" /> Use a different wallet</button>
+                <button className="inline-flex h-11 items-center justify-center border border-border px-4 font-mono text-[11px] font-medium uppercase tracking-wide text-muted-foreground transition hover:bg-white/[0.04] disabled:opacity-50" disabled={busy} onClick={skipModelAccess} type="button">Skip model setup</button>
+              </div>
             </div>
           ) : null}
 
@@ -4570,22 +4844,29 @@ export function OnboardingFlow({
             <div className="space-y-6">
               <div>
                 <p className="label-mono">Step 3 of 3 · basic setup complete</p>
-                <h2 className="mt-2 text-xl font-normal tracking-[-0.02em]">Wallet and model ready</h2>
+                <h2 className="mt-2 text-xl font-normal tracking-[-0.02em]">{modelAccessReady ? "Wallet and model ready" : "Wallet account ready"}</h2>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Pilot can open with this authenticated wallet and model session. Trading has not been enabled: no trust line, funding, delegation, mandate, strategy, or on-ledger authority was created by basic setup.
+                  {modelAccessReady
+                    ? "Pilot can open with this authenticated wallet and model session."
+                    : "Pilot can open with this authenticated wallet. Model access remains unconfigured and can be added later."} Trading has not been enabled: no trust line, funding, delegation, mandate, strategy, or on-ledger authority was created by basic setup.
                 </p>
               </div>
+              {walletSessionStatusUnavailable ? (
+                <p className="border border-approval/35 bg-approval/10 px-4 py-3 text-sm leading-6 text-approval" role="status">
+                  Pilot could not revalidate this wallet session. Read-only navigation remains available, but model and trading changes are locked until the session can be checked again.
+                </p>
+              ) : null}
               <AccountPanel account={account} network={network} />
               <div className="grid gap-px border border-border bg-border text-left sm:grid-cols-2">
                 <div className="bg-card p-4"><p className="label-mono">Wallet</p><p className="mt-1.5 text-sm font-medium capitalize">{provider}</p></div>
-                <div className="bg-card p-4"><p className="label-mono">Model access</p><p className="mt-1.5 text-sm font-medium">{aiMode === "openrouter" ? "Connected OpenRouter account" : "Quota-limited free demo"}</p></div>
+                <div className="bg-card p-4"><p className="label-mono">Model access</p><p className="mt-1.5 text-sm font-medium">{modelAccessReady ? aiMode === "openrouter" ? "Connected OpenRouter account" : "Quota-limited free demo" : "Not configured · optional"}</p></div>
               </div>
               <p className="border border-approval/35 bg-approval/[0.06] px-4 py-3 text-sm leading-6 text-muted-foreground">
                 Optional Testnet trading setup is separate and requires explicit reviews and wallet signatures. It is not needed to explore Pilot or use model features.
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <a className="inline-flex h-11 items-center justify-center gap-2 bg-foreground px-4 font-mono text-[11px] font-medium uppercase tracking-wide text-background transition hover:bg-foreground/90" href="/chat">Open workspace <ArrowRight className="size-4" /></a>
-                <button className="bracket bracket-light inline-flex h-11 items-center justify-center gap-2 border border-border bg-white/[0.03] px-4 font-mono text-[11px] font-medium uppercase tracking-wide transition hover:bg-white/[0.06]" onClick={() => setStep("fund")} type="button"><ShieldCheck className="size-4" /> Enable Testnet trading</button>
+                <button className="bracket bracket-light inline-flex h-11 items-center justify-center gap-2 border border-border bg-white/[0.03] px-4 font-mono text-[11px] font-medium uppercase tracking-wide transition hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-45" disabled={walletSessionStatusUnavailable} onClick={() => setStep("fund")} type="button"><ShieldCheck className="size-4" /> Enable Testnet trading</button>
               </div>
               <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
                 <BackButton onClick={() => setStep("ai")} />
@@ -4594,7 +4875,37 @@ export function OnboardingFlow({
             </div>
           ) : null}
 
-          {step === "fund" ? (
+          {tradingStepLocked ? (
+            <div className="space-y-6">
+              <div>
+                <p className="label-mono">Session check required · authority preserved</p>
+                <h2 className="mt-2 text-xl font-normal tracking-[-0.02em]">Trading changes are locked</h2>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  Pilot could not revalidate this wallet session, so every signature, submission, delegation, mandate, and revocation control is unavailable. Pilot has not changed or revoked any existing Testnet state. A trust line, funding, delegation, mandate, pending transaction, or strategy that already existed may still remain active.
+                </p>
+              </div>
+              <AccountPanel account={account} network={network} />
+              {link?.status === "active" ? (
+                <p className="border border-approval/35 bg-approval/10 px-4 py-3 text-sm leading-6 text-approval" role="status">
+                  The recorded delegation for this account remains active until an exact owner-authorized revocation is completed. This temporary lock is not a revocation.
+                </p>
+              ) : pending ? (
+                <p className="border border-approval/35 bg-approval/10 px-4 py-3 text-sm leading-6 text-approval" role="status">
+                  A signed transaction remains pending or uncertain. Pilot will not sign or submit it again while the wallet session is indeterminate.
+                </p>
+              ) : (
+                <p className="border border-approval/35 bg-approval/10 px-4 py-3 text-sm leading-6 text-approval" role="status">
+                  Partially completed Testnet setup is preserved. Pilot will not assume it was rolled back or create additional authority while the wallet session is indeterminate.
+                </p>
+              )}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <a className="inline-flex h-11 items-center justify-center gap-2 bg-foreground px-4 font-mono text-[11px] font-medium uppercase tracking-wide text-background transition hover:bg-foreground/90" href="/chat">Open read-only Pilot <ArrowRight className="size-4" /></a>
+                <button className="bracket bracket-light inline-flex h-11 items-center justify-center gap-2 border border-border bg-white/[0.03] px-4 font-mono text-[11px] font-medium uppercase tracking-wide transition hover:bg-white/[0.06]" onClick={() => window.dispatchEvent(new Event(WALLET_SESSION_CHANGED_EVENT))} type="button">Retry session check</button>
+              </div>
+            </div>
+          ) : null}
+
+          {step === "fund" && !tradingStepLocked ? (
             <div className="space-y-6">
               <StepHeading eyebrow={`Optional trading · step 1 of ${liveDevAcquisition ? 6 : 5}`} title="Prepare the budget account">{liveDevAcquisition ? "Pilot requests the fixed Testnet XRP headroom, then your wallet signs the exact official RLUSD TrustSet. The next step acquires RLUSD through a separate owner approval." : `First sign a ${publicConfig?.stableAsset.currency ?? "configured stablecoin"} trust line. The test-only fund handoff then sends 1,000 ${publicConfig?.stableAsset.currency ?? "stablecoin units"} to this budget address; an explicitly enabled public mock records only a fixture.`}</StepHeading>
               <AccountPanel account={account} network={network} />
@@ -4607,7 +4918,7 @@ export function OnboardingFlow({
             </div>
           ) : null}
 
-          {step === "acquire" ? (
+          {step === "acquire" && !tradingStepLocked ? (
             <div className="space-y-6">
               <StepHeading eyebrow="Optional trading · step 2 of 6" title="Acquire 75 official Testnet RLUSD">Review an exact-output, fill-or-kill offer. It receives exactly 75 RLUSD or cancels, uses a 1% slippage ceiling, and can spend no more than 275 XRP.</StepHeading>
               <AccountPanel account={account} network={network} />
@@ -4624,7 +4935,7 @@ export function OnboardingFlow({
             </div>
           ) : null}
 
-          {step === "delegate" ? (
+          {step === "delegate" && !tradingStepLocked ? (
             <div className="space-y-6">
               <StepHeading eyebrow={`Optional trading · step ${liveDevAcquisition ? 3 : 2} of ${liveDevAcquisition ? 6 : 5}`} title="Approve seven narrow permissions">None can send value to another account. Your wallet signs DelegateSet; Harbor's delegate pays network fees for permitted actions.</StepHeading>
               <ul className="grid gap-px border border-border bg-border sm:grid-cols-2">{DEFAULT_PERMISSIONS.map((permission) => <li className="flex items-center gap-2 bg-card px-3 py-2.5 font-mono text-[11px] uppercase tracking-wide" key={permission}><Check aria-hidden="true" className="size-3.5 shrink-0 text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))]" />{permission.replace(/([a-z])([A-Z])/g, "$1 $2")}</li>)}</ul>
@@ -4643,7 +4954,7 @@ export function OnboardingFlow({
             </div>
           ) : null}
 
-          {step === "verify" ? (
+          {step === "verify" && !tradingStepLocked ? (
             <div className="space-y-6">
               <StepHeading eyebrow={`Optional trading · step ${liveDevAcquisition ? 4 : 3} of ${liveDevAcquisition ? 6 : 5}`} title="Verify a bounded budget">Mastercard Open Finance supplies a mock, hash-only proof and a budget proposal. Raw customer references and credentials never reach this browser.</StepHeading>
               {provider === "ledger" ? <p className="border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">Delegation validated. Turn blind signing off again in the XRP app before continuing.</p> : null}
@@ -4660,7 +4971,7 @@ export function OnboardingFlow({
             </div>
           ) : null}
 
-          {step === "mandate" ? (
+          {step === "mandate" && !tradingStepLocked ? (
             <div className="space-y-6">
               <StepHeading eyebrow={`Optional trading · step ${liveDevAcquisition ? 5 : 4} of ${liveDevAcquisition ? 6 : 5}`} title="Approve the autonomous mandate">Review the exact limits, merchants, expiry, and XRPL Testnet channel locks. Nothing is signed until you use the approval button below.</StepHeading>
               {activeMandate ? (
@@ -4702,7 +5013,7 @@ export function OnboardingFlow({
             </div>
           ) : null}
 
-          {step === "ready" ? (
+          {step === "ready" && !tradingStepLocked ? (
             <div className="space-y-6 text-center sm:text-left">
               <div className="mx-auto grid size-14 place-items-center border border-executed/40 bg-executed/10 text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))] sm:mx-0"><Check aria-hidden="true" className="size-7" strokeWidth={1.75} /></div>
               <StepHeading eyebrow={`Optional trading · step ${liveDevAcquisition ? 6 : 5} of ${liveDevAcquisition ? 6 : 5} · setup complete`} title={`Your ${network ?? "test-network"} trading setup is active`}>{fundingSource === "fixture" ? "The explicit mock funding fixture is staged" : "The test-network wallet is funded"}, the delegate is active, and the bounded AP4M mandate is ACTIVE.</StepHeading>

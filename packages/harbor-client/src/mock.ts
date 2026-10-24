@@ -6,6 +6,11 @@ import {
   MandateSchema,
   MerchantSchema,
   PolicySchema,
+  DECLARATIVE_STRATEGY_SEMANTICS_VERSION,
+  StrategyPlanCapabilitiesSchema,
+  StrategyPlanPreviewSchema,
+  StrategyPlanValidationResultSchema,
+  StrategySchema,
   TxBuildSchema,
   VenueSchema,
   type AccountLink,
@@ -19,7 +24,11 @@ import {
   type PolicyResult,
   type Strategy,
   type StrategyAuditEvent,
+  type DeclarativeStrategyCondition,
+  type StrategyHoldCode,
   type StrategyKillSwitch,
+  type StrategyPlanObservation,
+  type StrategyPlanValidationResult,
   type TxBuild,
 } from "@pilot/contracts";
 import { z } from "zod";
@@ -882,6 +891,95 @@ function mockDigest(value: string): string {
   return state.toString(16).padStart(8, "0").repeat(8);
 }
 
+function stableJson(value: unknown): string {
+  if (value === null || typeof value === "boolean" || typeof value === "string" || typeof value === "number") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  const input = value as Record<string, unknown>;
+  return `{${Object.keys(input).sort().map((key) => `${JSON.stringify(key)}:${stableJson(input[key])}`).join(",")}}`;
+}
+
+function decimal15(value: string): bigint {
+  const match = /^(?:0|[1-9]\d*)(?:\.(\d{1,15}))?$/.exec(value);
+  if (!match) throw new Error("mock declarative decimal is not canonical");
+  const [whole = "0", fraction = ""] = value.split(".");
+  return BigInt(whole) * 1_000_000_000_000_000n + BigInt(fraction.padEnd(15, "0"));
+}
+
+function mockEnvelope<T>(data: T, asOfBasis: string): Envelope<T> {
+  return {
+    ok: true,
+    data,
+    asOf: "2026-10-22T00:00:00.000Z",
+    asOfBasis,
+  } as Envelope<T>;
+}
+
+function mockAllocationBps(observation: StrategyPlanObservation): number {
+  const mid = (decimal15(observation.bid) + decimal15(observation.ask)) / 2n;
+  const xrpValue = BigInt(observation.xrp_balance_drops) * mid / 1_000_000n;
+  const issuedValue = decimal15(observation.issued_balance);
+  const total = xrpValue + issuedValue;
+  return total === 0n ? 0 : Number(xrpValue * 10_000n / total);
+}
+
+function mockCondition(condition: DeclarativeStrategyCondition, observation: StrategyPlanObservation): boolean {
+  if (condition.kind === "always") return true;
+  if (condition.kind === "xrp_allocation_outside") {
+    const allocation = mockAllocationBps(observation);
+    return allocation < condition.lower_xrp_bps || allocation > condition.upper_xrp_bps;
+  }
+  const observed = decimal15(observation[condition.side]);
+  const threshold = decimal15(condition.price);
+  return condition.comparator === "lte" ? observed <= threshold : observed >= threshold;
+}
+
+function mockTargetDirection(targetXrpBps: number, observation: StrategyPlanObservation): "buy_xrp" | "sell_xrp" {
+  return mockAllocationBps(observation) < targetXrpBps ? "buy_xrp" : "sell_xrp";
+}
+
+function legacyMockStrategy(args: JsonRecord, strategyId: string, owner: string,
+  digest: string, now: string): Strategy {
+  const expiresAt = String(args.expires_at ?? "2026-10-29T00:00:00.000Z");
+  return StrategySchema.parse({
+    strategy_id: strategyId,
+    lifecycle: "draft",
+    mandate: {
+      mandate_id: `mandate-${strategyId}`,
+      strategy_id: strategyId,
+      version: 1,
+      digest,
+      status: "draft",
+      kind: "xrp_issued_rebalancer_v1",
+      network: "testnet",
+      account: owner,
+      issued_asset: args.issued_asset ?? {
+        currency: "524C555344000000000000000000000000000000",
+        issuer: "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV",
+      },
+      allocation: args.allocation ?? {
+        target_xrp_bps: 5_000, lower_xrp_bps: 4_500, upper_xrp_bps: 5_500,
+      },
+      limits: args.limits ?? {
+        max_order_value: "10", max_daily_value: "25", min_order_value: "1",
+        max_fee_drops: "20", max_slippage_bps: 100, max_price_impact_bps: 100,
+        min_xrp_reserve_drops: "12000000", fee_buffer_drops: "1000000",
+        max_xrp_exposure_drops: "100000000", max_issued_exposure: "100",
+        min_liquidity_value: "25", cooldown_seconds: 300,
+        max_quote_age_seconds: 30, max_ledger_gap: 2,
+      },
+      schedule: { interval_seconds: Number(args.interval_seconds ?? 300), next_evaluation_at: now },
+      execution_mode: "offer_create_fok",
+      not_before: String(args.not_before ?? now),
+      expires_at: expiresAt,
+    },
+    generation: 0,
+    created_at: now,
+    updated_at: now,
+  });
+}
+
 function scopedKey(owner: string, network: Network): string {
   return `${owner}:${network}`;
 }
@@ -910,6 +1008,7 @@ export class MockHarborClient implements HarborClient {
     { args: ArgsFor<"x402.pay">; result: Envelope<X402PayResult> }
   >();
   private readonly preparedMandates = new Map<string, StoredMockMandate>();
+  private readonly strategies = new Map<string, Strategy>();
 
   constructor() {
     for (const operation of builderOperations) {
@@ -1037,88 +1136,278 @@ export class MockHarborClient implements HarborClient {
     if (name === "x402.pay") {
       return this.x402Pay(validArgs as ArgsFor<"x402.pay">) as Envelope<ResultFor<K>>;
     }
+    if (name === "strategy.validate") {
+      return this.validateStrategy(validArgs as ArgsFor<"strategy.validate">) as Envelope<ResultFor<K>>;
+    }
+    if (name === "strategy.simulate") {
+      return this.simulateStrategy(validArgs as ArgsFor<"strategy.simulate">) as Envelope<ResultFor<K>>;
+    }
     if (name.startsWith("strategy.")) {
       return this.strategy(name, validArgs as JsonRecord) as Envelope<ResultFor<K>>;
     }
     return fixtureEnvelope(name) as Envelope<ResultFor<K>>;
   }
 
+  private validateStrategy(args: ArgsFor<"strategy.validate">): Envelope<StrategyPlanValidationResult> {
+    const errors: Array<{ code: "unreachable_rule" | "contradictory_conditions"; path: string; message: string }> = [];
+    let unconditionalSeen = false;
+    args.plan.rules.forEach((rule, index) => {
+      if (unconditionalSeen) {
+        errors.push({
+          code: "unreachable_rule",
+          path: `plan.rules[${index}]`,
+          message: "An earlier always rule makes this ordered rule unreachable.",
+        });
+      }
+      if (rule.all.length === 1 && rule.all[0]?.kind === "always") unconditionalSeen = true;
+      const thresholds = rule.all.filter((condition) => condition.kind === "price_threshold");
+      for (const side of ["bid", "ask"] as const) {
+        const sameSide = thresholds.filter((condition) => condition.side === side);
+        const lower = sameSide.filter((condition) => condition.comparator === "gte")
+          .map((condition) => decimal15(condition.price)).reduce<bigint | undefined>((max, value) => max === undefined || value > max ? value : max, undefined);
+        const upper = sameSide.filter((condition) => condition.comparator === "lte")
+          .map((condition) => decimal15(condition.price)).reduce<bigint | undefined>((min, value) => min === undefined || value < min ? value : min, undefined);
+        if (lower !== undefined && upper !== undefined && lower > upper) {
+          errors.push({
+            code: "contradictory_conditions",
+            path: `plan.rules[${index}].all`,
+            message: `${side} price thresholds cannot be true at the same time.`,
+          });
+        }
+      }
+    });
+    const capabilities = StrategyPlanCapabilitiesSchema.parse({
+      network: "testnet",
+      assets: [{ currency: "XRP" }, args.issued_asset],
+      trigger_kinds: ["interval"],
+      condition_kinds: ["always", "price_threshold", "xrp_allocation_outside"],
+      action_kinds: ["fixed_swap", "target_allocation"],
+      execution_mode: "offer_create_fok",
+      max_rules: 8,
+      max_conditions_per_rule: 8,
+      max_actions_per_evaluation: 1,
+    });
+    const planDigest = mockDigest(stableJson(args)).toUpperCase();
+    const data = StrategyPlanValidationResultSchema.parse({
+      valid: errors.length === 0,
+      semantics_version: DECLARATIVE_STRATEGY_SEMANTICS_VERSION,
+      capabilities,
+      errors,
+      ...(errors.length === 0 ? { plan_digest: planDigest, normalized_proposal: args } : {}),
+    });
+    return mockEnvelope(data, "offline deterministic declarative validation");
+  }
+
+  private simulateStrategy(args: ArgsFor<"strategy.simulate">): Envelope<unknown> {
+    const validation = this.validateStrategy(args.proposal);
+    if (!validation.ok || !validation.data.valid || !validation.data.plan_digest) {
+      return errorEnvelope("INVALID_STRATEGY_PLAN", "The proposal must validate before paper simulation.");
+    }
+    const observation = args.observation;
+    if (observation.account !== args.proposal.account ||
+      observation.network !== args.proposal.network ||
+      observation.issued_asset.currency !== args.proposal.issued_asset.currency ||
+      observation.issued_asset.issuer !== args.proposal.issued_asset.issuer) {
+      return errorEnvelope(
+        "STRATEGY_SCOPE_MISMATCH",
+        "Paper observations must match the proposal owner, network, and issued asset.",
+      );
+    }
+    const at = Date.parse(args.at);
+    const hold = (holdCodes: StrategyHoldCode[], explanation: string): Envelope<unknown> =>
+      mockEnvelope(StrategyPlanPreviewSchema.parse({
+        boundary: "paper_only",
+        ledger_acceptance: "not_tested",
+        semantics_version: DECLARATIVE_STRATEGY_SEMANTICS_VERSION,
+        plan_digest: validation.data.plan_digest,
+        outcome: "hold",
+        action: "hold",
+        hold_codes: holdCodes,
+        explanation,
+        evaluated_at: args.at,
+        observed_at: observation.observed_at,
+        quote_ledger_index: observation.quote_ledger_index,
+      }), "offline deterministic paper simulation");
+    const authorityHolds: StrategyHoldCode[] = [];
+    if (at < Date.parse(args.proposal.not_before)) authorityHolds.push("mandate_not_current");
+    if (at >= Date.parse(args.proposal.expires_at)) authorityHolds.push("mandate_expired");
+    if (observation.global_kill) authorityHolds.push("global_kill");
+    if (!observation.grant_active) authorityHolds.push("grant_not_active");
+    if (!observation.policy_active) authorityHolds.push("policy_paused");
+    if (observation.unresolved_execution) authorityHolds.push("pending_reconciliation");
+    if (authorityHolds.length > 0) {
+      return hold(authorityHolds, "The explicit fixture is outside current authority or is fail-closed.");
+    }
+    const stale = at < Date.parse(observation.observed_at) ||
+      at - Date.parse(observation.observed_at) > args.proposal.limits.max_quote_age_seconds * 1_000 ||
+      observation.quote_ledger_index > observation.ledger_index ||
+      observation.ledger_index - observation.quote_ledger_index > args.proposal.limits.max_ledger_gap;
+    if (stale) {
+      return hold(["stale_price"],
+        "The explicit fixture quote is stale or has contradictory ledger provenance.");
+    }
+    if (decimal15(observation.bid) > decimal15(observation.ask)) {
+      return hold(["contradictory_price"], "The explicit fixture bid exceeds its ask.");
+    }
+    const match = args.proposal.plan.rules.find((rule) => rule.all.every((condition) =>
+      mockCondition(condition, observation)));
+    if (!match) {
+      return hold(["no_rule_matched"], "No ordered rule matched the explicit fixture observation.");
+    }
+    const direction = match.action.kind === "fixed_swap" ? match.action.direction
+      : mockTargetDirection(match.action.target_xrp_bps, observation);
+    const proposedValue = match.action.kind === "fixed_swap" ? match.action.order_value
+      : args.proposal.limits.max_order_value;
+    const limits = args.proposal.limits;
+    const proposed = decimal15(proposedValue);
+    const budgetHolds: StrategyHoldCode[] = [];
+    if (proposed < decimal15(limits.min_order_value) || proposed > decimal15(limits.max_order_value)) {
+      budgetHolds.push("order_limit");
+    }
+    if (decimal15(observation.daily_value_used) + proposed > decimal15(limits.max_daily_value)) {
+      budgetHolds.push("daily_limit");
+    }
+    if (decimal15(observation.cumulative_value_used) + proposed > decimal15(limits.max_cumulative_value)) {
+      budgetHolds.push("cumulative_limit");
+    }
+    if (observation.daily_trades_used >= limits.max_daily_trades ||
+      observation.total_trades_used >= limits.max_total_trades) {
+      budgetHolds.push("trade_count_limit");
+    }
+    const fee = BigInt(observation.fee_drops);
+    if (fee > BigInt(limits.max_fee_drops)) budgetHolds.push("fee_limit");
+    if (BigInt(observation.daily_fee_drops_used) + fee > BigInt(limits.max_daily_fee_drops) ||
+      BigInt(observation.cumulative_fee_drops_used) + fee > BigInt(limits.max_cumulative_fee_drops)) {
+      budgetHolds.push("fee_budget_limit");
+    }
+    if (decimal15(observation.executable_liquidity_value) < decimal15(limits.min_liquidity_value)) {
+      budgetHolds.push("insufficient_liquidity");
+    }
+    if (observation.last_trade_at &&
+      at - Date.parse(observation.last_trade_at) < limits.cooldown_seconds * 1_000) {
+      budgetHolds.push("cooldown");
+    }
+    if (direction === "buy_xrp" &&
+      BigInt(observation.xrp_balance_drops) >= BigInt(limits.max_xrp_exposure_drops)) {
+      budgetHolds.push("exposure_limit");
+    }
+    if (direction === "sell_xrp" &&
+      decimal15(observation.issued_balance) >= decimal15(limits.max_issued_exposure)) {
+      budgetHolds.push("exposure_limit");
+    }
+    if (direction === "sell_xrp" &&
+      BigInt(observation.xrp_balance_drops) <=
+      BigInt(limits.min_xrp_reserve_drops) + BigInt(limits.fee_buffer_drops)) {
+      budgetHolds.push("reserve_limit");
+    }
+    if (budgetHolds.length > 0) {
+      return hold([...new Set(budgetHolds)],
+        "The first matching rule is held by explicit policy, budget, or safety limits.");
+    }
+    const priceBasis = direction === "buy_xrp" ? "ask" : "bid";
+    const data = StrategyPlanPreviewSchema.parse({
+      boundary: "paper_only",
+      ledger_acceptance: "not_tested",
+      semantics_version: DECLARATIVE_STRATEGY_SEMANTICS_VERSION,
+      plan_digest: validation.data.plan_digest,
+      outcome: "order",
+      action: direction,
+      matched_rule_id: match.rule_id,
+      proposed_value: proposedValue,
+      price_basis: priceBasis,
+      price_value: observation[priceBasis],
+      hold_codes: [],
+      explanation: "The first matching rule planned one bounded paper-only order.",
+      evaluated_at: args.at,
+      observed_at: observation.observed_at,
+      quote_ledger_index: observation.quote_ledger_index,
+    });
+    return mockEnvelope(data, "offline deterministic paper simulation");
+  }
+
   private strategy(name: HarborOpName, args: JsonRecord): Envelope<unknown> {
     const now = "2026-10-22T00:00:00.000Z";
     const owner = String(args.account ?? args.owner);
     const strategyId = String(args.strategy_id ?? "strategy-mock-001");
-    const digest = "C100000000000000000000000000000000000000000000000000000000000002";
-    const mandateExpiresAt = String(args.expires_at ?? "2026-10-29T00:00:00.000Z");
-    const authorized = ["strategy.authorize", "strategy.pause", "strategy.resume", "strategy.stop", "strategy.kill"].includes(name);
-    const lifecycle: Strategy["lifecycle"] = name === "strategy.authorize" || name === "strategy.resume"
-      ? "active" : name === "strategy.pause" ? "paused" : name === "strategy.stop" || name === "strategy.kill"
-        ? "stopped" : "draft";
-    const authorization = authorized ? (args.authorization ?? {
-      authorization_id: `authorization-${strategyId}`,
-      method: "wallet_action_proof_v1",
-      owner,
-      mandate_digest: digest,
-      mandate_version: 1,
-      approved_at: now,
-      expires_at: mandateExpiresAt,
-    }) as Strategy["mandate"]["authorization"] : undefined;
-    const strategy: Strategy = {
-      strategy_id: strategyId,
-      lifecycle,
-      mandate: {
-        mandate_id: `mandate-${strategyId}`,
-        strategy_id: strategyId,
-        version: Number(args.mandate_version ?? 1),
-        digest: String(args.mandate_digest ?? digest),
-        status: authorized ? "approved" : "draft",
-        kind: "xrp_issued_rebalancer_v1",
-        network: "testnet",
-        account: owner,
-        issued_asset: (args.issued_asset as Strategy["mandate"]["issued_asset"] | undefined) ?? {
-          currency: "524C555344000000000000000000000000000000",
-          issuer: "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV",
-        },
-        allocation: (args.allocation as Strategy["mandate"]["allocation"] | undefined) ?? {
-          target_xrp_bps: 5_000, lower_xrp_bps: 4_500, upper_xrp_bps: 5_500,
-        },
-        limits: (args.limits as Strategy["mandate"]["limits"] | undefined) ?? {
-          max_order_value: "10", max_daily_value: "25", min_order_value: "1",
-          max_fee_drops: "20", max_slippage_bps: 100, max_price_impact_bps: 100,
-          min_xrp_reserve_drops: "12000000", fee_buffer_drops: "1000000",
-          max_xrp_exposure_drops: "100000000", max_issued_exposure: "100",
-          min_liquidity_value: "25", cooldown_seconds: 300,
-          max_quote_age_seconds: 30, max_ledger_gap: 2,
-        },
-        schedule: { interval_seconds: Number(args.interval_seconds ?? 300), next_evaluation_at: now },
-        execution_mode: "offer_create_fok",
-        not_before: String(args.not_before ?? now),
-        expires_at: mandateExpiresAt,
-        ...(authorization ? { authorization } : {}),
-      },
-      generation: authorized ? 1 : 0,
-      ...(lifecycle === "active" ? { next_evaluation_at: now } : {}),
-      created_at: now,
-      updated_at: now,
-    };
-    const event: StrategyAuditEvent = {
-      event_id: "event-strategy-mock-001", strategy_id: strategyId,
-      actor: "owner", kind: "created", detail: { source: "offline-mock" }, at: now,
-    };
     const killSwitch: StrategyKillSwitch = {
       enabled: Boolean(args.enabled),
       ...(args.reason ? { reason: String(args.reason) } : {}),
       updated_at: now,
     };
-    const data = name === "strategy.list" ? [strategy]
-      : name === "strategy.audit" ? [event]
-        : name === "strategy.globalKill.get" || name === "strategy.globalKill.set" ? killSwitch
-          : strategy;
-    return {
-      ok: true,
-      data,
-      asOf: now,
-      asOfBasis: "offline deterministic strategy mock",
-    } as Envelope<unknown>;
+    if (name === "strategy.globalKill.get" || name === "strategy.globalKill.set") {
+      return mockEnvelope(killSwitch, "offline deterministic strategy mock");
+    }
+
+    if (name === "strategy.list") {
+      const listed = [...this.strategies.values()].filter((entry) =>
+        entry.mandate.account === owner && entry.mandate.network === "testnet");
+      return mockEnvelope(listed, "offline deterministic strategy mock");
+    }
+
+    let strategy = this.strategies.get(strategyId);
+    if (name === "strategy.create") {
+      const { request_id: _RequestIdForDigest, ...digestInput } = args;
+      const digest = mockDigest(stableJson(digestInput)).toUpperCase();
+      if (args.kind === "declarative_strategy_v1") {
+        const { request_id: _requestId, ...proposal } = args;
+        strategy = StrategySchema.parse({
+          strategy_id: strategyId,
+          lifecycle: "draft",
+          mandate: {
+            ...proposal,
+            mandate_id: `mandate-${strategyId}`,
+            strategy_id: strategyId,
+            version: 1,
+            digest,
+            status: "draft",
+            schedule: {
+              interval_seconds: (args.plan as { trigger: { interval_seconds: number } }).trigger.interval_seconds,
+              next_evaluation_at: now,
+            },
+          },
+          generation: 0,
+          created_at: now,
+          updated_at: now,
+        });
+      } else {
+        strategy = legacyMockStrategy(args, strategyId, owner, digest, now);
+      }
+      this.strategies.set(strategyId, strategy);
+    }
+
+    strategy ??= legacyMockStrategy(args, strategyId, owner,
+      "C100000000000000000000000000000000000000000000000000000000000002", now);
+
+    if (["strategy.authorize", "strategy.resume"].includes(name)) {
+      strategy = StrategySchema.parse({
+        ...strategy,
+        lifecycle: "active",
+        mandate: { ...strategy.mandate, status: "approved", authorization: args.authorization },
+        generation: strategy.generation + 1,
+        next_evaluation_at: now,
+        updated_at: now,
+      });
+      this.strategies.set(strategyId, strategy);
+    } else if (name === "strategy.pause") {
+      strategy = StrategySchema.parse({
+        ...strategy, lifecycle: "paused", generation: strategy.generation + 1,
+        next_evaluation_at: undefined, hold_reason: String(args.reason), updated_at: now,
+      });
+      this.strategies.set(strategyId, strategy);
+    } else if (name === "strategy.stop" || name === "strategy.kill") {
+      strategy = StrategySchema.parse({
+        ...strategy, lifecycle: "stopped", generation: strategy.generation + 1,
+        next_evaluation_at: undefined, hold_reason: String(args.reason), updated_at: now,
+      });
+      this.strategies.set(strategyId, strategy);
+    }
+
+    const event: StrategyAuditEvent = {
+      event_id: "event-strategy-mock-001", strategy_id: strategyId,
+      actor: "owner", kind: "created", detail: { source: "offline-mock" }, at: now,
+    };
+    const data = name === "strategy.audit" ? [event] : strategy;
+    return mockEnvelope(data, "offline deterministic strategy mock");
   }
 
   private x402Pay(args: ArgsFor<"x402.pay">): Envelope<X402PayResult> {

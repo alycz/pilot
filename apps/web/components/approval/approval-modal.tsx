@@ -6,6 +6,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { DeviceStatus } from "../ledger/device-status";
+import { ledgerSignedCopy, type LedgerTransportProvenance } from "../ledger/provenance";
 
 export type ApprovalSummary = {
   action: string;
@@ -33,6 +34,7 @@ export type ApprovalSubmission = {
 
 export type LedgerApprovalState = {
   accountIndex: number;
+  transport?: LedgerTransportProvenance;
   deviceReady: boolean;
   deviceState: LedgerDeviceState;
   signingMode: "clear" | "blind";
@@ -81,6 +83,12 @@ export function ledgerApprovalActionLabel(input: {
   return ledgerApprovalNeedsRebuild(input.expiresAt, input.now)
     ? "Rebuild and approve"
     : "Approve on Ledger";
+}
+
+export function ledgerApprovalSignerLabel(
+  ledger: Pick<LedgerApprovalState, "accountIndex" | "transport">,
+): string {
+  return `${ledgerSignedCopy(ledger.transport)} · account ${ledger.accountIndex}`;
 }
 
 export function canAttemptLedgerApproval(input: {
@@ -355,11 +363,11 @@ export function ApprovalModal({
                 <p className="label-mono">Ledger review</p>
                 {ledgerSigned ? (
                   <span className="border border-executed/35 bg-executed/10 px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))]">
-                    Signed on Ledger · account {ledger.accountIndex}
+                    {ledgerApprovalSignerLabel(ledger)}
                   </span>
                 ) : null}
               </div>
-              <DeviceStatus state={ledger.deviceState} signed={ledgerSigned} />
+              <DeviceStatus state={ledger.deviceState} signed={ledgerSigned} transport={ledger.transport} />
               {ledger.signingMode === "blind" ? (
                 ledger.blindLegend ?? (
                   <p className="border border-amber-300 bg-amber-50 p-3 text-xs font-medium text-amber-950">

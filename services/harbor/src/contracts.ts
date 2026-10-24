@@ -574,6 +574,66 @@ export const McIntentSchema = z
   .strict();
 export type McIntent = z.infer<typeof McIntentSchema>;
 
+const Ap4mEvidenceDigestSchema = z.string().regex(/^[A-F0-9]{64}$/);
+
+const Ap4mL1EvidenceArtifactSchema = z.object({
+    kind: z.literal("l1"),
+    digest: Ap4mEvidenceDigestSchema,
+    digest_basis: z.literal("sha256-utf8/vi-l1-presentation"),
+  }).strict();
+const Ap4mL2EvidenceArtifactSchema = z.object({
+    kind: z.literal("l2"),
+    digest: Ap4mEvidenceDigestSchema,
+    digest_basis: z.literal("sha256-utf8/vi-l2-merchant-presentation"),
+  }).strict();
+const Ap4mL3aEvidenceArtifactSchema = z.object({
+    kind: z.literal("l3a"),
+    digest: Ap4mEvidenceDigestSchema,
+    digest_basis: z.literal("sha256-utf8/vi-l3a-presentation"),
+  }).strict();
+const Ap4mL3bEvidenceArtifactSchema = z.object({
+    kind: z.literal("l3b"),
+    digest: Ap4mEvidenceDigestSchema,
+    digest_basis: z.literal("sha256-utf8/vi-l3b-presentation"),
+  }).strict();
+const Ap4mPaymentEvidenceArtifactSchema = z.object({
+    kind: z.literal("payment"),
+    digest: Ap4mEvidenceDigestSchema,
+    digest_basis: z.literal("xrpl/signed-transaction-hash"),
+  }).strict();
+
+export const Ap4mPublicEvidenceArtifactSchema = z.discriminatedUnion("kind", [
+  Ap4mL1EvidenceArtifactSchema,
+  Ap4mL2EvidenceArtifactSchema,
+  Ap4mL3aEvidenceArtifactSchema,
+  Ap4mL3bEvidenceArtifactSchema,
+  Ap4mPaymentEvidenceArtifactSchema,
+]);
+export type Ap4mPublicEvidenceArtifact = z.infer<
+  typeof Ap4mPublicEvidenceArtifactSchema
+>;
+
+/**
+ * Bounded public references for one finalized exact-rail AP4M purchase.
+ * Raw VI presentations, disclosures, signed blobs and credentials are never
+ * part of this contract. Pay-channel purchases do not emit this bundle.
+ */
+export const Ap4mPublicEvidenceSchema = z.object({
+  version: z.literal("ap4m-public-evidence-v1"),
+  provenance: z.literal("live-testnet"),
+  network: z.literal("testnet"),
+  rail: z.literal("exact"),
+  intent: McIntentSchema,
+  artifacts: z.tuple([
+    Ap4mL1EvidenceArtifactSchema,
+    Ap4mL2EvidenceArtifactSchema,
+    Ap4mL3aEvidenceArtifactSchema,
+    Ap4mL3bEvidenceArtifactSchema,
+    Ap4mPaymentEvidenceArtifactSchema,
+  ]),
+}).strict();
+export type Ap4mPublicEvidence = z.infer<typeof Ap4mPublicEvidenceSchema>;
+
 export const XrplPaymentProofSchema = z.discriminatedUnion("type", [
   z
     .object({
@@ -898,11 +958,19 @@ const CanonicalUnsignedDecimalSchema = z
   .max(64)
   .regex(/^(?:0|[1-9]\d*)(?:\.\d{1,15})?$/)
   .refine((value) => Number(value) > 0, "must be greater than zero");
+const CanonicalNonnegativeDecimalSchema = z
+  .string()
+  .max(64)
+  .regex(/^(?:0|[1-9]\d*)(?:\.\d{1,15})?$/);
 const CanonicalDropsSchema = z
   .string()
   .max(32)
   .regex(/^(?:0|[1-9]\d*)$/)
   .refine((value) => BigInt(value) > 0n, "must be greater than zero");
+const CanonicalNonnegativeDropsSchema = z
+  .string()
+  .max(32)
+  .regex(/^(?:0|[1-9]\d*)$/);
 const IsoDateTimeSchema = z.string().datetime({ offset: true });
 
 function compareCanonicalDecimals(left: string, right: string): number {
@@ -944,6 +1012,24 @@ export const StrategyIssuedAssetSchema = z
   })
   .strict();
 export type StrategyIssuedAsset = z.infer<typeof StrategyIssuedAssetSchema>;
+
+export const TESTNET_RLUSD_CURRENCY =
+  "524C555344000000000000000000000000000000" as const;
+export const TESTNET_RLUSD_ISSUER =
+  "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" as const;
+export const DECLARATIVE_STRATEGY_SEMANTICS_VERSION =
+  "harbor.declarative-strategy/1" as const;
+
+/** The first declarative engine deliberately supports one reviewed market. */
+export const DeclarativeStrategyIssuedAssetSchema = z
+  .object({
+    currency: z.literal(TESTNET_RLUSD_CURRENCY),
+    issuer: z.literal(TESTNET_RLUSD_ISSUER),
+  })
+  .strict();
+export type DeclarativeStrategyIssuedAsset = z.infer<
+  typeof DeclarativeStrategyIssuedAssetSchema
+>;
 
 export const StrategyAllocationSchema = z
   .object({
@@ -1012,6 +1098,99 @@ export const StrategyLimitsSchema = z
   });
 export type StrategyLimits = z.infer<typeof StrategyLimitsSchema>;
 
+// Keep this shape explicit instead of extending StrategyLimitsSchema. The
+// latter is refined (ZodEffects in Pilot's pinned Zod 3), and refined-object
+// extension is not byte-compatible across the two pinned Zod majors.
+export const DeclarativeStrategyLimitsSchema = z.object({
+  max_order_value: CanonicalUnsignedDecimalSchema,
+  max_daily_value: CanonicalUnsignedDecimalSchema,
+  min_order_value: CanonicalUnsignedDecimalSchema,
+  max_fee_drops: CanonicalDropsSchema,
+  max_slippage_bps: z.number().int().min(1).max(1_000),
+  max_price_impact_bps: z.number().int().min(1).max(1_000),
+  min_xrp_reserve_drops: CanonicalDropsSchema,
+  fee_buffer_drops: CanonicalDropsSchema,
+  max_xrp_exposure_drops: CanonicalDropsSchema,
+  max_issued_exposure: CanonicalUnsignedDecimalSchema,
+  min_liquidity_value: CanonicalUnsignedDecimalSchema,
+  cooldown_seconds: z.number().int().min(60).max(86_400),
+  max_quote_age_seconds: z.number().int().min(1).max(300),
+  max_ledger_gap: z.number().int().min(0).max(4),
+  max_cumulative_value: CanonicalUnsignedDecimalSchema,
+  max_daily_fee_drops: CanonicalDropsSchema,
+  max_cumulative_fee_drops: CanonicalDropsSchema,
+  max_daily_trades: z.number().int().min(1).max(1_000),
+  max_total_trades: z.number().int().min(1).max(100_000),
+  /**
+   * Optional for byte-compatible parsing of already-approved v1 mandates.
+   * New finite recurring mandates bind this executed-action count explicitly.
+   */
+  max_mandate_occurrences: z.number().int().min(1).max(100_000).optional(),
+  cumulative_scope: z.literal("owner_network_asset_lifetime"),
+})
+  .strict()
+  .superRefine((limits, context) => {
+    if (
+      compareCanonicalDecimals(
+        limits.max_daily_value,
+        limits.max_cumulative_value,
+      ) > 0
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["max_daily_value"],
+        message: "daily value cannot exceed cumulative value",
+      });
+    }
+    if (BigInt(limits.max_fee_drops) > BigInt(limits.max_daily_fee_drops)) {
+      context.addIssue({
+        code: "custom",
+        path: ["max_fee_drops"],
+        message: "per-order fee cannot exceed daily fee budget",
+      });
+    }
+    if (
+      BigInt(limits.max_daily_fee_drops) >
+      BigInt(limits.max_cumulative_fee_drops)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["max_daily_fee_drops"],
+        message: "daily fee budget cannot exceed cumulative fee budget",
+      });
+    }
+    if (limits.max_daily_trades > limits.max_total_trades) {
+      context.addIssue({
+        code: "custom",
+        path: ["max_daily_trades"],
+        message: "daily trade count cannot exceed total trade count",
+      });
+    }
+    if (
+      limits.max_mandate_occurrences !== undefined &&
+      limits.max_daily_trades > limits.max_mandate_occurrences
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["max_daily_trades"],
+        message: "daily trade count cannot exceed mandate occurrences",
+      });
+    }
+    if (
+      limits.max_mandate_occurrences !== undefined &&
+      limits.max_mandate_occurrences > limits.max_total_trades
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["max_mandate_occurrences"],
+        message: "mandate occurrences cannot exceed total trade count",
+      });
+    }
+  });
+export type DeclarativeStrategyLimits = z.infer<
+  typeof DeclarativeStrategyLimitsSchema
+>;
+
 export const StrategyScheduleSchema = z
   .object({
     interval_seconds: z.number().int().min(300).max(86_400),
@@ -1019,6 +1198,129 @@ export const StrategyScheduleSchema = z
   })
   .strict();
 export type StrategySchedule = z.infer<typeof StrategyScheduleSchema>;
+
+export const DeclarativeStrategyTriggerSchema = z
+  .object({
+    kind: z.literal("interval"),
+    interval_seconds: z.number().int().min(300).max(86_400),
+  })
+  .strict();
+export type DeclarativeStrategyTrigger = z.infer<
+  typeof DeclarativeStrategyTriggerSchema
+>;
+
+export const DeclarativeStrategyConditionSchema = z.union([
+  z.object({ kind: z.literal("always") }).strict(),
+  z
+    .object({
+      kind: z.literal("price_threshold"),
+      side: z.enum(["bid", "ask"]),
+      comparator: z.enum(["lte", "gte"]),
+      /** test-RLUSD per XRP, from the named executable book side. */
+      price: CanonicalUnsignedDecimalSchema,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("xrp_allocation_outside"),
+      lower_xrp_bps: z.number().int().min(0).max(9_998),
+      upper_xrp_bps: z.number().int().min(2).max(10_000),
+    })
+    .strict()
+    .superRefine((condition, context) => {
+      if (condition.lower_xrp_bps >= condition.upper_xrp_bps) {
+        context.addIssue({
+          code: "custom",
+          path: ["lower_xrp_bps"],
+          message: "lower allocation bound must be below upper bound",
+        });
+      }
+    }),
+]);
+export type DeclarativeStrategyCondition = z.infer<
+  typeof DeclarativeStrategyConditionSchema
+>;
+
+export const DeclarativeStrategyActionSchema = z.union([
+  z
+    .object({
+      kind: z.literal("fixed_swap"),
+      direction: z.enum(["buy_xrp", "sell_xrp"]),
+      /** Maximum order value in test-RLUSD units. */
+      order_value: CanonicalUnsignedDecimalSchema,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("target_allocation"),
+      target_xrp_bps: z.number().int().min(1).max(9_999),
+      lower_xrp_bps: z.number().int().min(0).max(9_998),
+      upper_xrp_bps: z.number().int().min(2).max(10_000),
+    })
+    .strict()
+    .superRefine((action, context) => {
+      if (
+        action.lower_xrp_bps >= action.target_xrp_bps ||
+        action.target_xrp_bps >= action.upper_xrp_bps
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["target_xrp_bps"],
+          message: "target must be strictly inside the allocation band",
+        });
+      }
+    }),
+]);
+export type DeclarativeStrategyAction = z.infer<
+  typeof DeclarativeStrategyActionSchema
+>;
+
+export const DeclarativeStrategyRuleSchema = z
+  .object({
+    rule_id: StrategyIdSchema,
+    all: z.array(DeclarativeStrategyConditionSchema).min(1).max(8),
+    action: DeclarativeStrategyActionSchema,
+  })
+  .strict()
+  .superRefine((rule, context) => {
+    const always = rule.all.filter((condition) => condition.kind === "always");
+    if (always.length > 0 && rule.all.length !== 1) {
+      context.addIssue({
+        code: "custom",
+        path: ["all"],
+        message: "always must be the only condition in a rule",
+      });
+    }
+  });
+export type DeclarativeStrategyRule = z.infer<
+  typeof DeclarativeStrategyRuleSchema
+>;
+
+export const DeclarativeStrategyPlanSchema = z
+  .object({
+    plan_version: z.literal("1"),
+    trigger: DeclarativeStrategyTriggerSchema,
+    rules: z.array(DeclarativeStrategyRuleSchema).min(1).max(8),
+    fallback: z.object({ kind: z.literal("hold") }).strict(),
+  })
+  .strict()
+  .superRefine((plan, context) => {
+    const seen = new Set<string>();
+    for (let index = 0; index < plan.rules.length; index += 1) {
+      const id = plan.rules[index]!.rule_id;
+      if (seen.has(id)) {
+        context.addIssue({
+          code: "custom",
+          path: ["rules", index, "rule_id"],
+          message: "rule_id must be unique within the plan",
+        });
+      }
+      seen.add(id);
+    }
+  });
+export type DeclarativeStrategyPlan = z.infer<
+  typeof DeclarativeStrategyPlanSchema
+>;
 
 export const StrategyOwnerAuthorizationSchema = z
   .object({
@@ -1046,7 +1348,7 @@ export type StrategyOwnerAuthorization = z.infer<
   typeof StrategyOwnerAuthorizationSchema
 >;
 
-export const StrategyMandateSchema = z
+export const LegacyStrategyMandateSchema = z
   .object({
     mandate_id: StrategyIdSchema,
     strategy_id: StrategyIdSchema,
@@ -1096,7 +1398,109 @@ export const StrategyMandateSchema = z
       });
     }
   });
-export type StrategyMandate = z.infer<typeof StrategyMandateSchema>;
+export type LegacyStrategyMandate = z.infer<
+  typeof LegacyStrategyMandateSchema
+>;
+
+export const DeclarativeStrategyProposalSchema = z
+  .object({
+    semantics_version: z.literal(DECLARATIVE_STRATEGY_SEMANTICS_VERSION),
+    kind: z.literal("declarative_strategy_v1"),
+    network: z.literal("testnet"),
+    account: ClassicAddressSchema,
+    issued_asset: DeclarativeStrategyIssuedAssetSchema,
+    plan: DeclarativeStrategyPlanSchema,
+    limits: DeclarativeStrategyLimitsSchema,
+    execution_mode: z.literal("offer_create_fok"),
+    not_before: IsoDateTimeSchema,
+    expires_at: IsoDateTimeSchema,
+  })
+  .strict()
+  .superRefine((proposal, context) => {
+    if (Date.parse(proposal.expires_at) <= Date.parse(proposal.not_before)) {
+      context.addIssue({
+        code: "custom",
+        path: ["expires_at"],
+        message: "authority window must end after it begins",
+      });
+    }
+  });
+export type DeclarativeStrategyProposal = z.infer<
+  typeof DeclarativeStrategyProposalSchema
+>;
+
+export const DeclarativeStrategyMandateSchema = z
+  .object({
+    mandate_id: StrategyIdSchema,
+    strategy_id: StrategyIdSchema,
+    version: z.number().int().positive(),
+    digest: StrategyDigestSchema,
+    status: StrategyMandateStatusSchema,
+    semantics_version: z.literal(DECLARATIVE_STRATEGY_SEMANTICS_VERSION),
+    kind: z.literal("declarative_strategy_v1"),
+    network: z.literal("testnet"),
+    account: ClassicAddressSchema,
+    issued_asset: DeclarativeStrategyIssuedAssetSchema,
+    plan: DeclarativeStrategyPlanSchema,
+    limits: DeclarativeStrategyLimitsSchema,
+    schedule: StrategyScheduleSchema,
+    execution_mode: z.literal("offer_create_fok"),
+    not_before: IsoDateTimeSchema,
+    expires_at: IsoDateTimeSchema,
+    authorization: StrategyOwnerAuthorizationSchema.optional(),
+  })
+  .strict()
+  .superRefine((mandate, context) => {
+    if (Date.parse(mandate.expires_at) <= Date.parse(mandate.not_before)) {
+      context.addIssue({
+        code: "custom",
+        path: ["expires_at"],
+        message: "authority window must end after it begins",
+      });
+    }
+    if (
+      mandate.schedule.interval_seconds !==
+      mandate.plan.trigger.interval_seconds
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["schedule", "interval_seconds"],
+        message: "persisted schedule must match the approved plan trigger",
+      });
+    }
+    const authorization = mandate.authorization;
+    if (mandate.status === "approved" && authorization === undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["authorization"],
+        message: "approved mandates require owner authorization",
+      });
+    }
+    if (
+      authorization !== undefined &&
+      (authorization.owner !== mandate.account ||
+        authorization.mandate_digest !== mandate.digest ||
+        authorization.mandate_version !== mandate.version ||
+        Date.parse(authorization.expires_at) > Date.parse(mandate.expires_at))
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["authorization"],
+        message: "authorization must bind this mandate and its expiry",
+      });
+    }
+  });
+export type DeclarativeStrategyMandate = z.infer<
+  typeof DeclarativeStrategyMandateSchema
+>;
+
+export const StrategyMandateSchema = z.union([
+  LegacyStrategyMandateSchema,
+  DeclarativeStrategyMandateSchema,
+]);
+export type AnyStrategyMandate = z.infer<typeof StrategyMandateSchema>;
+/** Compatibility alias for the original rebalancer's dedicated interpreter. */
+export type StrategyMandate = LegacyStrategyMandate;
 
 export const StrategySchema = z
   .object({
@@ -1157,6 +1561,11 @@ export const StrategyHoldCodeSchema = z.enum([
   "exposure_limit",
   "order_limit",
   "daily_limit",
+  "cumulative_limit",
+  "fee_budget_limit",
+  "trade_count_limit",
+  "no_rule_matched",
+  "condition_not_met",
   "simulation_failed",
   "service_unavailable",
   "pending_reconciliation",
@@ -1175,6 +1584,11 @@ export const StrategyDecisionSchema = z
     hold_codes: z.array(StrategyHoldCodeSchema).max(24),
     xrp_allocation_bps: z.number().int().min(0).max(10_000).optional(),
     proposed_value: CanonicalUnsignedDecimalSchema.optional(),
+    semantics_version: z
+      .literal(DECLARATIVE_STRATEGY_SEMANTICS_VERSION)
+      .optional(),
+    plan_digest: StrategyDigestSchema.optional(),
+    matched_rule_id: StrategyIdSchema.optional(),
     quote_ledger_index: z.number().int().positive().optional(),
     quote_observed_at: IsoDateTimeSchema.optional(),
     explanation: z.string().min(1).max(1_000),
@@ -1201,6 +1615,27 @@ export const StrategyDecisionSchema = z
         code: "custom",
         path: ["proposed_value"],
         message: "trade decisions require a proposed value",
+      });
+    }
+    if (
+      (decision.semantics_version === undefined) !==
+      (decision.plan_digest === undefined)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["plan_digest"],
+        message:
+          "declarative decisions require both semantics_version and plan_digest",
+      });
+    }
+    if (
+      decision.matched_rule_id !== undefined &&
+      decision.semantics_version === undefined
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["matched_rule_id"],
+        message: "matched_rule_id is only valid for declarative decisions",
       });
     }
   });
@@ -1264,7 +1699,7 @@ export const StrategyAuditEventSchema = z
   .strict();
 export type StrategyAuditEvent = z.infer<typeof StrategyAuditEventSchema>;
 
-export const StrategyCreateArgsSchema = z
+export const LegacyStrategyCreateArgsSchema = z
   .object({
     kind: z.literal("xrp_issued_rebalancer_v1"),
     network: z.literal("testnet"),
@@ -1287,7 +1722,192 @@ export const StrategyCreateArgsSchema = z
       });
     }
   });
+export type LegacyStrategyCreateArgs = z.infer<
+  typeof LegacyStrategyCreateArgsSchema
+>;
+
+export const DeclarativeStrategyCreateArgsSchema =
+  DeclarativeStrategyProposalSchema;
+export type DeclarativeStrategyCreateArgs = z.infer<
+  typeof DeclarativeStrategyCreateArgsSchema
+>;
+
+export const StrategyCreateArgsSchema = z.union([
+  LegacyStrategyCreateArgsSchema,
+  DeclarativeStrategyCreateArgsSchema,
+]);
 export type StrategyCreateArgs = z.infer<typeof StrategyCreateArgsSchema>;
+
+export const StrategyPlanDiagnosticSchema = z
+  .object({
+    code: z.enum([
+      "invalid_shape",
+      "unsupported_asset",
+      "unsupported_condition",
+      "unsupported_action",
+      "ambiguous_conditions",
+      "contradictory_conditions",
+      "unreachable_rule",
+      "order_exceeds_limit",
+      "numeric_overflow",
+    ]),
+    path: z.string().min(1).max(240),
+    message: z.string().min(1).max(500),
+  })
+  .strict();
+export type StrategyPlanDiagnostic = z.infer<
+  typeof StrategyPlanDiagnosticSchema
+>;
+
+export const StrategyPlanCapabilitiesSchema = z
+  .object({
+    network: z.literal("testnet"),
+    assets: z.tuple([
+      z.object({ currency: z.literal("XRP") }).strict(),
+      DeclarativeStrategyIssuedAssetSchema,
+    ]),
+    trigger_kinds: z.tuple([z.literal("interval")]),
+    condition_kinds: z.tuple([
+      z.literal("always"),
+      z.literal("price_threshold"),
+      z.literal("xrp_allocation_outside"),
+    ]),
+    action_kinds: z.tuple([
+      z.literal("fixed_swap"),
+      z.literal("target_allocation"),
+    ]),
+    execution_mode: z.literal("offer_create_fok"),
+    max_rules: z.literal(8),
+    max_conditions_per_rule: z.literal(8),
+    max_actions_per_evaluation: z.literal(1),
+  })
+  .strict();
+export type StrategyPlanCapabilities = z.infer<
+  typeof StrategyPlanCapabilitiesSchema
+>;
+
+export const StrategyPlanValidationResultSchema = z
+  .object({
+    valid: z.boolean(),
+    semantics_version: z.literal(DECLARATIVE_STRATEGY_SEMANTICS_VERSION),
+    capabilities: StrategyPlanCapabilitiesSchema,
+    errors: z.array(StrategyPlanDiagnosticSchema).max(64),
+    plan_digest: StrategyDigestSchema.optional(),
+    normalized_proposal: DeclarativeStrategyProposalSchema.optional(),
+  })
+  .strict()
+  .superRefine((result, context) => {
+    if (
+      result.valid !==
+      (result.errors.length === 0 &&
+        result.plan_digest !== undefined &&
+        result.normalized_proposal !== undefined)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["valid"],
+        message: "valid must agree with diagnostics, digest, and normalization",
+      });
+    }
+  });
+export type StrategyPlanValidationResult = z.infer<
+  typeof StrategyPlanValidationResultSchema
+>;
+
+export const StrategyValidateArgsSchema = DeclarativeStrategyProposalSchema;
+export type StrategyValidateArgs = z.infer<typeof StrategyValidateArgsSchema>;
+
+export const StrategyPlanObservationSchema = z
+  .object({
+    account: ClassicAddressSchema,
+    network: z.literal("testnet"),
+    issued_asset: DeclarativeStrategyIssuedAssetSchema,
+    xrp_balance_drops: CanonicalNonnegativeDropsSchema,
+    issued_balance: CanonicalNonnegativeDecimalSchema,
+    /** Executable test-RLUSD per XRP book sides at quote_ledger_index. */
+    bid: CanonicalUnsignedDecimalSchema,
+    ask: CanonicalUnsignedDecimalSchema,
+    executable_liquidity_value: CanonicalNonnegativeDecimalSchema,
+    fee_drops: CanonicalDropsSchema,
+    reserve_base_drops: CanonicalNonnegativeDropsSchema,
+    reserve_increment_drops: CanonicalNonnegativeDropsSchema,
+    owner_count: z.number().int().min(0).max(1_000_000),
+    daily_value_used: CanonicalNonnegativeDecimalSchema,
+    cumulative_value_used: CanonicalNonnegativeDecimalSchema,
+    daily_fee_drops_used: CanonicalNonnegativeDropsSchema,
+    cumulative_fee_drops_used: CanonicalNonnegativeDropsSchema,
+    daily_trades_used: z.number().int().nonnegative().max(1_000_000),
+    total_trades_used: z.number().int().nonnegative().max(100_000_000),
+    ledger_index: z.number().int().positive(),
+    quote_ledger_index: z.number().int().positive(),
+    observed_at: IsoDateTimeSchema,
+    last_trade_at: IsoDateTimeSchema.optional(),
+    global_kill: z.boolean(),
+    unresolved_execution: z.boolean(),
+    grant_active: z.boolean(),
+    policy_active: z.boolean(),
+  })
+  .strict();
+export type StrategyPlanObservation = z.infer<
+  typeof StrategyPlanObservationSchema
+>;
+
+export const StrategySimulateArgsSchema = z
+  .object({
+    proposal: DeclarativeStrategyProposalSchema,
+    observation: StrategyPlanObservationSchema,
+    at: IsoDateTimeSchema,
+  })
+  .strict();
+export type StrategySimulateArgs = z.infer<typeof StrategySimulateArgsSchema>;
+
+export const StrategyPlanPreviewSchema = z
+  .object({
+    boundary: z.literal("paper_only"),
+    ledger_acceptance: z.literal("not_tested"),
+    semantics_version: z.literal(DECLARATIVE_STRATEGY_SEMANTICS_VERSION),
+    plan_digest: StrategyDigestSchema,
+    outcome: z.enum(["hold", "order"]),
+    action: z.enum(["hold", "buy_xrp", "sell_xrp"]),
+    matched_rule_id: StrategyIdSchema.optional(),
+    proposed_value: CanonicalUnsignedDecimalSchema.optional(),
+    price_basis: z.enum(["bid", "ask"]).optional(),
+    price_value: CanonicalUnsignedDecimalSchema.optional(),
+    hold_codes: z.array(StrategyHoldCodeSchema).max(24),
+    explanation: z.string().min(1).max(1_000),
+    evaluated_at: IsoDateTimeSchema,
+    observed_at: IsoDateTimeSchema,
+    quote_ledger_index: z.number().int().positive(),
+  })
+  .strict()
+  .superRefine((preview, context) => {
+    if (
+      preview.outcome === "order" &&
+      (preview.action === "hold" ||
+        preview.proposed_value === undefined ||
+        preview.matched_rule_id === undefined ||
+        preview.price_basis === undefined ||
+        preview.price_value === undefined ||
+        preview.hold_codes.length !== 0)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["outcome"],
+        message: "order previews require one bounded matched action and price",
+      });
+    }
+    if (
+      preview.outcome === "hold" &&
+      (preview.action !== "hold" || preview.hold_codes.length === 0)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["hold_codes"],
+        message: "hold previews require a hold action and reason",
+      });
+    }
+  });
+export type StrategyPlanPreview = z.infer<typeof StrategyPlanPreviewSchema>;
 
 export const StrategyAuthorizeArgsSchema = z
   .object({

@@ -354,7 +354,7 @@ export function StrategyWorkspace({ client: injectedClient }: { client?: Client 
       <div className="min-w-0 space-y-5">
         {error ? <div role="alert" className="border border-blocked/35 bg-blocked/[0.06] px-4 py-3 text-sm text-blocked"><p>{error}</p>{pendingMutation || pendingGlobalKill ? <><p className="mt-2 break-all font-mono text-xs">Retained {pendingMutation?.action ?? "global kill"} request ID: {pendingMutation?.requestId ?? pendingGlobalKill?.requestId}</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => void refresh()} className="min-h-11 border border-blocked/40 px-3 text-sm">Check durable evidence</button>{pendingMutation && recoveryRef.current ? <button type="button" onClick={() => void replayPending()} className="min-h-11 border border-blocked/40 px-3 text-sm">Replay exact request ID</button> : null}{pendingGlobalKill && globalRecoveryRef.current ? <button type="button" onClick={() => void replayPendingGlobalKill()} className="min-h-11 border border-blocked/40 px-3 text-sm">Replay exact request ID</button> : null}</div></> : null}</div> : null}
         {screen === "draft" ? <StrategyDraftForm draft={draft} disabled={Boolean(busy || pendingMutation || pendingGlobalKill)} onChange={setDraft} onReview={(candidate) => void createDraft(candidate)} /> : null}
-        {screen === "review" && strategy ? <MandateReview draft={fromMandate(strategy, draft)} digest={strategy.mandate.digest} version={strategy.mandate.version} busy={Boolean(busy)} blocked={Boolean(pendingMutation || pendingGlobalKill)} authorizationBlocked={globalKillError ? "Pilot cannot verify the account-wide global kill switch. Activation fails closed." : !globalKill ? "Pilot is verifying the account-wide global kill switch. Activation remains blocked." : globalKill.enabled ? "Account-wide global kill is enabled. Use the owner control to authorize submissions before activating this mandate." : undefined} onBack={() => setScreen("draft")} onApprove={() => void run("activate", async () => client.activate(await authorizeProof("activate")), mutationDescriptor("activate", strategy), (requestId) => { const retained = proofRef.current; if (!retained || retained.action !== "activate" || retained.proof.request_id !== requestId) throw new Error("The byte-identical activation proof is no longer in memory; check durable evidence instead."); return client.activate(retained.proof); })} /> : null}
+        {screen === "review" && strategy ? <MandateReview draft={fromMandate(strategy, draft)} digest={strategy.mandate.digest} version={strategy.mandate.version} busy={Boolean(busy)} blocked={Boolean(pendingMutation || pendingGlobalKill)} authorizationBlocked={globalKillError ? "Pilot cannot verify the account-wide global kill switch. Activation fails closed." : !globalKill ? "Pilot is verifying the account-wide global kill switch. Activation remains blocked." : globalKill.enabled ? "Account-wide global kill is enabled. Use the owner control to authorize submissions before activating this mandate." : undefined} onBack={() => setScreen("draft")} onReject={() => void run("stop", () => client.stop(strategy.strategy_id, "Draft rejected by owner"), mutationDescriptor("stop", strategy), (requestId) => client.stop(strategy.strategy_id, "Draft rejected by owner", requestId))} onApprove={() => void run("activate", async () => client.activate(await authorizeProof("activate")), mutationDescriptor("activate", strategy), (requestId) => { const retained = proofRef.current; if (!retained || retained.action !== "activate" || retained.proof.request_id !== requestId) throw new Error("The byte-identical activation proof is no longer in memory; check durable evidence instead."); return client.activate(retained.proof); })} /> : null}
         {view && screen === "status" ? <>{view.unresolvedTransaction ? <InflightWarning transaction={view.unresolvedTransaction} onRefresh={() => void refresh()} /> : null}<DecisionList decisions={view.decisions} /><AuditTrail events={view.audit} /></> : null}
       </div>
       <aside className="min-w-0 space-y-5">
@@ -365,13 +365,86 @@ export function StrategyWorkspace({ client: injectedClient }: { client?: Client 
   </div>;
 }
 
-function fromMandate(strategy: Strategy, fallback: StrategyDraft): StrategyDraft { return { ...fallback, account: strategy.mandate.account, issuedAsset: { label: "test-RLUSD", currency: strategy.mandate.issued_asset.currency, issuer: strategy.mandate.issued_asset.issuer }, targetXrpBps: String(strategy.mandate.allocation.target_xrp_bps), lowerXrpBps: String(strategy.mandate.allocation.lower_xrp_bps), upperXrpBps: String(strategy.mandate.allocation.upper_xrp_bps), maxOrderValue: strategy.mandate.limits.max_order_value, maxDailyValue: strategy.mandate.limits.max_daily_value, minOrderValue: strategy.mandate.limits.min_order_value, maxFeeDrops: strategy.mandate.limits.max_fee_drops, maxSlippageBps: String(strategy.mandate.limits.max_slippage_bps), maxPriceImpactBps: String(strategy.mandate.limits.max_price_impact_bps), minimumXrpReserveDrops: strategy.mandate.limits.min_xrp_reserve_drops, feeBufferDrops: strategy.mandate.limits.fee_buffer_drops, maxXrpExposureDrops: strategy.mandate.limits.max_xrp_exposure_drops, maxIssuedExposure: strategy.mandate.limits.max_issued_exposure, minimumLiquidityValue: strategy.mandate.limits.min_liquidity_value, cooldownSeconds: String(strategy.mandate.limits.cooldown_seconds), maxQuoteAgeSeconds: String(strategy.mandate.limits.max_quote_age_seconds), mandateExpiresAt: strategy.mandate.expires_at.slice(0, 16) }; }
+type WireRule = { rule_id: string; all: Array<Record<string, unknown>>; action: Record<string, unknown> };
+type WireMandate = {
+  kind: "xrp_issued_rebalancer_v1" | "declarative_strategy_v1";
+  account: string;
+  issued_asset: { currency: string; issuer: string };
+  version: number;
+  digest: string;
+  expires_at: string;
+  allocation?: { target_xrp_bps: number; lower_xrp_bps: number; upper_xrp_bps: number };
+  plan?: { trigger: { interval_seconds: number }; rules: WireRule[] };
+  limits: Strategy["mandate"]["limits"] & {
+    max_cumulative_value?: string; max_daily_fee_drops?: string; max_cumulative_fee_drops?: string;
+    max_daily_trades?: number; max_total_trades?: number; max_mandate_occurrences?: number;
+  };
+};
+
+function fromMandate(strategy: Strategy, fallback: StrategyDraft): StrategyDraft {
+  const mandate = strategy.mandate as WireMandate;
+  const declarativeRules = mandate.plan?.rules.map((rule) => {
+    const condition = rule.all[0] ?? {};
+    const action = rule.action;
+    const actionKind = action.kind;
+    const direction = action.direction;
+    const kind = actionKind === "target_allocation" ? "rebalance" : condition.kind === "price_threshold"
+      ? direction === "sell_xrp" ? "price_sell" : "price_buy" : "scheduled_buy";
+    return {
+      id: rule.rule_id,
+      kind,
+      price: typeof condition.price === "string" ? condition.price : "1",
+      fixedValue: typeof action.order_value === "string" ? action.order_value : "10",
+      lowerXrpBps: String(action.lower_xrp_bps ?? condition.lower_xrp_bps ?? 4500),
+      targetXrpBps: String(action.target_xrp_bps ?? 5000),
+      upperXrpBps: String(action.upper_xrp_bps ?? condition.upper_xrp_bps ?? 5500),
+    } as const;
+  });
+  return {
+    ...fallback,
+    strategyMode: mandate.kind === "declarative_strategy_v1" ? "declarative" : "legacy_rebalancer",
+    account: mandate.account,
+    issuedAsset: { label: "test-RLUSD", currency: mandate.issued_asset.currency, issuer: mandate.issued_asset.issuer },
+    targetXrpBps: String(mandate.allocation?.target_xrp_bps ?? 5000),
+    lowerXrpBps: String(mandate.allocation?.lower_xrp_bps ?? 4500),
+    upperXrpBps: String(mandate.allocation?.upper_xrp_bps ?? 5500),
+    maxOrderValue: mandate.limits.max_order_value,
+    maxDailyValue: mandate.limits.max_daily_value,
+    minOrderValue: mandate.limits.min_order_value,
+    maxFeeDrops: mandate.limits.max_fee_drops,
+    maxSlippageBps: String(mandate.limits.max_slippage_bps),
+    maxPriceImpactBps: String(mandate.limits.max_price_impact_bps),
+    minimumXrpReserveDrops: mandate.limits.min_xrp_reserve_drops,
+    feeBufferDrops: mandate.limits.fee_buffer_drops,
+    maxXrpExposureDrops: mandate.limits.max_xrp_exposure_drops,
+    maxIssuedExposure: mandate.limits.max_issued_exposure,
+    minimumLiquidityValue: mandate.limits.min_liquidity_value,
+    cooldownSeconds: String(mandate.limits.cooldown_seconds),
+    maxQuoteAgeSeconds: String(mandate.limits.max_quote_age_seconds),
+    mandateExpiresAt: mandate.expires_at.slice(0, 16),
+    declarative: {
+      ...fallback.declarative,
+      intervalSeconds: String(mandate.plan?.trigger.interval_seconds ?? fallback.declarative.intervalSeconds),
+      rules: declarativeRules?.length ? declarativeRules : fallback.declarative.rules,
+      maxDailyTrades: String(mandate.limits.max_daily_trades ?? fallback.declarative.maxDailyTrades),
+      maxTotalTrades: String(mandate.limits.max_total_trades ?? fallback.declarative.maxTotalTrades),
+      maxMandateOccurrences: String(mandate.limits.max_mandate_occurrences ?? fallback.declarative.maxMandateOccurrences),
+      maxCumulativeValue: mandate.limits.max_cumulative_value ?? fallback.declarative.maxCumulativeValue,
+      maxDailyFeeDrops: mandate.limits.max_daily_fee_drops ?? fallback.declarative.maxDailyFeeDrops,
+      maxCumulativeFeeDrops: mandate.limits.max_cumulative_fee_drops ?? fallback.declarative.maxCumulativeFeeDrops,
+    },
+  };
+}
 
 function toView(strategy: Strategy, events: StrategyAuditEvent[]): StrategyView {
+  const mandate = strategy.mandate as WireMandate;
+  const allocation = mandate.allocation ?? (mandate.plan?.rules.map((rule) => rule.action).find((action) => action.kind === "target_allocation") as { target_xrp_bps?: number; lower_xrp_bps?: number; upper_xrp_bps?: number } | undefined);
+  const declarativeSummary = mandate.kind === "declarative_strategy_v1" && mandate.plan
+    ? `${mandate.plan.rules.length} ordered rule${mandate.plan.rules.length === 1 ? "" : "s"}; first match may plan one order per evaluation.` : undefined;
   const last = unresolvedSubmission(events);
   const heldDecisions = events.filter((event) => event.kind === "held").map((event) => { const codes = Array.isArray(event.detail.hold_codes) && event.detail.hold_codes.every((value) => typeof value === "string") ? event.detail.hold_codes.join(", ") : "unspecified"; return { id: event.decision_id ?? event.event_id, triggerId: event.trigger_id ?? "unknown", at: event.at, outcome: "hold" as const, explanation: `${typeof event.detail.explanation === "string" ? event.detail.explanation : "Strategy held without submitting."} Hold codes: ${codes}.` }; });
   const approvalDecisions = events.filter((event) => event.kind === "needs_approval").map((event) => ({ id: event.decision_id ?? event.event_id, triggerId: event.trigger_id ?? "unknown", at: event.at, outcome: "needs_approval" as const, explanation: typeof event.detail.next_action === "string" ? event.detail.next_action : "Complete the existing Harbor owner-approval workflow; Pilot will not sign for the owner.", ...(typeof event.detail.approval_id === "string" ? { approvalId: event.detail.approval_id } : {}) }));
-  return { id: strategy.strategy_id, lifecycle: strategy.lifecycle, mandateVersion: strategy.mandate.version, mandateDigest: strategy.mandate.digest, account: strategy.mandate.account, issuedCurrency: strategy.mandate.issued_asset.currency, issuedIssuer: strategy.mandate.issued_asset.issuer, targetXrpBps: strategy.mandate.allocation.target_xrp_bps, lowerXrpBps: strategy.mandate.allocation.lower_xrp_bps, upperXrpBps: strategy.mandate.allocation.upper_xrp_bps, maxOrderValue: strategy.mandate.limits.max_order_value, maxDailyValue: strategy.mandate.limits.max_daily_value, maxFeeDrops: strategy.mandate.limits.max_fee_drops, maxSlippageBps: strategy.mandate.limits.max_slippage_bps, minimumXrpReserveDrops: strategy.mandate.limits.min_xrp_reserve_drops, feeBufferDrops: strategy.mandate.limits.fee_buffer_drops, cooldownSeconds: strategy.mandate.limits.cooldown_seconds, expiresAt: strategy.mandate.expires_at, lastEvaluationAt: strategy.last_evaluation_at, nextEvaluationAt: strategy.next_evaluation_at, schedulerEnabled: strategy.lifecycle === "active", unresolvedTransaction: last ? { state: last.kind === "needs_approval" ? "needs_approval" : last.kind === "submission_unknown" ? "unknown" : "submitted", hash: typeof last.detail.tx_hash === "string" ? last.detail.tx_hash : typeof last.detail.hash === "string" ? last.detail.hash : undefined, approvalId: typeof last.detail.approval_id === "string" ? last.detail.approval_id : undefined } : undefined, decisions: [...(strategy.hold_reason && heldDecisions.length === 0 ? [{ id: "latest", triggerId: "latest", at: strategy.last_evaluation_at ?? strategy.updated_at, outcome: "hold" as const, explanation: strategy.hold_reason }] : []), ...heldDecisions, ...approvalDecisions], audit: events.map(strategyAuditView) };
+  return { id: strategy.strategy_id, strategyKind: mandate.kind, strategyLabel: mandate.kind === "declarative_strategy_v1" ? "Bounded declarative strategy" : undefined, strategySummary: declarativeSummary, evaluationIntervalSeconds: mandate.plan?.trigger.interval_seconds ?? 300, maxMandateOccurrences: mandate.limits.max_mandate_occurrences, lifecycle: strategy.lifecycle, mandateVersion: mandate.version, mandateDigest: mandate.digest, account: mandate.account, issuedCurrency: mandate.issued_asset.currency, issuedIssuer: mandate.issued_asset.issuer, targetXrpBps: allocation?.target_xrp_bps ?? 5000, lowerXrpBps: allocation?.lower_xrp_bps ?? 4500, upperXrpBps: allocation?.upper_xrp_bps ?? 5500, maxOrderValue: mandate.limits.max_order_value, maxDailyValue: mandate.limits.max_daily_value, maxFeeDrops: mandate.limits.max_fee_drops, maxSlippageBps: mandate.limits.max_slippage_bps, minimumXrpReserveDrops: mandate.limits.min_xrp_reserve_drops, feeBufferDrops: mandate.limits.fee_buffer_drops, cooldownSeconds: mandate.limits.cooldown_seconds, expiresAt: mandate.expires_at, lastEvaluationAt: strategy.last_evaluation_at, nextEvaluationAt: strategy.next_evaluation_at, schedulerEnabled: strategy.lifecycle === "active", unresolvedTransaction: last ? { state: last.kind === "needs_approval" ? "needs_approval" : last.kind === "submission_unknown" ? "unknown" : "submitted", hash: typeof last.detail.tx_hash === "string" ? last.detail.tx_hash : typeof last.detail.hash === "string" ? last.detail.hash : undefined, approvalId: typeof last.detail.approval_id === "string" ? last.detail.approval_id : undefined } : undefined, decisions: [...(strategy.hold_reason && heldDecisions.length === 0 ? [{ id: "latest", triggerId: "latest", at: strategy.last_evaluation_at ?? strategy.updated_at, outcome: "hold" as const, explanation: strategy.hold_reason }] : []), ...heldDecisions, ...approvalDecisions], audit: events.map(strategyAuditView) };
 }
 function mutationDescriptor(action: Exclude<PendingStrategyMutation["action"], "create">, strategy: Strategy): Omit<PendingStrategyMutation, "requestId"> { return { action, account: strategy.mandate.account, strategyId: strategy.strategy_id, expectedLifecycle: action === "pause" ? "paused" : action === "stop" || action === "kill" ? "stopped" : "active", baselineGeneration: strategy.generation, mandateVersion: strategy.mandate.version, mandateDigest: strategy.mandate.digest, startedAt: new Date().toISOString() }; }
 function globalKillPendingStorageKey(account: string): string { return `pilot:strategy:global-kill-pending:${account}`; }

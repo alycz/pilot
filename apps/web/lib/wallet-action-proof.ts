@@ -324,11 +324,17 @@ export async function validateWalletActionProofDirectory(
  * durable before model or tool execution begins.
  */
 export class FileWalletActionProofConsumer implements WalletActionProofConsumer {
-  constructor(private readonly directory: string | undefined) {}
+  constructor(
+    private readonly directory: string | undefined,
+    private readonly storeDirectory = PROOF_STORE_DIRECTORY,
+  ) {}
 
   private async resolvedDirectories(): Promise<{ parent: string; store: string }> {
     const parent = await validateWalletActionProofDirectory(this.directory);
-    const store = join(parent, PROOF_STORE_DIRECTORY);
+    if (!/^[a-z0-9-]{1,64}$/.test(this.storeDirectory)) {
+      throw new Error("The wallet action proof store namespace is invalid.");
+    }
+    const store = join(parent, this.storeDirectory);
     let created = false;
     try {
       await mkdir(store, { mode: 0o700 });

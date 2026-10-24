@@ -87,6 +87,7 @@ describe("isolated migration profiles", () => {
       "0005_v2_approval_recovery.sql",
       "0006_local_trading_isolated_onboarding_v1.sql",
       "0012_isolated_sequence_authority.sql",
+      "0014_declarative_strategies.sql",
     ]);
     expect(X402_ISOLATED_V1_MIGRATIONS).toEqual([
       "0001_init.sql",
@@ -106,7 +107,7 @@ describe("isolated migration profiles", () => {
     );
 
     expect(TRADING_ISOLATED_V1_MIGRATIONS.at(-1)).toBe(
-      "0012_isolated_sequence_authority.sql",
+      "0014_declarative_strategies.sql",
     );
     expect(X402_ISOLATED_V1_MIGRATIONS.at(-1)).toBe(
       "0009_isolated_sequence_authority.sql",

@@ -5,7 +5,11 @@ import type { OpContext, OpDef } from "../catalog/registry";
 import {
   StrategyAuditEventSchema,
   StrategyAuthorizeArgsSchema,
-  StrategyCreateArgsSchema,
+  DeclarativeStrategyCreateArgsSchema,
+  LegacyStrategyCreateArgsSchema,
+  StrategyPlanPreviewSchema,
+  StrategyPlanValidationResultSchema,
+  StrategySimulateArgsSchema,
   StrategyKillSwitchSchema,
   StrategyOwnerAuthorizationSchema,
   StrategySchema,
@@ -15,7 +19,11 @@ import {
   type StrategyCreateArgs,
   type StrategyKillSwitch,
   type StrategyOwnerAuthorization,
+  type StrategyPlanPreview,
+  type StrategyPlanValidationResult,
 } from "../contracts";
+import { validateDeclarativeStrategyProposal } from "../strategy/plan/compiler";
+import { evaluateDeclarativeStrategy } from "../strategy/plan/interpreter";
 import { StrategyStore } from "../strategy/store";
 
 const OwnerSchema = z
@@ -41,9 +49,10 @@ const ReasonSchema = z.string().trim().min(1).max(240);
 export const StrategyListOperationArgsSchema = z
   .object({ owner: OwnerSchema, network: NetworkSchema })
   .strict();
-export const StrategyCreateOperationArgsSchema = StrategyCreateArgsSchema.extend({
-  request_id: RequestIdSchema,
-}).strict();
+export const StrategyCreateOperationArgsSchema = z.discriminatedUnion("kind", [
+  LegacyStrategyCreateArgsSchema.safeExtend({ request_id: RequestIdSchema }),
+  DeclarativeStrategyCreateArgsSchema.safeExtend({ request_id: RequestIdSchema }),
+]);
 export const StrategyScopedOperationArgsSchema = z
   .object({
     strategy_id: StrategyIdSchema,
@@ -320,6 +329,34 @@ export async function handleStrategyCreate(
   );
 }
 
+export async function handleStrategyValidate(
+  rawArgs: unknown,
+): Promise<StrategyPlanValidationResult> {
+  return StrategyPlanValidationResultSchema.parse(
+    await validateDeclarativeStrategyProposal(rawArgs),
+  );
+}
+
+export async function handleStrategySimulate(
+  rawArgs: z.infer<typeof StrategySimulateArgsSchema>,
+): Promise<StrategyPlanPreview> {
+  const args = StrategySimulateArgsSchema.parse(rawArgs);
+  const validation = await validateDeclarativeStrategyProposal(args.proposal);
+  if (!validation.valid || !validation.plan_digest) {
+    throw new Error(
+      validation.errors.map((item) => `${item.path}: ${item.message}`).join("; "),
+    );
+  }
+  const evaluated = await evaluateDeclarativeStrategy({
+    authority: args.proposal,
+    observation: args.observation,
+    triggerId: `trigger:paper:${validation.plan_digest.slice(0, 32)}`,
+    decisionId: `decision:paper:${validation.plan_digest.slice(0, 32)}`,
+    now: new Date(args.at),
+  });
+  return StrategyPlanPreviewSchema.parse(evaluated.preview);
+}
+
 export async function handleStrategyList(
   input: OpContext,
   rawArgs: z.infer<typeof StrategyListOperationArgsSchema>,
@@ -536,6 +573,33 @@ export async function handleStrategyGlobalKillSet(
 
 export const ops: OpDef[] = [
   {
+    name: "strategy.validate",
+    family: "strategy",
+    summary: "Validate untrusted input against the finite Testnet declarative-strategy grammar without creating authority.",
+    tags: ["strategy", "validation", "testnet", "deterministic"],
+    args: z.unknown(),
+    returns: "a StrategyPlanValidationResult with exact diagnostics and capabilities",
+    caveats: [],
+    example:
+      'await harbor.strategy.validate({ semantics_version: "harbor.declarative-strategy/1", kind: "declarative_strategy_v1", network: "testnet", account: "r...", issued_asset: { currency: "524C555344000000000000000000000000000000", issuer: "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" }, plan: { plan_version: "1", trigger: { kind: "interval", interval_seconds: 3600 }, rules: [{ rule_id: "hourly-buy", all: [{ kind: "always" }], action: { kind: "fixed_swap", direction: "buy_xrp", order_value: "5" } }], fallback: { kind: "hold" } }, limits: { "...": "exact owner limits" }, execution_mode: "offer_create_fok", not_before: "2026-10-22T00:00:00.000Z", expires_at: "2026-10-23T00:00:00.000Z" })',
+    handler: (_ctx, args) => handleStrategyValidate(args),
+  },
+  {
+    name: "strategy.simulate",
+    family: "strategy",
+    summary: "Evaluate one explicit observation as a deterministic paper-only preview; no build, signing, submission, or return claim.",
+    tags: ["strategy", "simulation", "paper-only", "testnet", "deterministic"],
+    args: StrategySimulateArgsSchema,
+    returns: "a paper-only StrategyPlanPreview with ledger acceptance marked not tested",
+    caveats: [],
+    example:
+      'await harbor.strategy.simulate({ proposal: { "...": "validated declarative proposal" }, observation: { "...": "explicit timestamped balances and executable book" }, at: "2026-10-22T00:00:10.000Z" })',
+    handler: (_ctx, args) =>
+      handleStrategySimulate(
+        args as z.infer<typeof StrategySimulateArgsSchema>,
+      ),
+  },
+  {
     name: "strategy.create",
     family: "strategy",
     summary: "Create a non-authorizing Testnet rebalancer draft with immutable bounded limits.",
@@ -682,7 +746,7 @@ export const ops: OpDef[] = [
   {
     name: "strategy.globalKill.get",
     family: "strategy",
-    summary: "Read the fail-closed owner-scoped Testnet strategy kill switch.",
+    summary: "Read the fail-closed account-wide Testnet strategy kill switch under Harbor's enforced single-principal owner binding.",
     tags: ["strategy", "control", "kill", "status"],
     args: StrategyListOperationArgsSchema,
     returns: "StrategyKillSwitch",
@@ -698,7 +762,7 @@ export const ops: OpDef[] = [
   {
     name: "strategy.globalKill.set",
     family: "strategy",
-    summary: "Set the global strategy kill switch; clearing it requires fresh owner authorization.",
+    summary: "Set the account-wide strategy kill switch under the single-principal owner binding; clearing requires fresh owner authorization.",
     tags: ["strategy", "control", "kill", "authorization"],
     args: StrategyGlobalKillSetArgsSchema,
     returns: "StrategyKillSwitch",

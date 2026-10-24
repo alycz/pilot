@@ -317,7 +317,7 @@ export const ledgerExplainer = {
     "A live Testnet submission or validated transaction from the public replay or this explainer.",
     "Hosted or production readiness for real or virtual Ledger signing.",
     "A Ledger partnership, certification, sponsorship, endorsement, or Agent Intent support for XRPL.",
-    "Server-verifiable proof that a client-known “Approved on Ledger” badge came from physical hardware.",
+    "Server-verifiable proof that client-known signer provenance came from physical hardware.",
   ],
   sources: [
     {

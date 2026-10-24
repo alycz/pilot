@@ -1,5 +1,8 @@
 import { isValidClassicAddress } from "xrpl";
 
+import { resolvePilotRequestAuthority } from "../runtime-profile";
+import { authorizeWalletResource } from "../wallet-authorization";
+
 import {
   DemoNetworkError,
   demoNetworkErrorResponse,
@@ -48,6 +51,37 @@ function ok(body: unknown): Response {
   });
 }
 
+function requireSameOriginWallet(
+  request: Request,
+  account: string,
+  env: NodeJS.ProcessEnv,
+): void {
+  let expectedOrigin: string;
+  try {
+    expectedOrigin = resolvePilotRequestAuthority(env, request).origin;
+  } catch {
+    throw new DemoNetworkError(
+      "DEMO_NETWORK_FORBIDDEN_ORIGIN",
+      403,
+      "Same-origin demo network access is required.",
+    );
+  }
+  if (request.headers.get("origin") !== expectedOrigin) {
+    throw new DemoNetworkError(
+      "DEMO_NETWORK_FORBIDDEN_ORIGIN",
+      403,
+      "Same-origin demo network access is required.",
+    );
+  }
+  if (!authorizeWalletResource(request, account, "testnet", env)) {
+    throw new DemoNetworkError(
+      "DEMO_NETWORK_UNAUTHORIZED",
+      401,
+      "A wallet session bound to this Testnet account is required.",
+    );
+  }
+}
+
 export interface CredentialRouteDependencies {
   env: NodeJS.ProcessEnv;
   issue(
@@ -80,6 +114,7 @@ export function createCredentialIssueHandler(
         body.subject,
         dependencies.validateAddress,
       );
+      requireSameOriginWallet(request, subject, dependencies.env);
       const demoUrl = new URL("/demo/ap4m", request.url).toString();
       return ok(
         await dependencies.issue(
@@ -105,6 +140,7 @@ export function createCredentialRevokeHandler(
         body.subject,
         dependencies.validateAddress,
       );
+      requireSameOriginWallet(request, subject, dependencies.env);
       return ok(
         await dependencies.revoke(subject, { env: dependencies.env }),
       );
@@ -172,6 +208,7 @@ export function createViL1Handler(
         await json(request),
         dependencies.validateAddress,
       );
+      requireSameOriginWallet(request, input.budget_account, dependencies.env);
       const privateJwk = parsePrivateIssuerJwk(
         dependencies.env.DEMO_NETWORK_VI_L1_JWK,
       );

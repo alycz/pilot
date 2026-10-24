@@ -26,7 +26,9 @@ async function submitPersonalizationPrompt(page: Page, prompt: string): Promise<
     }),
     send.click(),
   ]);
-  expect(response.ok()).toBe(true);
+  if (!response.ok()) {
+    throw new Error(`Personalization chat failed (${response.status()}): ${await response.text()}`);
+  }
 }
 
 test.describe("personalization fixture lifecycle", () => {

@@ -1,17 +1,17 @@
 import type { Metadata } from "next";
 
-import { MarketsView } from "@/components/markets";
+import { AnalyticsView } from "@/components/markets";
 import { AppShell } from "@/components/shell";
 
 export const metadata: Metadata = {
-  title: "Markets",
-  description: "Live XRPL order books, AMM pools and route quotes, read in your browser.",
+  title: "XRPL Market Analytics",
+  description: "Source-labelled XRPL order-book, AMM and executable-liquidity analytics through Harbor.",
 };
 
 export default function MarketsPage() {
   return (
-    <AppShell active="markets" eyebrow="XRP Ledger" title="Markets" ownHeading>
-      <MarketsView />
+    <AppShell active="markets" eyebrow="XRP Ledger" title="Market Analytics" ownHeading>
+      <AnalyticsView />
     </AppShell>
   );
 }

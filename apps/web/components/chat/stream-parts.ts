@@ -5,6 +5,10 @@ import {
   type CardState,
 } from "@pilot/contracts";
 import {
+  Ap4mExactEvidenceEventSchema,
+  type Ap4mExactEvidenceEvent,
+} from "@pilot/agent/ap4m-evidence-event";
+import {
   X402PaymentEventSchema,
   type X402PaymentEvent,
 } from "@pilot/agent/x402";
@@ -210,6 +214,7 @@ type PilotStreamCallbacks = {
   onQuickNodeFreeze?: (notice: QuickNodeFreezeNotice) => void;
   onPreference: (event: PreferenceProposalEvent) => void;
   onX402?: (event: X402PaymentEvent) => void;
+  onAp4m?: (event: Ap4mExactEvidenceEvent) => void;
 };
 
 const CARD_TRANSITIONS: Readonly<Record<CardState, readonly CardState[]>> = {
@@ -311,6 +316,10 @@ export function parsePilotStreamLine(
     if (payload.type === "data-x402") {
       const parsed = X402PaymentEventSchema.safeParse(payload.data ?? payload.value);
       if (parsed.success) callbacks.onX402?.(parsed.data);
+    }
+    if (payload.type === "data-ap4m") {
+      const parsed = Ap4mExactEvidenceEventSchema.safeParse(payload.data ?? payload.value);
+      if (parsed.success) callbacks.onAp4m?.(parsed.data);
     }
     if (payload.type === "data-guardrailNotice") {
       const parsed = GuardrailNoticeSchema.safeParse(

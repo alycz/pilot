@@ -67,6 +67,7 @@ describe("X402ResultCard", () => {
     const html = renderToStaticMarkup(<X402ResultCard event={event} />);
     expect(html).toContain("Explicit local fixture only");
     expect(html).toContain("No payment, settlement, or ledger validation occurred");
+    expect(html).not.toContain("testnet.xrpl.org");
     expect(html).not.toContain("<script>");
     expect(html).not.toContain("<a href=");
     expect(html).toContain("&lt;script&gt;");
@@ -101,6 +102,7 @@ describe("X402ResultCard", () => {
     expect(html).toContain("Payment settlement is validated");
     expect(html).toContain("Only the durable journal receipt is pending");
     expect(html).toContain("Retry journal with same operation");
+    expect(html).toContain(`https://testnet.xrpl.org/transactions/${"A".repeat(64)}`);
     expect(html).not.toContain("Settlement status unknown");
   });
 });

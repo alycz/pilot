@@ -5,7 +5,7 @@ import { StrategyWorkspace } from "@/components/strategy";
 
 export const metadata: Metadata = {
   title: "Autonomous strategy",
-  description: "A deterministic, bounded XRP and test-RLUSD rebalancer for XRPL Testnet test funds.",
+  description: "Bounded declarative XRP and test-RLUSD strategies for XRPL Testnet test funds.",
 };
 
 export default function StrategyPage() {

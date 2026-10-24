@@ -152,7 +152,8 @@ function walletError(error: unknown, phase: "connect" | "sign", tx?: Record<stri
 
 class LedgerWallet implements PilotWallet {
   readonly provider = "ledger" as const;
-  readonly custody = "hardware" as const;
+  readonly custody: "hardware" | "software";
+  readonly ledgerTransport: LedgerTransport;
   private readonly path: string;
   private readonly listeners = new Set<(state: LedgerDeviceState) => void>();
   private lease: LedgerDeviceLease | undefined;
@@ -169,6 +170,8 @@ class LedgerWallet implements PilotWallet {
     private readonly options: LedgerWalletOptions,
     private readonly acquireDevice: typeof acquireLedgerDevice,
   ) {
+    this.ledgerTransport = options.transport;
+    this.custody = options.transport === "webhid" ? "hardware" : "software";
     try {
       this.path = ledgerDerivationPath(options.accountIndex ?? 0);
     } catch {

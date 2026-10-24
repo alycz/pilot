@@ -100,7 +100,8 @@ describe("Ledger wallet facade", () => {
     ).toMatchObject({ account, network: "testnet" });
     expect(fake.counts().signCalls).toBe(1);
     expect(seen).toContainEqual({ interaction: "sign-transaction", busy: true });
-    expect(wallet.custody).toBe("hardware");
+    expect(wallet.ledgerTransport).toBe("virtual");
+    expect(wallet.custody).toBe("software");
   });
 
   it("verifies the same address on the device", async () => {
@@ -111,6 +112,8 @@ describe("Ledger wallet facade", () => {
       { acquireDevice: fake.acquireDevice },
     );
     await wallet.connect();
+    expect(wallet.ledgerTransport).toBe("webhid");
+    expect(wallet.custody).toBe("hardware");
     await expect(wallet.verifyAddressOnDevice?.()).resolves.toBeUndefined();
   });
 
@@ -273,6 +276,7 @@ describe("Ledger wallet facade", () => {
       ledger: { transport: "virtual", accountIndex: 0 },
     });
     expect(wallet.provider).toBe("ledger");
-    expect(wallet.custody).toBe("hardware");
+    expect(wallet.ledgerTransport).toBe("virtual");
+    expect(wallet.custody).toBe("software");
   });
 });

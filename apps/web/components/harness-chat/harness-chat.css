@@ -1,0 +1,205 @@
+.harness-chat-toggle {
+  position: fixed;
+  left: 0;
+  top: 46%;
+  z-index: 35;
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid var(--border-strong);
+  border-left: 0;
+  background: color-mix(in srgb, var(--card) 94%, transparent);
+  padding: 0.65rem 0.75rem;
+  color: var(--foreground);
+  box-shadow: 0 12px 30px rgb(22 22 21 / 10%);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  backdrop-filter: blur(12px);
+  transition: left 180ms ease, background-color 180ms ease, color 180ms ease;
+}
+
+.harness-chat-toggle:hover,
+.harness-chat-toggle:focus-visible {
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.harness-chat-toggle svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.harness-chat-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: rgb(22 22 21 / 42%);
+  backdrop-filter: blur(2px);
+}
+
+.harness-chat-panel {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  border-right: 1px solid var(--border-strong);
+  background: var(--background);
+  box-shadow: 20px 0 60px rgb(22 22 21 / 14%);
+  transition: left 180ms ease, visibility 180ms linear;
+}
+
+.harness-chat-panel--drawer {
+  inset-block: 0;
+  width: min(92vw, 30rem);
+}
+
+.harness-chat-panel--drawer.harness-chat-panel--open {
+  left: 0;
+  visibility: visible;
+}
+
+.harness-chat-panel--drawer.harness-chat-panel--closed {
+  left: min(-92vw, -30rem);
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.harness-chat-panel--full {
+  inset: 3.5rem 0 0;
+  z-index: 15;
+  border-right: 0;
+  box-shadow: none;
+  visibility: visible;
+}
+
+.harness-chat-header {
+  display: flex;
+  min-height: 3.5rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--border);
+  padding: 0.6rem 0.85rem 0.6rem 1rem;
+  background: color-mix(in srgb, var(--sidebar) 94%, transparent);
+}
+
+.harness-chat-header h2 {
+  margin-top: 0.15rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.harness-chat-close {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--muted-foreground);
+}
+
+.harness-chat-close:hover,
+.harness-chat-close:focus-visible {
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  color: var(--foreground);
+}
+
+.harness-chat-close svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.harness-chat-view {
+  position: relative;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.harness-chat-view .pilot-chat-frame,
+.harness-chat-view .pilot-chat-surface {
+  min-height: 0 !important;
+  height: 100%;
+}
+
+.harness-chat-view .pilot-chat-conversation {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* DemoBanner uses viewport breakpoints for its local developer hint. A wide
+   viewport can still contain this narrow drawer, so keep that hint out of the
+   compact header instead of letting it collide with Card states. */
+.harness-chat-panel--drawer .pilot-chat-toolbar p.label-mono {
+  display: none;
+}
+
+/* RequestModeControl also keys its row layout to the viewport. Keep its
+   explanation below the selector when it is hosted in the narrow drawer. */
+.harness-chat-panel--drawer .harness-chat-view form > div:first-child > div {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.harness-chat-panel--drawer .harness-chat-view form > div:first-child > div > label {
+  justify-content: space-between;
+}
+
+/* ChatView remains the one full implementation. Its composer is contained by
+   this persistent surface instead of opening a competing page-wide transport. */
+.harness-chat-view .pilot-chat-composer {
+  position: absolute !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+}
+
+.harness-chat-loading {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  color: var(--muted-foreground);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+@media (min-width: 1024px) {
+  .harness-chat-host--app-shell .harness-chat-toggle {
+    left: 16rem;
+  }
+
+  .harness-chat-host--app-shell .harness-chat-toggle--open {
+    left: calc(16rem + 30rem);
+    z-index: 55;
+  }
+
+  .harness-chat-host--app-shell .harness-chat-panel--drawer.harness-chat-panel--open {
+    left: 16rem;
+  }
+
+  .harness-chat-host--app-shell .harness-chat-panel--drawer.harness-chat-panel--closed {
+    left: calc(16rem - 30rem);
+  }
+
+  .harness-chat-host--app-shell .harness-chat-panel--full {
+    inset: 4rem 0 0 16rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .harness-chat-toggle,
+  .harness-chat-panel {
+    animation-duration: 0s !important;
+    transition-duration: 0s !important;
+  }
+}

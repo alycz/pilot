@@ -173,7 +173,7 @@ export function LedgerSigningGuide({
           </label>
         </>
       ) : null}
-      {wallet ? <LedgerDeviceStatus wallet={wallet} /> : null}
+      {wallet ? <LedgerDeviceStatus wallet={wallet} transport={transport} /> : null}
       {transport === "virtual" ? <VirtualDevicePanel /> : null}
     </div>
   );

@@ -279,6 +279,7 @@ describe('ap4m.purchase payment-channel seam', () => {
 
 		const result = await handleAp4mPurchase(context(test.value), args);
 		expect(result.receipt.settlement).toBe('claim_accepted');
+		expect(result.evidence).toBeUndefined();
 		expect(order.at(-1)).toBe('execute');
 		expect(order).toEqual(expect.arrayContaining(['mandate', 'policy', 'mandate-daily', 'base-daily', 'payer']));
 		expect(test.store.claim).not.toHaveBeenCalled();

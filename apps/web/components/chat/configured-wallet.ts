@@ -3,6 +3,7 @@ import {
   WALLET_PROVIDERS,
   type LedgerDeviceState,
   type CreateWalletOptions,
+  type PilotWallet,
   type WalletProvider,
 } from "@pilot/wallet";
 import { isValidClassicAddress } from "xrpl";
@@ -118,6 +119,17 @@ export function configuredWalletOptions(
     network,
     ...(configured.ledger === undefined ? {} : { ledger: configured.ledger }),
   };
+}
+
+export function isConfiguredLedgerFacade(
+  configured: ConfiguredWalletMetadata,
+  wallet: Pick<PilotWallet, "provider" | "custody" | "ledgerTransport">,
+): boolean {
+  if (configured.provider !== "ledger" || configured.ledger === undefined) return false;
+  const { transport } = configured.ledger;
+  return wallet.provider === "ledger" &&
+    wallet.ledgerTransport === transport &&
+    wallet.custody === (transport === "webhid" ? "hardware" : "software");
 }
 
 export function ledgerRebuildIdempotencyKey(

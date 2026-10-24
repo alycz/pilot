@@ -76,10 +76,10 @@ export function StrategySignedOutDemo({ realModeStatus = "Signed out · connect 
                 Illustrative simulation · client only
               </p>
               <h1 id="strategy-demo-title" className="mt-3 text-2xl font-medium tracking-tight sm:text-3xl">
-                Explore a bounded rebalancer
+                Explore bounded autonomous strategies
               </h1>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Step through fixed XRP / test-RLUSD examples to see when a policy holds, plans a rebalance, or blocks. The simulator itself uses no wallet, live prices, model, network-dependent sample data, scheduler, or trading authority.
+                Review the exact declarative strategies Pilot supports, then step through one allocation-drift example to see when policy holds, plans one order, or blocks. The simulator itself uses no wallet, live prices, model, network-dependent sample data, scheduler, or trading authority.
               </p>
             </div>
             <dl className="bracket bracket-accent grid shrink-0 grid-cols-2 border border-primary/30 bg-card">
@@ -144,6 +144,19 @@ export function StrategySignedOutDemo({ realModeStatus = "Signed out · connect 
         </div>
 
         <aside className="min-w-0 space-y-5">
+          <section aria-labelledby="demo-capabilities-title" className="border border-border bg-card">
+            <header className="border-b border-border px-4 py-3">
+              <p className="label-mono">Supported declarative grammar</p>
+              <h2 id="demo-capabilities-title" className="mt-1 text-sm font-medium">Three bounded strategy patterns</h2>
+            </header>
+            <ol className="divide-y divide-border text-xs leading-5">
+              <li className="px-4 py-3"><strong className="text-foreground">Scheduled fixed-size trade</strong><span className="mt-1 block text-muted-foreground">An always rule at a 5–1,440 minute interval, bounded by expiry, cooldown, trade-count, value, fee, exposure, liquidity and slippage limits.</span></li>
+              <li className="px-4 py-3"><strong className="text-foreground">Price-threshold buy or sell</strong><span className="mt-1 block text-muted-foreground">A bid/ask threshold may propose one allowlisted XRP/test-RLUSD fill-or-kill order only after a fresh executable quote passes every mandate limit.</span></li>
+              <li className="px-4 py-3"><strong className="text-foreground">Allocation-drift rebalance</strong><span className="mt-1 block text-muted-foreground">An out-of-band allocation rule may propose one bounded adjustment. Rules are ordered and first-match, so one evaluation can plan at most one action.</span></li>
+            </ol>
+            <p className="border-t border-border bg-surface px-4 py-3 text-xs leading-5 text-muted-foreground">Unsupported assets, venues, URLs, scripts, recursive plans, arbitrary actions and unavailable data are rejected. New capabilities require reviewed primitive registration; the agent cannot load code.</p>
+          </section>
+
           <section aria-labelledby="demo-limits-title" className="border border-border bg-card">
             <header className="border-b border-border px-4 py-3">
               <p className="label-mono flex items-center gap-2"><ShieldCheck className="size-3.5 text-executed" aria-hidden="true" />Illustrative limits</p>

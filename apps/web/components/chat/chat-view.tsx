@@ -3,6 +3,7 @@
 import type { GuardrailNotice } from "@pilot/agent/guardrail-notice";
 import type { CardEvent } from "@pilot/contracts";
 import type { X402PaymentEvent } from "@pilot/agent";
+import type { Ap4mExactEvidenceEvent } from "@pilot/agent/ap4m-evidence-event";
 import { toBuild } from "@pilot/intents";
 import {
   createWallet,
@@ -11,6 +12,7 @@ import {
   type PilotWallet,
 } from "@pilot/wallet";
 import { ArrowLeftRight, ArrowUp, BarChart3, Bot, FlaskConical, Info, Landmark, type LucideIcon, RotateCcw, Scale, ShieldAlert, Square, UserRound, Wallet } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -21,9 +23,13 @@ import {
   type ApprovalRequest,
   type ApprovalSubmission,
 } from "@/components/approval/approval-modal";
+import { ApprovalSubmissionScope } from "@/components/approval/approval-scope";
 import { normalizeIssuedCurrencyCodes } from "@/components/approval/normalize-transaction";
-import { IntentCard, type LedgerOwnerSigner } from "@/components/cards";
+import { Ap4mReceiptCard, IntentCard, type LedgerOwnerSigner } from "@/components/cards";
 import { DeviceStatus } from "@/components/ledger/device-status";
+import { ledgerFlowName } from "@/components/ledger/provenance";
+import { useHarnessPageContext } from "@/components/harness-chat/page-context-provider";
+import { useHarnessWalletSession } from "@/components/harness-chat/session-context";
 import { SHELL_SIDEBAR_FOOTER_SLOT_ID } from "@/components/shell";
 import {
   createChatWalletActionProof,
@@ -49,6 +55,7 @@ import { DemoBanner } from "./chat-notice";
 import {
   configuredWalletMetadata,
   configuredWalletOptions,
+  isConfiguredLedgerFacade,
   ledgerDeviceReady,
   ledgerRebuildIdempotencyKey,
   type ConfiguredWalletMetadata,
@@ -67,6 +74,13 @@ import {
 import { fixtureQuickNodeFreezeNotice } from "../../app/chat/fixtures";
 import { bindApprovalTransaction } from "./approval-binding";
 import { X402ResultCard } from "./x402-result-card";
+import { RequestModeControl } from "./request-mode-control";
+import {
+  ChatRequestGate,
+  resolveRequestMode,
+  type ChatRequestMode,
+  type RequestModeResolution,
+} from "./request-mode";
 import {
   X402_APPROVED_RECEIVER,
   X402_MAX_PRICE_DROPS,
@@ -95,6 +109,7 @@ type ChatTurn = {
   preferences?: PreferenceProposalEvent[];
   operationId?: string;
   x402?: X402PaymentEvent;
+  ap4m?: Ap4mExactEvidenceEvent;
   streaming?: boolean;
   source?: "api" | "fixture" | "demo";
   /** Demo-only structured reply parts (tables, stats, links). */
@@ -103,6 +118,8 @@ type ChatTurn = {
   status?: string;
   /** Demo-only closing line shown after the card sequence. */
   followUp?: string;
+  /** Request-scoped interpretation only; never an approval or authority grant. */
+  requestMode?: RequestModeResolution;
 };
 
 const suggestions = [
@@ -138,13 +155,20 @@ const openingTurn: ChatTurn = {
 };
 
 export function ChatView() {
+  const pathname = usePathname();
+  const pageContext = useHarnessPageContext();
+  const hostedWalletSession = useHarnessWalletSession();
   const harbor = useMemo(() => createBrowserHarborClient(), []);
   const [publicConfig, setPublicConfig] = useState<PublicPilotConfig | null>();
-  const [walletSession, setWalletSession] = useState<WalletSessionStatus | null>();
+  const [walletSession, setWalletSession] = useState<WalletSessionStatus | null | undefined>(
+    hostedWalletSession?.session,
+  );
   const [draft, setDraft] = useState("");
+  const [requestMode, setRequestMode] = useState<ChatRequestMode>("auto");
   const [turns, setTurns] = useState<ChatTurn[]>([openingTurn]);
   const [running, setRunning] = useState(false);
   const [lastPrompt, setLastPrompt] = useState(openingTurn.prompt);
+  const [lastRequestMode, setLastRequestMode] = useState<ChatRequestMode>("auto");
   const [approvalEvent, setApprovalEvent] = useState<CardEvent>();
   const [approvalWallet, setApprovalWallet] = useState<PilotWallet>();
   const [approvalRequest, setApprovalRequest] = useState<ApprovalRequest>();
@@ -165,10 +189,13 @@ export function ChatView() {
   const x402ScopeRef = useRef<X402OperationScope | undefined>(undefined);
   const x402DispatchedRef = useRef(false);
   const preparedWalletsRef = useRef(new Map<string, PilotWallet>());
+  const approvalWalletRef = useRef<PilotWallet | undefined>(undefined);
+  const approvalScopeRef = useRef(new ApprovalSubmissionScope());
   const ledgerDeviceUnsubscribeRef = useRef<(() => void) | undefined>(undefined);
   const runRef = useRef(0);
+  const submitGateRef = useRef(new ChatRequestGate());
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const endRef = useRef<HTMLDivElement>(null);
+  const conversationRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -176,14 +203,32 @@ export function ChatView() {
     void loadPublicPilotConfig(globalThis.fetch, controller.signal)
       .then((config) => { if (active) setPublicConfig(config); })
       .catch(() => { if (active) setPublicConfig(null); });
-    void loadWalletSessionStatus(globalThis.fetch, controller.signal)
-      .then((session) => { if (active) setWalletSession(session); })
-      .catch(() => { if (active) setWalletSession(null); });
     return () => {
       active = false;
       controller.abort();
     };
   }, []);
+
+  useEffect(() => {
+    if (hostedWalletSession !== undefined) return;
+    const controller = new AbortController();
+    let active = true;
+    if (hostedWalletSession === undefined) {
+      void loadWalletSessionStatus(globalThis.fetch, controller.signal)
+        .then((session) => { if (active) setWalletSession(session); })
+        .catch(() => { if (active) setWalletSession(null); });
+    }
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [hostedWalletSession]);
+
+  useEffect(() => {
+    if (hostedWalletSession !== undefined) {
+      setWalletSession(hostedWalletSession.session);
+    }
+  }, [hostedWalletSession]);
 
   useEffect(() => {
     if (!publicConfig) {
@@ -201,14 +246,36 @@ export function ChatView() {
     }
   }, [publicConfig, walletSession]);
 
-  useEffect(() => () => ledgerDeviceUnsubscribeRef.current?.(), []);
+  const walletScope = walletSession?.authenticated
+    ? `${walletSession.network}:${walletSession.account}`
+    : "signed-out";
+  useEffect(() => {
+    // Mode selection is deliberately request-local UI state. It is neither
+    // durable authority nor transferable across owner/account changes.
+    setRequestMode("auto");
+  }, [walletScope]);
+
+  useEffect(() => {
+    approvalWalletRef.current = approvalWallet;
+  }, [approvalWallet]);
+
+  useEffect(() => () => {
+    approvalScopeRef.current.invalidate();
+    ledgerDeviceUnsubscribeRef.current?.();
+    ledgerDeviceUnsubscribeRef.current = undefined;
+    const wallets = new Set(preparedWalletsRef.current.values());
+    if (approvalWalletRef.current) wallets.add(approvalWalletRef.current);
+    preparedWalletsRef.current.clear();
+    for (const wallet of wallets) void wallet.disconnect().catch(() => undefined);
+    approvalWalletRef.current = undefined;
+  }, []);
 
   const [sidebarSlot, setSidebarSlot] = useState<HTMLElement | null>(null);
   const [cardStatesOpen, setCardStatesOpen] = useState(false);
   const closeCardStates = useCallback(() => setCardStatesOpen(false), []);
   useEffect(() => {
     setSidebarSlot(document.getElementById(SHELL_SIDEBAR_FOOTER_SLOT_ID));
-  }, []);
+  }, [pathname]);
   const sessionUi = chatSessionUi(publicConfig, walletSession);
   const walletReady = sessionUi.ready;
   const x402Scope = useMemo<X402OperationScope | undefined>(() => {
@@ -248,10 +315,14 @@ export function ChatView() {
   // Visitors without a usable wallet session get a fully local, scripted demo.
   // The live path below is unchanged and only runs when `walletReady`.
   const demoMode = !walletReady && sessionUi.notice !== null;
+  const draftRequestMode = useMemo(
+    () => resolveRequestMode(requestMode, draft),
+    [draft, requestMode],
+  );
   const [reducedMotion, setReducedMotion] = useState(false);
   const [demoApproval, setDemoApproval] = useState<{ event: CardEvent; seed: number }>();
   const demoSeqRef = useRef(0);
-  const demoTimersRef = useRef<number[]>([]);
+  const demoTimersRef = useRef<Array<{ timer: number; finish: () => void }>>([]);
 
   useEffect(() => {
     const query = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -263,8 +334,11 @@ export function ChatView() {
 
   const interrupt = useCallback((announce = true) => {
     runRef.current += 1;
-    demoTimersRef.current.forEach((timer) => window.clearTimeout(timer));
-    demoTimersRef.current = [];
+    const sleeps = demoTimersRef.current.splice(0);
+    for (const sleep of sleeps) {
+      window.clearTimeout(sleep.timer);
+      sleep.finish();
+    }
     abortRef.current?.abort();
     abortRef.current = undefined;
     setRunning(false);
@@ -293,27 +367,21 @@ export function ChatView() {
     }
   }, []);
 
-  useEffect(() => {
-    const onPopState = () => interrupt(false);
-    window.addEventListener("popstate", onPopState);
-    return () => {
-      window.removeEventListener("popstate", onPopState);
-      interrupt(false);
-    };
-  }, [interrupt]);
+  // The root harness keeps ChatView mounted across route changes. Only a true
+  // account-scope remount or app teardown interrupts the active run.
+  useEffect(() => () => interrupt(false), [interrupt]);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: running ? "smooth" : "auto", block: "nearest" });
-  }, [running, turns]);
-
-  // Demo turns grow in small steps; keep the newest content above the fixed composer.
-  useEffect(() => {
-    if (!demoMode || turns.length <= 1) return;
+    const conversation = conversationRef.current;
+    if (!conversation) return;
     const frame = window.requestAnimationFrame(() => {
-      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: running && !reducedMotion ? "smooth" : "auto" });
+      conversation.scrollTo({
+        top: conversation.scrollHeight,
+        behavior: running && !reducedMotion ? "smooth" : "auto",
+      });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [demoMode, reducedMotion, running, turns]);
+  }, [reducedMotion, running, turns]);
 
   const updateTurn = useCallback((id: string, patch: Partial<ChatTurn>) => {
     setTurns((current) => current.map((turn) => turn.id === id ? { ...turn, ...patch } : turn));
@@ -439,6 +507,7 @@ export function ChatView() {
             "AP4M purchases become available after the dedicated agent-tool integration is installed.",
           );
     }
+    approvalScopeRef.current.assertActive();
     if (!build.ok) throw new Error(build.error.message);
     const execute = await executeFreshLedgerBuild({
         deviceReady: ledgerDeviceReady(
@@ -453,6 +522,7 @@ export function ChatView() {
           idempotency_key: idempotencyKey,
         }),
     });
+    approvalScopeRef.current.assertActive();
     if (!execute.ok) throw new Error(execute.error.message);
     if (execute.data.status !== "needs_approval") {
       throw new Error(execute.data.status === "blocked" ? "Policy blocked this action before signing." : "This action does not require owner approval.");
@@ -473,6 +543,7 @@ export function ChatView() {
     try {
       if (approvalWallet && approvalWallet !== nextWallet) await approvalWallet.disconnect();
       if (!nextWallet) ({ wallet: nextWallet } = await connectConfiguredWallet(event.intent.network));
+      approvalScopeRef.current.assertActive();
       const approval = event.exec?.status === "needs_approval" ? event.exec : undefined;
       if (!approval) throw new Error("This card does not contain a signable Harbor approval.");
       const account = approval.tx_json.Account;
@@ -484,6 +555,7 @@ export function ChatView() {
         network: event.intent.network,
         ledger_index: "validated",
       });
+      approvalScopeRef.current.assertActive();
       const sequence = ledger.ok ? ledger.data.account_data.Sequence : undefined;
       if (!ledger.ok || ledger.data.validated !== true || !Number.isSafeInteger(ledger.data.ledger_index) ||
           !Number.isSafeInteger(sequence)) {
@@ -515,12 +587,13 @@ export function ChatView() {
     try {
       if (!nextWallet) {
         const connected = await connectConfiguredWallet(event.intent.network, true);
-        if (connected.configured.provider !== "ledger" || connected.wallet.custody !== "hardware") {
+        if (!isConfiguredLedgerFacade(connected.configured, connected.wallet)) {
           await connected.wallet.disconnect();
-          throw new Error("Reconnect the Ledger configured for this Pilot session.");
+          throw new Error("Reconnect the configured Ledger provider and transport for this Pilot session.");
         }
         nextWallet = connected.wallet;
       }
+      approvalScopeRef.current.assertActive();
       preparedWalletsRef.current.set(event.intent_id, nextWallet);
       setLedgerPreparedIntents((current) => new Set(current).add(event.intent_id));
     } catch (cause) {
@@ -561,11 +634,11 @@ export function ChatView() {
     if (network !== "testnet" && network !== "devnet") {
       throw new Error("Owner submission is limited to Testnet and Devnet.");
     }
-    const result = await harbor.op("tx.submit", {
-      tx_blob: txBlob,
-      network,
-      ...(approvalId ? { approval_id: approvalId } : {}),
-    });
+    const result = await approvalScopeRef.current.submit(() => harbor.op("tx.submit", {
+        tx_blob: txBlob,
+        network,
+        ...(approvalId ? { approval_id: approvalId } : {}),
+      }));
     if (!result.ok) throw new Error(result.error.message);
     if ("status" in result.data) throw new Error(result.data.detail);
     if (result.data.engine_result !== "tesSUCCESS") {
@@ -580,6 +653,7 @@ export function ChatView() {
   ): Promise<ApprovalSubmission> => {
     const account = wallet.address();
     const freshEvent = await prepareFreshApproval(event, wallet, account);
+    approvalScopeRef.current.assertActive();
     const approval = freshEvent.exec?.status === "needs_approval" ? freshEvent.exec : undefined;
     if (!approval || freshEvent.build?.build_id === event.build?.build_id) {
       throw new Error("Harbor did not return a fresh owner approval. The prior tuple was not submitted.");
@@ -589,6 +663,7 @@ export function ChatView() {
       network: freshEvent.intent.network,
       ledger_index: "validated",
     });
+    approvalScopeRef.current.assertActive();
     const sequence = ledger.ok ? ledger.data.account_data.Sequence : undefined;
     if (!ledger.ok || ledger.data.validated !== true || !Number.isSafeInteger(ledger.data.ledger_index) ||
         !Number.isSafeInteger(sequence)) {
@@ -604,12 +679,13 @@ export function ChatView() {
     if (isApprovalExpired(request.expiresAt)) {
       throw new Error("The rebuilt approval expired while the Ledger was open. Nothing was submitted.");
     }
+    approvalScopeRef.current.assertActive();
     return submitApprovalBlob(freshEvent, txBlob, request.approvalId);
   }, [harbor, prepareFreshApproval, submitApprovalBlob]);
 
   const submit = useCallback(async (
     promptInput: string,
-    options: { x402?: boolean; expectedOperationId?: string } = {},
+    options: { x402?: boolean; expectedOperationId?: string; requestMode?: ChatRequestMode } = {},
   ) => {
     const prompt = promptInput.trim();
     if (!prompt || !walletReady || running) return;
@@ -617,6 +693,7 @@ export function ChatView() {
       setX402RecoveryError("x402 requires an authenticated Testnet owner or explicit fixture mode.");
       return;
     }
+    if (!submitGateRef.current.enter()) return;
     const execute = async (lockedOperation?: PendingX402Operation) => {
     interrupt(false);
     const controller = new AbortController();
@@ -632,10 +709,13 @@ export function ChatView() {
       setX402RecoveryError(undefined);
     }
     const id = `turn-${Date.now()}-${runId}`;
+    const selectedRequestMode = options.requestMode ?? requestMode;
+    const modeResolution = resolveRequestMode(selectedRequestMode, prompt);
     setDraft("");
     setLastPrompt(prompt);
+    setLastRequestMode(selectedRequestMode);
     setRunning(true);
-    setTurns((current) => [...current, { id, prompt, response: "", operationId, streaming: true, source: "api" }]);
+    setTurns((current) => [...current, { id, prompt, response: "", operationId, streaming: true, source: "api", requestMode: modeResolution }]);
 
     try {
       let selectedModel: string | undefined;
@@ -653,6 +733,8 @@ export function ChatView() {
       }
       const requestBody = JSON.stringify({
         messages: [{ role: "user", content: prompt }],
+        request_mode: selectedRequestMode,
+        page_context: pageContext,
         ...(operationId ? { operation: "x402_compare", operation_id: operationId } : {}),
         ...(selectedModel ? { model: selectedModel } : {}),
       });
@@ -788,6 +870,11 @@ export function ChatView() {
             }
             updateTurn(id, { x402: event, source: "api" });
           },
+          onAp4m: (event) => {
+            if (runRef.current !== runId) return;
+            receivedCard = true;
+            updateTurn(id, { ap4m: event, source: "api" });
+          },
         });
         if (runRef.current !== runId) return;
         if (operationId && !receivedX402 && x402Scope) {
@@ -830,7 +917,11 @@ export function ChatView() {
     }
     };
     if (!options.x402) {
-      await execute();
+      try {
+        await execute();
+      } finally {
+        submitGateRef.current.leave();
+      }
       return;
     }
     try {
@@ -862,21 +953,26 @@ export function ChatView() {
       }
     } catch (cause) {
       setX402RecoveryError(cause instanceof Error ? cause.message : "The x402 operation could not be locked safely.");
+    } finally {
+      submitGateRef.current.leave();
     }
-  }, [connectConfiguredWallet, interrupt, publicConfig, running, updateTurn, walletReady, walletSession, x402Scope]);
+  }, [connectConfiguredWallet, interrupt, pageContext, publicConfig, requestMode, running, updateTurn, walletReady, walletSession, x402Scope]);
   /** Scripted demo turn: local timers only, no fetch, wallet or Harbor call. */
-  const runDemo = useCallback(async (promptInput: string) => {
+  const runDemo = useCallback(async (promptInput: string, selectedRequestMode: ChatRequestMode = requestMode) => {
     const prompt = promptInput.trim();
     if (!prompt) return;
+    if (!submitGateRef.current.enter()) return;
     // A new prompt cleanly stops any run still in progress.
     interrupt(true);
     const runId = ++runRef.current;
     const seq = ++demoSeqRef.current;
     const id = `demo-${seq}`;
-    const plan = routeDemoPrompt(prompt, seq);
+    const modeResolution = resolveRequestMode(selectedRequestMode, prompt);
+    const plan = routeDemoPrompt(prompt, seq, modeResolution.effective);
     const steps = buildDemoTimeline(plan, { reducedMotion });
     setDraft("");
     setLastPrompt(prompt);
+    setLastRequestMode(selectedRequestMode);
     setRunning(true);
     const quickNodeFreeze = fixtureQuickNodeFreezeNotice(prompt);
     setTurns((current) => [...current, {
@@ -885,48 +981,61 @@ export function ChatView() {
       response: "",
       streaming: true,
       source: "demo",
+      requestMode: modeResolution,
       ...(quickNodeFreeze
         ? { quickNodeFreezeNotice: quickNodeFreeze }
         : {}),
     }]);
 
-    const finished = await playDemoTimeline(steps, {
-      sleep: (milliseconds) => new Promise<void>((resolve) => {
-        demoTimersRef.current.push(window.setTimeout(resolve, milliseconds));
-      }),
-      isAlive: () => runRef.current === runId,
-      onStep: (step) => {
-        switch (step.kind) {
-          case "thinking":
-            updateTurn(id, { status: step.status });
-            break;
-          case "text":
-            updateTurn(id, { response: step.text, status: undefined });
-            break;
-          case "blocks":
-            updateTurn(id, { blocks: plan.blocks });
-            break;
-          case "event": {
-            const event = plan.events[step.index];
-            updateTurn(id, { event, events: [event] });
-            break;
+    try {
+      const finished = await playDemoTimeline(steps, {
+        sleep: (milliseconds) => new Promise<void>((resolve) => {
+          const entry: { timer: number; finish: () => void } = {
+            timer: 0,
+            finish: () => {
+              demoTimersRef.current = demoTimersRef.current.filter((candidate) => candidate !== entry);
+              resolve();
+            },
+          };
+          entry.timer = window.setTimeout(entry.finish, milliseconds);
+          demoTimersRef.current.push(entry);
+        }),
+        isAlive: () => runRef.current === runId,
+        onStep: (step) => {
+          switch (step.kind) {
+            case "thinking":
+              updateTurn(id, { status: step.status });
+              break;
+            case "text":
+              updateTurn(id, { response: step.text, status: undefined });
+              break;
+            case "blocks":
+              updateTurn(id, { blocks: plan.blocks });
+              break;
+            case "event": {
+              const event = plan.events[step.index];
+              updateTurn(id, { event, events: [event] });
+              break;
+            }
+            case "followUp":
+              updateTurn(id, { followUp: plan.followUp });
+              break;
+            case "done":
+              updateTurn(id, { streaming: false });
+              break;
           }
-          case "followUp":
-            updateTurn(id, { followUp: plan.followUp });
-            break;
-          case "done":
-            updateTurn(id, { streaming: false });
-            break;
-        }
-      },
-    });
-    if (finished && runRef.current === runId) setRunning(false);
-  }, [interrupt, reducedMotion, updateTurn]);
+        },
+      });
+      if (finished && runRef.current === runId) setRunning(false);
+    } finally {
+      submitGateRef.current.leave();
+    }
+  }, [interrupt, reducedMotion, requestMode, updateTurn]);
 
-  const send = useCallback((prompt: string) => {
-    if (demoMode) void runDemo(prompt);
-    else void submit(prompt);
-  }, [demoMode, runDemo, submit]);
+  const send = useCallback((prompt: string, selectedRequestMode: ChatRequestMode = requestMode) => {
+    if (demoMode) void runDemo(prompt, selectedRequestMode);
+    else void submit(prompt, { requestMode: selectedRequestMode });
+  }, [demoMode, requestMode, runDemo, submit]);
 
   const fillComposer = useCallback((prompt: string) => {
     setDraft(prompt);
@@ -957,6 +1066,7 @@ export function ChatView() {
       setOwnerSigners((current) => new Map(current).set(approvalEvent.intent_id, {
         kind: "ledger",
         accountIndex: ledgerMetadata.accountIndex,
+        transport: ledgerMetadata.transport,
       }));
     }
     const approved: CardEvent = {
@@ -978,9 +1088,9 @@ export function ChatView() {
   }, [approvalEvent, approvalWallet?.provider, configuredWallet?.ledger]);
 
   return (
-    <div className="min-h-[calc(100dvh-3.5rem)] min-w-0 lg:min-h-[calc(100dvh-4rem)]">
-      <section className="flex min-w-0 flex-col">
-        <div className="flex min-h-11 min-w-0 items-center justify-between gap-3 border-b border-border px-4 py-1.5 sm:px-6 lg:px-8">
+    <div className="pilot-chat-frame min-h-[calc(100dvh-3.5rem)] min-w-0 lg:min-h-[calc(100dvh-4rem)]">
+      <section className="pilot-chat-surface flex min-w-0 flex-col">
+        <div className="pilot-chat-toolbar flex min-h-11 min-w-0 items-center justify-between gap-3 border-b border-border px-4 py-1.5 sm:px-6 lg:px-8">
           {demoMode && sessionUi.notice ? (
             <DemoBanner reason={sessionUi.notice} />
           ) : (
@@ -1003,12 +1113,16 @@ export function ChatView() {
           </button>
         </div>
 
-        <div className={`mx-auto w-full min-w-0 max-w-4xl flex-1 px-4 pt-8 sm:px-6 lg:px-8 ${demoMode ? "pb-56" : "pb-60"}`}>
+        <div ref={conversationRef} className={`pilot-chat-conversation mx-auto w-full min-w-0 max-w-4xl flex-1 px-4 pt-8 sm:px-6 lg:px-8 ${demoMode ? "pb-56" : "pb-60"}`}>
           <h2 className="sr-only">Conversation</h2>
           <div className="space-y-9" aria-live="polite">
             {turns.map((turn) => (
               <article key={turn.id} className="min-w-0 space-y-5">
                 <MessageBubble role="user">{turn.prompt}</MessageBubble>
+                {turn.requestMode ? <div aria-label="Request scope" className="ml-auto max-w-2xl border border-border bg-surface px-3 py-2 text-xs leading-5 text-muted-foreground">
+                  <span className="font-mono font-medium uppercase text-foreground">{turn.requestMode.selection === "auto" ? `Let agent choose · ${turn.requestMode.label}` : turn.requestMode.label}</span>
+                  <span className="block">{turn.requestMode.review}</span>
+                </div> : null}
                 <div className="flex min-w-0 items-start gap-3">
                   <span className="grid h-9 w-9 shrink-0 place-items-center border border-border bg-card text-foreground" role="img" aria-label="Pilot"><Bot className="h-[18px] w-[18px]" strokeWidth={1.75} /></span>
                   <div className="min-w-0 flex-1">
@@ -1029,7 +1143,11 @@ export function ChatView() {
                     </div>
                     {turn.blocks ? <DemoBlocks blocks={turn.blocks} /> : null}
                     {(turn.events ?? (turn.event ? [turn.event] : [])).map((event) => {
-                      const ledgerConfigured = configuredWallet?.provider === "ledger";
+                      const ledgerTransport = configuredWallet?.provider === "ledger"
+                        ? configuredWallet.ledger?.transport
+                        : undefined;
+                      const ledgerConfigured = ledgerTransport !== undefined;
+                      const ledgerProviderLabel = ledgerFlowName(ledgerTransport);
                       const ledgerPrepared = ledgerPreparedIntents.has(event.intent_id);
                       const ledgerReady = ledgerDeviceReady(ledgerPrepared, ledgerDeviceState);
                       return (
@@ -1038,6 +1156,7 @@ export function ChatView() {
                             <>
                               <IntentCard
                                 event={event}
+                                realLedgerReceipt={false}
                                 onApprove={(candidate) => setDemoApproval({ event: candidate, seed: demoSeqRef.current * 97 + candidate.intent_id.length })}
                                 onCancel={() => interrupt(true)}
                               />
@@ -1050,6 +1169,7 @@ export function ChatView() {
                             <>
                               <IntentCard
                                 event={event}
+                                realLedgerReceipt={turn.source === "api" && publicConfig?.mockMode === false}
                                 ownerSigner={ownerSigners.get(event.intent_id)}
                                 onApprove={ledgerConfigured ? undefined : (candidate) => void openApproval(candidate)}
                                 onCancel={() => interrupt(true)}
@@ -1066,10 +1186,10 @@ export function ChatView() {
                                   >
                                     {ledgerPrepared
                                       ? "Build and approve"
-                                      : "Prepare Ledger"}
+                                      : `Prepare ${ledgerProviderLabel}`}
                                   </button>
-                                  {ledgerPrepared ? <DeviceStatus state={ledgerDeviceState} /> : (
-                                    <p className="text-xs text-muted-foreground">Connect and open the XRP app before the approval window is used.</p>
+                                  {ledgerPrepared ? <DeviceStatus state={ledgerDeviceState} transport={ledgerTransport} /> : (
+                                    <p className="text-xs text-muted-foreground">Connect {ledgerProviderLabel} and open the XRP app before the approval window is used.</p>
                                   )}
                                 </div>
                               ) : null}
@@ -1086,13 +1206,14 @@ export function ChatView() {
                     ) : null}
                     {turn.quickNodeFreezeNotice ? (
                       <div className="mt-3">
-                        <QuickNodeFreezeBanner notices={[turn.quickNodeFreezeNotice]} />
+                        <QuickNodeFreezeBanner notices={[turn.quickNodeFreezeNotice]} realLedgerReceipt={turn.source === "api" && publicConfig?.mockMode === false} />
                       </div>
                     ) : null}
                     {turn.preferences?.map((preference) => (
                       <PreferenceCard key={preferenceProposalRenderKey(preference)} proposal={preference} />
                     ))}
-                    {turn.x402 ? <X402ResultCard event={turn.x402} onRetry={turn.operationId && pendingX402?.operation_id === turn.operationId && (turn.x402.result.status === "settlement_unknown" || turn.x402.journal_status === "failed") ? () => void submit(X402_RECOVERY_PROMPT, { x402: true, expectedOperationId: turn.operationId }) : undefined} /> : null}
+                    {turn.x402 ? <X402ResultCard event={turn.x402} onRetry={turn.operationId && pendingX402?.operation_id === turn.operationId && (turn.x402.result.status === "settlement_unknown" || turn.x402.journal_status === "failed") ? () => void submit(X402_RECOVERY_PROMPT, { x402: true, expectedOperationId: turn.operationId, requestMode: "one_time" }) : undefined} /> : null}
+                    {turn.ap4m ? <Ap4mReceiptCard receipt={turn.ap4m.receipt} evidence={turn.ap4m.evidence} /> : null}
                     {turn.source === "fixture" && turn.id !== "opening" ? <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Local mock stream</p> : null}
                   </div>
                 </div>
@@ -1132,21 +1253,22 @@ export function ChatView() {
             </div>
               </div>
             ) : null}
-            <div ref={endRef} className={demoMode ? "scroll-mb-56" : "scroll-mb-64"} />
+            <div className={demoMode ? "scroll-mb-56" : "scroll-mb-64"} />
           </div>
 
         </div>
 
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 px-3 pb-3 pt-3 backdrop-blur-md sm:px-4 sm:pb-4 lg:left-64 [@media(max-height:520px)]:pb-2 [@media(max-height:520px)]:pt-2">
+        <div className="pilot-chat-composer fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 px-3 pb-3 pt-3 backdrop-blur-md sm:px-4 sm:pb-4 lg:left-64 [@media(max-height:520px)]:pb-2 [@media(max-height:520px)]:pt-2">
           <div className="mx-auto max-w-4xl">
-            {!demoMode && pendingX402 ? <div className="mb-2 flex items-center justify-between gap-3 border border-approval/25 bg-approval/8 px-3 py-2 text-xs text-approval"><span>{pendingX402.phase === "paid_journal_pending" ? "Payment is validated; durable journal recovery is pending." : pendingX402.phase === "recovering" ? "x402 settlement recovery is pending." : "An x402 recovery identity is reserved."}</span><button type="button" disabled={running || !walletReady} onClick={() => void submit(X402_RECOVERY_PROMPT, { x402: true, expectedOperationId: pendingX402.operation_id })} className="font-semibold underline disabled:opacity-40">Resume same operation</button></div> : null}
+            {!demoMode && pendingX402 ? <div className="mb-2 flex items-center justify-between gap-3 border border-approval/25 bg-approval/8 px-3 py-2 text-xs text-approval"><span>{pendingX402.phase === "paid_journal_pending" ? "Payment is validated; durable journal recovery is pending." : pendingX402.phase === "recovering" ? "x402 settlement recovery is pending." : "An x402 recovery identity is reserved."}</span><button type="button" disabled={running || !walletReady} onClick={() => void submit(X402_RECOVERY_PROMPT, { x402: true, expectedOperationId: pendingX402.operation_id, requestMode: "one_time" })} className="font-semibold underline disabled:opacity-40">Resume same operation</button></div> : null}
             {!demoMode && x402RecoveryError ? <p className="mb-2 px-1 text-xs text-blocked">{x402RecoveryError}</p> : null}
             {!demoMode && sessionUi.notice === "onboarding" ? <p className="mb-2 px-1 text-xs text-muted-foreground">Live chat is locked until a wallet proves control through <a className="font-semibold text-primary hover:underline" href="/onboarding">onboarding</a>.</p> : null}
             {!demoMode && sessionUi.notice === "unavailable" ? <p className="mb-2 px-1 text-xs text-blocked">Wallet session status is unavailable. Reload the page to retry.</p> : null}
             {!demoMode && sessionUi.notice === "proof" ? <p className="mb-2 px-1 text-xs text-blocked">Local wallet proof prerequisites are not configured. Set the server-only session secret and replay-state directory, then reload.</p> : null}
             {!demoMode && sessionUi.notice === "configuration" ? <p className="mb-2 px-1 text-xs text-blocked">Pilot configuration is unavailable. Reload the page to retry.</p> : null}
-            {!demoMode ? <div className="mb-2 flex min-w-0 flex-wrap gap-2 pb-1"><button type="button" disabled={running || !walletReady || !x402Scope} onClick={() => void submit("Purchase the approved local Testnet premium venue comparison.", { x402: true })} className="bracket bracket-light inline-flex max-w-full border border-primary/20 bg-primary/5 px-3 py-1.5 text-[11px] text-primary hover:border-primary/40 disabled:opacity-40">Premium comparison · x402</button></div> : null}
+            {!demoMode ? <div className="mb-2 flex min-w-0 flex-wrap gap-2 pb-1"><button type="button" disabled={running || !walletReady || !x402Scope} onClick={() => void submit("Purchase the approved local Testnet premium venue comparison.", { x402: true, requestMode: "one_time" })} className="bracket bracket-light inline-flex max-w-full border border-primary/20 bg-primary/5 px-3 py-1.5 text-[11px] text-primary hover:border-primary/40 disabled:opacity-40">Premium comparison · x402</button></div> : null}
             <form onSubmit={(event) => { event.preventDefault(); send(draft); }} className="bracket bracket-focus min-w-0 border border-border-strong bg-card">
+              <RequestModeControl value={requestMode} resolution={draftRequestMode} disabled={running} onChange={setRequestMode} />
               <textarea
                 ref={textareaRef}
                 value={draft}
@@ -1164,7 +1286,7 @@ export function ChatView() {
                   {publicConfig === undefined ? "Checking…" : publicConfig?.network ?? "Unavailable"}
                 </span>
                 <div className="ml-auto flex shrink-0 items-center gap-1.5">
-                  <button type="button" onClick={() => send(lastPrompt)} disabled={running || (!walletReady && !demoMode)} className="inline-flex h-8 items-center gap-1.5 px-2 font-mono text-[10px] uppercase tracking-wide text-muted-foreground transition hover:text-foreground pointer-coarse:h-11 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:text-muted-foreground"><RotateCcw className="h-3 w-3" aria-hidden="true" />Repeat</button>
+                  <button type="button" onClick={() => send(lastPrompt, lastRequestMode)} disabled={running || (!walletReady && !demoMode)} className="inline-flex h-8 items-center gap-1.5 px-2 font-mono text-[10px] uppercase tracking-wide text-muted-foreground transition hover:text-foreground pointer-coarse:h-11 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:text-muted-foreground"><RotateCcw className="h-3 w-3" aria-hidden="true" />Repeat</button>
                   {running ? (
                     <button type="button" onClick={() => interrupt(true)} className="bracket bracket-light grid h-8 w-8 shrink-0 place-items-center border border-border bg-white/[0.04] text-foreground hover:bg-white/[0.08] pointer-coarse:h-11 pointer-coarse:w-11" aria-label="Stop streaming"><Square className="h-3 w-3 fill-current" /></button>
                   ) : (
@@ -1224,6 +1346,7 @@ export function ChatView() {
           wallet={approvalWallet}
           ledger={approvalWallet.provider === "ledger" && configuredWallet?.ledger ? {
             accountIndex: configuredWallet.ledger.accountIndex,
+            transport: configuredWallet.ledger.transport,
             deviceReady: ledgerDeviceReady(
               ledgerPreparedIntents.has(approvalEvent.intent_id),
               ledgerDeviceState,

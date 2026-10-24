@@ -15,6 +15,11 @@
       "import": "./src/x402.ts",
       "default": "./src/x402.ts"
     },
+    "./ap4m-evidence-event": {
+      "types": "./src/ap4m-evidence-event.ts",
+      "import": "./src/ap4m-evidence-event.ts",
+      "default": "./src/ap4m-evidence-event.ts"
+    },
     "./proposal-provider": {
       "types": "./src/proposal-provider.ts",
       "import": "./src/proposal-provider.ts",

@@ -19,6 +19,8 @@ import {
   currentRequestPreferenceKeys,
   rejectsRememberedPreferences,
 } from "./handler";
+import { parseChatRequestMode } from "../../../components/chat/request-mode";
+import { parseHarnessPageContext } from "../../../components/harness-chat/page-context";
 
 type FixtureEnvironment = Readonly<Record<string, string | undefined>>;
 type FixtureVault = {
@@ -105,8 +107,20 @@ export async function maybeHandlePersonalizationFixtureChat(
   } catch {
     return invalid("Fixture chat requires a JSON object.");
   }
-  if (Object.keys(body).some((key) => key !== "messages" && key !== "model")) {
-    return invalid("Fixture chat is read-only and accepts messages only.");
+  if (Object.keys(body).some((key) =>
+    key !== "messages" && key !== "model" && key !== "request_mode" && key !== "page_context"
+  )) {
+    return invalid("Fixture chat accepts only read-only message metadata.");
+  }
+  try {
+    parseChatRequestMode(body.request_mode);
+  } catch {
+    return invalid("Fixture chat request mode is invalid.");
+  }
+  try {
+    parseHarnessPageContext(body.page_context);
+  } catch {
+    return invalid("Fixture chat page context is invalid.");
   }
   const currentRequest = textFromMessages(body.messages);
   if (!currentRequest) return invalid("Fixture chat requires a user message.");

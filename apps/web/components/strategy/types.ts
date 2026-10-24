@@ -3,10 +3,18 @@ import {
   OFFICIAL_TESTNET_RLUSD_ISSUER,
 } from "../../lib/rlusd-acquisition";
 import type { Strategy, StrategyAuditEvent } from "@pilot/contracts";
+import {
+  compileDeclarativePlan,
+  defaultDeclarativePlan,
+  validateDeclarativePlan,
+  type DeclarativePlanDraft,
+  type PaperInputs,
+} from "./declarative-model";
 
 export type StrategyLifecycle = "draft" | "paused" | "active" | "stopped" | "error";
 
 export type StrategyDraft = {
+  strategyMode: "legacy_rebalancer" | "declarative";
   network: "testnet";
   account: string;
   issuedAsset: { label: "test-RLUSD"; currency: string; issuer: string };
@@ -28,6 +36,8 @@ export type StrategyDraft = {
   maxQuoteAgeSeconds: string;
   mandateExpiresAt: string;
   intervalSeconds: "300";
+  declarative: DeclarativePlanDraft;
+  paperInputs: PaperInputs;
 };
 
 export type StrategyDecisionView = {
@@ -52,6 +62,11 @@ export type StrategyAuditView = {
 
 export type StrategyView = {
   id: string;
+  strategyKind?: "xrp_issued_rebalancer_v1" | "declarative_strategy_v1";
+  strategyLabel?: string;
+  strategySummary?: string;
+  evaluationIntervalSeconds?: number;
+  maxMandateOccurrences?: number;
   lifecycle: StrategyLifecycle;
   mandateVersion: number;
   mandateDigest: string;
@@ -79,7 +94,7 @@ export type StrategyView = {
   audit: StrategyAuditView[];
 };
 
-export type DraftErrors = Partial<Record<keyof StrategyDraft, string>>;
+export type DraftErrors = Partial<Record<keyof StrategyDraft | string, string>>;
 
 export type StrategyMutationAction = "create" | "activate" | "pause" | "resume" | "stop" | "kill";
 export type PendingStrategyMutation = {
@@ -160,6 +175,7 @@ export function compareDecimal(left: string, right: string): number {
 
 export function defaultStrategyDraft(account = ""): StrategyDraft {
   return {
+    strategyMode: "legacy_rebalancer",
     network: "testnet",
     account,
     issuedAsset: {
@@ -185,18 +201,39 @@ export function defaultStrategyDraft(account = ""): StrategyDraft {
     maxQuoteAgeSeconds: "20",
     mandateExpiresAt: "",
     intervalSeconds: "300",
+    declarative: defaultDeclarativePlan(),
+    paperInputs: { observedAt: "", executableBid: "", executableAsk: "", xrpAllocationBps: "" },
   };
 }
 
 export function strategyCreateInput(draft: StrategyDraft) {
-  return {
-    kind: "xrp_issued_rebalancer_v1" as const,
+  const common = {
     issued_asset: { currency: draft.issuedAsset.currency, issuer: draft.issuedAsset.issuer },
-    allocation: { target_xrp_bps: Number(draft.targetXrpBps), lower_xrp_bps: Number(draft.lowerXrpBps), upper_xrp_bps: Number(draft.upperXrpBps) },
     limits: { max_order_value: draft.maxOrderValue, max_daily_value: draft.maxDailyValue, min_order_value: draft.minOrderValue, max_fee_drops: draft.maxFeeDrops, max_slippage_bps: Number(draft.maxSlippageBps), max_price_impact_bps: Number(draft.maxPriceImpactBps), min_xrp_reserve_drops: draft.minimumXrpReserveDrops, fee_buffer_drops: draft.feeBufferDrops, max_xrp_exposure_drops: draft.maxXrpExposureDrops, max_issued_exposure: draft.maxIssuedExposure, min_liquidity_value: draft.minimumLiquidityValue, cooldown_seconds: Number(draft.cooldownSeconds), max_quote_age_seconds: Number(draft.maxQuoteAgeSeconds), max_ledger_gap: 1 },
     execution_mode: "offer_create_fok" as const,
     not_before: new Date().toISOString(),
     expires_at: new Date(draft.mandateExpiresAt).toISOString(),
+  };
+  if (draft.strategyMode === "declarative") return {
+    ...common,
+    kind: "declarative_strategy_v1" as const,
+    semantics_version: "harbor.declarative-strategy/1" as const,
+    plan: compileDeclarativePlan(draft.declarative),
+    limits: {
+      ...common.limits,
+      max_cumulative_value: draft.declarative.maxCumulativeValue,
+      max_daily_fee_drops: draft.declarative.maxDailyFeeDrops,
+      max_cumulative_fee_drops: draft.declarative.maxCumulativeFeeDrops,
+      max_daily_trades: Number(draft.declarative.maxDailyTrades),
+      max_total_trades: Number(draft.declarative.maxTotalTrades),
+      max_mandate_occurrences: Number(draft.declarative.maxMandateOccurrences),
+      cumulative_scope: "owner_network_asset_lifetime" as const,
+    },
+  };
+  return {
+    ...common,
+    kind: "xrp_issued_rebalancer_v1" as const,
+    allocation: { target_xrp_bps: Number(draft.targetXrpBps), lower_xrp_bps: Number(draft.lowerXrpBps), upper_xrp_bps: Number(draft.upperXrpBps) },
     interval_seconds: 300,
   };
 }
@@ -226,7 +263,7 @@ export function validateStrategyDraft(draft: StrategyDraft, now = new Date()): D
   for (const key of ["targetXrpBps", "lowerXrpBps", "upperXrpBps", "maxFeeDrops", "maxSlippageBps", "maxPriceImpactBps", "minimumXrpReserveDrops", "feeBufferDrops", "maxXrpExposureDrops", "cooldownSeconds", "maxQuoteAgeSeconds"] as const) {
     if (draft[key].length > 32 || !INTEGER.test(draft[key]) || BigInt(draft[key] || "0") <= 0n) errors[key] = "Enter a positive whole number up to 32 digits.";
   }
-  if (!errors.lowerXrpBps && !errors.targetXrpBps && !errors.upperXrpBps) {
+  if (draft.strategyMode === "legacy_rebalancer" && !errors.lowerXrpBps && !errors.targetXrpBps && !errors.upperXrpBps) {
     const lower = BigInt(draft.lowerXrpBps);
     const target = BigInt(draft.targetXrpBps);
     const upper = BigInt(draft.upperXrpBps);
@@ -246,6 +283,19 @@ export function validateStrategyDraft(draft: StrategyDraft, now = new Date()): D
   if (!errors.maxQuoteAgeSeconds && BigInt(draft.maxQuoteAgeSeconds) > 300n) errors.maxQuoteAgeSeconds = "Quote age must be no more than 300 seconds.";
   if (!draft.mandateExpiresAt || !Number.isFinite(Date.parse(draft.mandateExpiresAt)) || Date.parse(draft.mandateExpiresAt) <= now.getTime()) {
     errors.mandateExpiresAt = "Choose a future mandate expiry.";
+  }
+  if (draft.strategyMode === "declarative") {
+    const diagnostics = validateDeclarativePlan(draft.declarative);
+    const relationships: string[] = [];
+    if (diagnostics.length === 0) {
+      if (!errors.maxDailyValue && compareDecimal(draft.declarative.maxCumulativeValue, draft.maxDailyValue) < 0) relationships.push("limits.max_cumulative_value: Cumulative value cannot be below the daily value cap.");
+      if (!errors.maxFeeDrops && BigInt(draft.declarative.maxDailyFeeDrops) < BigInt(draft.maxFeeDrops)) relationships.push("limits.max_daily_fee_drops: Daily fee cap cannot be below the per-order fee cap.");
+      if (BigInt(draft.declarative.maxCumulativeFeeDrops) < BigInt(draft.declarative.maxDailyFeeDrops)) relationships.push("limits.max_cumulative_fee_drops: Cumulative fee cap cannot be below the daily fee cap.");
+      if (BigInt(draft.declarative.maxTotalTrades) < BigInt(draft.declarative.maxDailyTrades)) relationships.push("limits.max_total_trades: Total trade cap cannot be below the daily trade cap.");
+      for (const [index, rule] of draft.declarative.rules.entries()) if (rule.kind !== "rebalance" && !errors.maxOrderValue && compareDecimal(rule.fixedValue, draft.maxOrderValue) > 0) relationships.push(`plan.rules.${index}.action.order_value: Fixed value cannot exceed the per-order cap.`);
+    }
+    const messages = [...diagnostics.map((diagnostic) => `${diagnostic.path}: ${diagnostic.message}`), ...relationships];
+    if (messages.length > 0) errors.declarative = messages.join(" ");
   }
   return errors;
 }

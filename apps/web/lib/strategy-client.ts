@@ -4,12 +4,14 @@ import {
   StrategySchema,
   type Strategy,
   type StrategyAuditEvent,
-  type StrategyCreateArgs,
   type StrategyKillSwitch,
 } from "@pilot/contracts";
 import { z } from "zod";
 
-export type StrategyDraftInput = Omit<StrategyCreateArgs, "account" | "network">;
+// The proposal is untrusted input. Harbor's versioned schema/compiler remains
+// authoritative; Pilot deliberately does not turn a client-side shape into
+// execution authority.
+export type StrategyDraftInput = Record<string, unknown>;
 export type StrategyProofInput = {
   strategy_id: string;
   mandate_version: number;

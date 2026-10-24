@@ -293,6 +293,26 @@ describe("fresh wallet action proof", () => {
     }
   });
 
+  it("keeps wallet authentication replay ordering independent from chat action proofs", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "pilot-wallet-proof-namespaces-"));
+    await chmod(directory, 0o700);
+    try {
+      const chatProofs = new FileWalletActionProofConsumer(directory);
+      const authProofs = new FileWalletActionProofConsumer(
+        directory,
+        "wallet-auth-proofs-v1",
+      );
+      expect(await chatProofs.consume("newer-chat-proof", NOW + 60_000, NOW + 10_000))
+        .toBe(true);
+      expect(await authProofs.consume("older-auth-proof", NOW + 60_000, NOW))
+        .toBe(true);
+      expect(await authProofs.consume("older-auth-proof", NOW + 60_000, NOW))
+        .toBe(false);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("rejects an unsafe or symlinked durable proof directory", async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "pilot-wallet-proof-unsafe-"));
     const link = `${directory}-link`;

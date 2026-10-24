@@ -19,7 +19,7 @@ async function main(): Promise<void> {
     refreshed.selected_account_id,
     5_000,
   );
-  console.log(`Account: ${summary.account_id}`);
+  console.log(`Account: ${refreshed.selected_account_id}`);
   console.log(`Owner: ${summary.owner_name_masked}`);
   console.log(`Proposed budget USD: ${summary.proposed_budget_usd}`);
 }

@@ -1,8 +1,10 @@
 import {
 	Ap4mReceiptSchema,
+	Ap4mPublicEvidenceSchema,
 	McIntentSchema,
 	MerchantSchema,
 	type Ap4mReceipt,
+	type Ap4mPublicEvidence,
 	type McIntent,
 	type Merchant,
 } from '../contracts';
@@ -23,6 +25,7 @@ export type JsonObject = Record<string, unknown>;
 export interface Ap4mStoredResult {
 	receipt: Ap4mReceipt;
 	data: JsonObject;
+	evidence?: Ap4mPublicEvidence;
 }
 
 export interface Ap4mPreparedExecutionContext {
@@ -897,14 +900,19 @@ function parseObject(value: unknown, field: string, maxBytes = MAX_RESULT_BYTES)
 function parseResult(value: unknown): Ap4mStoredResult | null {
 	const parsed = parseObject(value, 'result_json');
 	if (parsed === null) return null;
-	if (Object.keys(parsed).length !== 2 || !Object.hasOwn(parsed, 'receipt') || !Object.hasOwn(parsed, 'data')) {
+	const keys = Object.keys(parsed).sort().join(',');
+	if (!['data,receipt', 'data,evidence,receipt'].includes(keys)) {
 		throw new Ap4mPurchaseStoreError('Invalid result_json', 'INVALID_DATA');
 	}
 	const receipt = Ap4mReceiptSchema.parse(parsed.receipt);
 	if (parsed.data === null || typeof parsed.data !== 'object' || Array.isArray(parsed.data)) {
 		throw new Ap4mPurchaseStoreError('Invalid result data', 'INVALID_DATA');
 	}
-	return { receipt, data: parsed.data as JsonObject };
+	return {
+		receipt,
+		data: parsed.data as JsonObject,
+		...(parsed.evidence === undefined ? {} : { evidence: Ap4mPublicEvidenceSchema.parse(parsed.evidence) }),
+	};
 }
 
 function decode(row: RawAttempt): Ap4mPurchaseAttempt {
@@ -1371,7 +1379,17 @@ export class Ap4mPurchaseStore {
 		if (receipt.mandate_id !== mandateId) {
 			throw new Ap4mPurchaseStoreError('Receipt mandate does not match attempt', 'INVALID_DATA');
 		}
-		const resultJson = serializeObject({ receipt, data: value.result.data }, 'result');
+		if (receipt.scheme === 'exact' && value.result.evidence === undefined) {
+			throw new Ap4mPurchaseStoreError('Exact AP4M result requires public evidence', 'INVALID_DATA');
+		}
+		const evidence = value.result.evidence === undefined
+			? undefined
+			: Ap4mPublicEvidenceSchema.parse(value.result.evidence);
+		const resultJson = serializeObject({
+			receipt,
+			data: value.result.data,
+			...(evidence === undefined ? {} : { evidence }),
+		}, 'result');
 		const existing = await this.required(mandateId, idempotencyKey);
 		const binding = existing.preparedContextBinding;
 		const receiptAsset = receipt.amount.asset;
@@ -1389,6 +1407,14 @@ export class Ap4mPurchaseStore {
 			receipt.amount.value !== existing.amountUsd ||
 			receipt.proof.tx_hash?.toUpperCase() !== existing.txHash) {
 			throw new Ap4mPurchaseStoreError('Receipt does not match attempt', 'INVALID_DATA');
+		}
+		if (evidence !== undefined && (
+			evidence.intent.intentId !== binding.intentId ||
+			evidence.artifacts[2].digest !== binding.l3aDigest.toUpperCase() ||
+			evidence.artifacts[3].digest !== binding.l3bDigest.toUpperCase() ||
+			evidence.artifacts[4].digest !== existing.txHash
+		)) {
+			throw new Ap4mPurchaseStoreError('Public evidence does not match attempt', 'INVALID_DATA');
 		}
 		if (
 			canonicalJson(existing.merchantResponse.data) !== canonicalJson(value.result.data) ||

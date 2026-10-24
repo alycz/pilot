@@ -4,7 +4,7 @@ import { Check } from "lucide-react";
 
 export const ONBOARDING_STEPS = [
   { id: "wallet", label: "Wallet" },
-  { id: "ai", label: "AI" },
+  { id: "ai", label: "AI optional" },
   { id: "access", label: "Access" },
   { id: "fund", label: "Fund" },
   { id: "acquire", label: "Acquire" },

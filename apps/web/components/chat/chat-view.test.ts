@@ -8,6 +8,7 @@ import {
   XAMAN_UNAVAILABLE_REASON,
   configuredWalletMetadata,
   configuredWalletOptions,
+  isConfiguredLedgerFacade,
   ledgerDeviceReady,
   ledgerRebuildIdempotencyKey,
 } from "./configured-wallet";
@@ -170,6 +171,44 @@ describe("chat wallet restoration", () => {
       account: ACCOUNT,
       ledger: { transport: "virtual", accountIndex: 2 },
     });
+  });
+
+  it.each([
+    ["webhid", "hardware"],
+    ["virtual", "software"],
+  ] as const)("matches configured %s Ledger provenance without relabeling custody", (transport, custody) => {
+    const configured = {
+      provider: "ledger" as const,
+      account: ACCOUNT,
+      ledger: { transport, accountIndex: 0 },
+    };
+    expect(isConfiguredLedgerFacade(configured, {
+      provider: "ledger",
+      ledgerTransport: transport,
+      custody,
+    })).toBe(true);
+    expect(isConfiguredLedgerFacade(configured, {
+      provider: "ledger",
+      ledgerTransport: transport,
+      custody: custody === "hardware" ? "software" : "hardware",
+    })).toBe(false);
+  });
+
+  it("fails unknown or mismatched Ledger transport provenance closed", () => {
+    const configured = {
+      provider: "ledger" as const,
+      account: ACCOUNT,
+      ledger: { transport: "virtual" as const, accountIndex: 0 },
+    };
+    expect(isConfiguredLedgerFacade(configured, {
+      provider: "ledger",
+      custody: "software",
+    })).toBe(false);
+    expect(isConfiguredLedgerFacade(configured, {
+      provider: "ledger",
+      ledgerTransport: "webhid",
+      custody: "hardware",
+    })).toBe(false);
   });
 
   it("creates a fresh bounded rebuild identity for every explicit attempt", () => {

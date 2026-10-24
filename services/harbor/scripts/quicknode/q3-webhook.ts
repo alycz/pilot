@@ -4,8 +4,6 @@ import { dirname, resolve } from "node:path";
 import { isValidClassicAddress } from "xrpl";
 import { z } from "zod";
 
-import { QuickNodeWebhookEvidenceSchema } from "../../src/quicknode/webhook.ts";
-
 import {
   isEntrypoint,
   parseProbeArgs,
@@ -23,6 +21,33 @@ const TxTypeSchema = z.string().regex(/^[A-Za-z][A-Za-z0-9]{0,63}$/);
 const ResultSchema = z
   .string()
   .regex(/^(?:tes|tec|tef|tel|tem|ter)[A-Za-z0-9_]{0,61}$/);
+const EvidenceIdentifierSchema = z
+  .string()
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
+// Keep the event-day probe runnable through Node's built-in TypeScript
+// transform. Importing the Worker module would transitively load its
+// extensionless production imports, which Node does not resolve. This strict
+// projection intentionally mirrors Harbor's public webhook-evidence envelope
+// without loading any Worker runtime code or provider payload fields.
+const QuickNodeWebhookEvidenceSchema = z
+  .object({
+    hash: HashSchema,
+    account: AccountSchema,
+    delegate: AccountSchema.optional(),
+    tx_type: TxTypeSchema,
+    result: ResultSchema,
+    ledger_index: z.number().int().nonnegative(),
+    received_at: z.string().datetime(),
+    execution: z
+      .object({
+        id: EvidenceIdentifierSchema,
+        confirmed_by: z.literal("quicknode-webhook"),
+        confirmed_at: z.string().datetime(),
+        latency_ms: z.number().int().nonnegative(),
+      })
+      .strict(),
+  })
+  .strict();
 const CanonicalTransactionSchema = z
   .object({
     hash: HashSchema,
@@ -231,8 +256,7 @@ export async function runQ3Webhook(
 ): Promise<void> {
   const args = parseProbeArgs(argv);
   const mode = probeMode(args.get("--mode") ?? process.env.QN_MODE);
-  const statusInput = args.get("--status") ?? (process.env.HARBOR_PRIVATE_EVIDENCE_ROOT ? resolve(process.env.HARBOR_PRIVATE_EVIDENCE_ROOT, "quicknode.md") : undefined);
-  const status = statusInput ? resolve(statusInput) : undefined;
+  const status = resolve(args.get("--status") ?? "status/H-qn.md");
   const payloadPath = args.get("--payload");
   const standinPath = args.get("--standin-payload");
   const executionPath = args.get("--execution");
@@ -301,7 +325,6 @@ export async function runQ3Webhook(
       `${JSON.stringify(real, null, 2)}\n`,
       { encoding: "utf8", mode: 0o600 },
     );
-    if (!status) throw new Error("--status or HARBOR_PRIVATE_EVIDENCE_ROOT is required");
     await recordProbeResult(
       "q3-webhook",
       mode,
@@ -313,7 +336,7 @@ export async function runQ3Webhook(
       dependencies,
     );
   } catch (error) {
-    if (status) await recordProbeResult(
+    await recordProbeResult(
       "q3-webhook",
       mode,
       false,

@@ -41,16 +41,33 @@ describe("autonomous strategy UI", () => {
   it("binds the create payload to the exact Testnet issue and every approved limit", () => {
     const payload = strategyCreateInput(draft);
     expect(payload.issued_asset).toEqual({ currency: "524C555344000000000000000000000000000000", issuer: "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" });
-    expect(payload.interval_seconds).toBe(300);
+    expect((payload as { interval_seconds: number }).interval_seconds).toBe(300);
     expect(payload.execution_mode).toBe("offer_create_fok");
     expect(payload.limits).toMatchObject({ max_order_value: "25", max_daily_value: "100", max_fee_drops: "20", max_slippage_bps: 100, max_price_impact_bps: 100, min_xrp_reserve_drops: "12000000", fee_buffer_drops: "1000000", cooldown_seconds: 300, max_quote_age_seconds: 20, max_ledger_gap: 1 });
   });
 
+  it("renders the bounded declarative grammar, explicit paper boundary, and immutable counters", () => {
+    const declarative = { ...draft, strategyMode: "declarative" as const, declarative: { ...draft.declarative, intervalSeconds: "900" } };
+    const markup = renderToStaticMarkup(createElement(StrategyDraftForm, { draft: declarative, onChange: vi.fn(), onReview: vi.fn() }));
+    for (const copy of ["Scheduled fixed-value XRP buys", "executable ask", "executable bid", "first match", "one fill-or-kill order per evaluation", "Cumulative value cap", "Maximum total trades", "Maximum actions for this mandate", "reserved, committed, and outcome-unknown", "same decision does not count twice", "Explicit inputs only", "not a live signal"]) expect(markup).toContain(copy);
+    expect(markup).toContain("Unsupported assets");
+    expect(markup).toContain("does not reset after a restart");
+    expect(markup).toContain("Every 900 seconds");
+    expect(markup).not.toContain("Every 5 minutes");
+    const payload = strategyCreateInput(declarative) as Record<string, unknown>;
+    expect(payload).toMatchObject({ kind: "declarative_strategy_v1", semantics_version: "harbor.declarative-strategy/1", execution_mode: "offer_create_fok", limits: { max_mandate_occurrences: 12, cumulative_scope: "owner_network_asset_lifetime" } });
+    expect(payload).not.toHaveProperty("paperInputs");
+  });
+
   it("renders immutable mandate identity and says model, memory, and chat cannot expand it", () => {
-    const markup = renderToStaticMarkup(createElement(MandateReview, { draft, digest: strategy.mandateDigest, version: 3, onBack: vi.fn(), onApprove: vi.fn() }));
+    const declarative = { ...draft, strategyMode: "declarative" as const };
+    const markup = renderToStaticMarkup(createElement(MandateReview, { draft: declarative, digest: strategy.mandateDigest, version: 3, onBack: vi.fn(), onApprove: vi.fn() }));
     expect(markup).toContain(strategy.mandateDigest);
     expect(markup).toContain(draft.issuedAsset.issuer);
     expect(markup).toContain("Model preferences, memory, and chat cannot change");
+    expect(markup).toContain("Immutable mandate action cap");
+    expect(markup).toContain("retrying the same decision does not count twice");
+    expect(markup).toContain("lifetime total-trades cap");
     expect(markup).toContain("Approve and activate this mandate");
   });
 
@@ -91,9 +108,11 @@ describe("autonomous strategy UI", () => {
 
   it("renders every lifecycle and honest not-live-accepted labeling", () => {
     for (const lifecycle of ["draft", "paused", "active", "stopped", "error"] as const) {
-      const markup = renderToStaticMarkup(createElement(StrategyStatus, { strategy: { ...strategy, lifecycle } }));
+      const markup = renderToStaticMarkup(createElement(StrategyStatus, { strategy: { ...strategy, lifecycle, strategyKind: "declarative_strategy_v1", maxMandateOccurrences: 12 } }));
       expect(markup).toContain("XRPL TESTNET · TEST FUNDS ONLY");
       expect(markup).toContain(lifecycle);
+      expect(markup).toContain("Mandate action cap");
+      expect(markup).toContain("12 actions");
       expect(markup).toContain("live bounded acceptance has not been performed");
     }
     const unavailable = renderToStaticMarkup(createElement(StrategyStatus, { strategy: { ...strategy, budgetReserved: undefined, budgetCommitted: undefined } }));

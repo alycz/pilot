@@ -81,8 +81,9 @@ export function authorizeWalletResource(
   request: Request,
   account: string,
   network: WalletSessionNetwork,
+  environment: AuthEnvironment = process.env,
 ): boolean {
-  const session = readWalletSession(request);
+  const session = readWalletSession(request, environment);
   return session?.account === account && session.network === network;
 }
 
@@ -115,6 +116,15 @@ export function authorizeWalletHarborOperation(
   // proof on /api/chat. A long-lived wallet session is insufficient and this
   // browser-reachable proxy must never dispatch a payment.
   if (op === "x402.pay") return false;
+
+  // These sponsor operations have irreversible or privileged effects and are
+  // intentionally unavailable through the browser proxy. Harbor's internal
+  // policy checks remain defense in depth, not browser authorization.
+  if (
+    op === "mandate.revoke" ||
+    op === "credential.payerAccept" ||
+    op === "ap4m.purchase"
+  ) return false;
 
   if (op === "tx.execute") {
     return hasWalletExecutionCapability(
@@ -153,6 +163,8 @@ export function authorizeWalletHarborOperation(
     op === "account.link" ||
     op === "account.revoke" ||
     op === "account.status" ||
+    op === "mandate.prepare" ||
+    op === "mandate.register" ||
     op === "policy.get" ||
     op === "policy.set" ||
     op.startsWith("tx.");

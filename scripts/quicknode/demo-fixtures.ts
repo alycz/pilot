@@ -85,6 +85,7 @@ export function verifyPilotQuickNodeDemoFixtures(): QuickNodeDemoFixtureReport {
     ledger_index: selected.ledger_index,
     close_time: "2026-10-21T00:00:00.000Z",
     action: "frozen",
+    next_step: "owner_revoke_onledger",
   });
   assert(
     JSON.stringify(parseQuickNodeFreezeNotice(rawWatchdogEvent, FIXTURE_ACCOUNT)) ===

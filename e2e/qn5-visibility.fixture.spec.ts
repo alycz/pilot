@@ -105,14 +105,14 @@ test("renders intercepted mock-live QuickNode trust and freeze evidence", async 
     });
   });
   await submitPrompt(page);
-  await assertAndCaptureChat(page, submittedTurn(page), "qn5-mock-live", txHash);
+  await assertAndCaptureChat(page, submittedTurn(page), "qn5-mock-live");
 });
 
 test("renders the logged-out QuickNode demo", async ({ page }) => {
   await installAuthFixture(page, false);
   await submitPrompt(page);
   const turn = submittedTurn(page);
-  await assertAndCaptureChat(page, turn, "qn5-logged-out-demo", "B".repeat(64));
+  await assertAndCaptureChat(page, turn, "qn5-logged-out-demo");
 });
 
 test("renders the logged-out QuickNode account panel", async ({ page }) => {
@@ -186,7 +186,6 @@ async function assertAndCaptureChat(
   page: Page,
   turn: Locator,
   prefix: string,
-  expectedHash: string,
 ) {
   const receipt = turn.getByLabel("AWS and QuickNode trust receipt");
   await expect(receipt).toBeVisible({ timeout: 15_000 });
@@ -196,7 +195,9 @@ async function assertAndCaptureChat(
   const banner = turn.getByRole("alert", { name: "QuickNode Streams freeze notice" });
   await expect(banner).toBeVisible();
   await expect(banner.getByRole("link", { name: "Revoke on-ledger" })).toHaveAttribute("href", "/onboarding?action=revoke");
-  await expect(banner.getByRole("link", { name: /View transaction/ })).toHaveAttribute("href", `https://testnet.xrpl.org/transactions/${expectedHash}`);
+  // Mock/demo hashes are illustrative identifiers, not validated-ledger
+  // receipts. Explorer links are reserved for trusted live API evidence.
+  await expect(banner.getByRole("link", { name: /View transaction/ })).toHaveCount(0);
   await receipt.locator("..").screenshot({
     animations: "disabled",
     path: path.join(screenshotDirectory, `${prefix}-trust-card.png`),

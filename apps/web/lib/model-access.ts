@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import {
   readWalletBoundOpenRouterSession,
   type OpenRouterSession,
@@ -59,10 +57,14 @@ export class BedrockDailyTurnLimitError extends Error {
   }
 }
 
-function takeBedrockTurn(apiKey: string, limit: number, now = Date.now()): void {
-  // The OAuth credential is never stored. Its one-way digest is sufficient to
-  // keep the hackathon's process-local, per-user counter isolated.
-  const userKey = createHash("sha256").update(apiKey, "utf8").digest("hex");
+function takeBedrockTurn(
+  wallet: WalletModelBinding,
+  limit: number,
+  now = Date.now(),
+): void {
+  // Account + network is the stable authenticated principal. API keys can be
+  // rotated and wallet-session cookies can be renewed without resetting caps.
+  const userKey = `${wallet.network}\0${wallet.account}`;
   const current = bedrockTurnBuckets.get(userKey);
   const bucket =
     current && current.resetAt > now
@@ -76,6 +78,11 @@ function takeBedrockTurn(apiKey: string, limit: number, now = Date.now()): void 
       Math.max(1, Math.ceil((bucket.resetAt - now) / 1_000)),
     );
   }
+}
+
+/** Test isolation only; production never resets authenticated wallet caps. */
+export function resetBedrockTurnBucketsForTest(): void {
+  bedrockTurnBuckets.clear();
 }
 
 export function getDefaultModel(): string {
@@ -162,7 +169,7 @@ export function getModelAccess(request: Request): ModelAccess {
       aws.bedrockMode !== "off" &&
       aws.bedrockModels.includes(model)
     ) {
-      takeBedrockTurn(session.apiKey, aws.bedrockDailyTurnCap);
+      takeBedrockTurn(session.wallet, aws.bedrockDailyTurnCap);
       return {
         provider: "bedrock",
         model,

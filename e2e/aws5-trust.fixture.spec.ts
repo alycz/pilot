@@ -192,7 +192,12 @@ async function installAuthFixture(page: Page, authenticated: boolean) {
     });
   });
   await page.route("**/api/auth/wallet/session", async (route) => {
-    await route.fulfill({ json: { authenticated: false } });
+    await route.fulfill({ json: authenticated ? {
+      authenticated: true,
+      account: "rPT7vGmYxnV6wNP9RC2Mm3Fp9NBH3bK",
+      network: "testnet",
+      expiresAt: Date.now() + 60_000,
+    } : { authenticated: false } });
   });
   await page.route("**/api/auth/openrouter/session", async (route) => {
     if (authenticated) {
@@ -242,14 +247,11 @@ async function assertAndCaptureTrustEvidence(
   });
   await expect(banner).toBeVisible();
 
-  // The production composer is fixed to the viewport bottom. Hide only that
-  // chrome while capturing scoped evidence so it cannot cover the target.
-  await page.getByLabel("Message Pilot").evaluate((element) => {
-    let container: HTMLElement | null = element.parentElement;
-    while (container && window.getComputedStyle(container).position !== "fixed") {
-      container = container.parentElement;
-    }
-    if (container) container.style.display = "none";
+  // Hide only the named composer surface while capturing scoped evidence.
+  // In the persistent harness it is panel-contained rather than viewport-fixed,
+  // so walking ancestors by computed positioning can hide the entire harness.
+  await page.locator(".pilot-chat-composer").evaluate((element) => {
+    (element as HTMLElement).style.display = "none";
   });
 
   const noHorizontalOverflow = await page.evaluate(

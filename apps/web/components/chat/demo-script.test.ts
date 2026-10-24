@@ -37,6 +37,22 @@ describe("demo prompt router", () => {
     expect(plan.events).toHaveLength(0);
     expect(plan.reply).toMatch(/simulated/i);
   });
+
+  it("keeps one-time demo requests single and makes ongoing modes proposal-only", () => {
+    const once = routeDemoPrompt("Swap 80 RLUSD for XRP", 1, "one_time");
+    expect(once.events.filter((event) => event.state === "validated")).toHaveLength(1);
+    expect(once.followUp).toContain("one simulated transaction only");
+
+    for (const mode of ["recurring", "autonomous"] as const) {
+      const proposal = routeDemoPrompt("Swap 80 RLUSD for XRP", 2, mode);
+      expect(proposal.events).toHaveLength(0);
+      expect(`${proposal.reply} ${proposal.followUp}`).toMatch(/simulation|signed-out/i);
+      expect(`${proposal.reply} ${proposal.followUp}`).toMatch(/wallet|ledger/i);
+    }
+    const ambiguous = routeDemoPrompt("Trade XRP", 3, "clarify");
+    expect(ambiguous.events).toHaveLength(0);
+    expect(ambiguous.reply).toMatch(/choose a request mode/i);
+  });
 });
 
 describe("demo swap scenarios follow the spending policy", () => {

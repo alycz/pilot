@@ -591,16 +591,21 @@ describe("Hermes durable retention journal", () => {
     });
     const before = await readFile(lockPath, "utf8");
     const delay = vi.fn(async () => undefined);
+    const retryClock = vi.spyOn(performance, "now").mockReturnValue(0);
     const journal = new HermesRetentionJournal(statePath, {
       now: () => NOW + 120_000,
       processState: () => "alive",
       lockRetryDelay: delay,
     });
 
-    await expect(journal.acceptConsent(SCOPE, NOW + 120_000))
-      .rejects.toBeInstanceOf(HermesRetentionContentionError);
-    expect(delay).toHaveBeenCalledTimes(60);
-    expect(await readFile(lockPath, "utf8")).toBe(before);
+    try {
+      await expect(journal.acceptConsent(SCOPE, NOW + 120_000))
+        .rejects.toBeInstanceOf(HermesRetentionContentionError);
+      expect(delay).toHaveBeenCalledTimes(60);
+      expect(await readFile(lockPath, "utf8")).toBe(before);
+    } finally {
+      retryClock.mockRestore();
+    }
   });
 
   it("fails immediately when old-lock owner state is ambiguous", async () => {

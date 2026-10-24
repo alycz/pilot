@@ -327,6 +327,18 @@ export function verifyWalletChallenge(
     environment?: WalletArtifactEnvironment;
   } = {},
 ): WalletSession {
+  return verifyWalletChallengeForConsumption(challengeCookie, txBlob, options).session;
+}
+
+export function verifyWalletChallengeForConsumption(
+  challengeCookie: string | undefined,
+  txBlob: string,
+  options: {
+    now?: number;
+    secret?: string;
+    environment?: WalletArtifactEnvironment;
+  } = {},
+): { session: WalletSession; nonce: string; challengeExpiresAt: number } {
   const secret = options.secret ?? getSessionSecret();
   const challenge = open(challengeCookie, CHALLENGE_AAD, secret);
   if (
@@ -367,13 +379,17 @@ export function verifyWalletChallenge(
   }
 
   return {
-    version: VERSION,
-    account: challenge.account,
-    network: challenge.network,
-    expiresAt: (options.now ?? Date.now()) + WALLET_SESSION_COOKIE_OPTIONS.maxAge * 1_000,
-    ...(challenge.deployment_profile ? {
-      deployment_profile: challenge.deployment_profile,
-    } : {}),
+    session: {
+      version: VERSION,
+      account: challenge.account,
+      network: challenge.network,
+      expiresAt: (options.now ?? Date.now()) + WALLET_SESSION_COOKIE_OPTIONS.maxAge * 1_000,
+      ...(challenge.deployment_profile ? {
+        deployment_profile: challenge.deployment_profile,
+      } : {}),
+    },
+    nonce: challenge.nonce,
+    challengeExpiresAt: challenge.expiresAt,
   };
 }
 

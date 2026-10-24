@@ -2,5 +2,7 @@
 export * from "./card-state";
 export * from "./guardrail-notice";
 export * from "./prompt";
+export * from "./strategy-proposal";
 export * from "./tools";
 export * from "./x402";
+export type { Ap4mToolContext } from "./ap4m";

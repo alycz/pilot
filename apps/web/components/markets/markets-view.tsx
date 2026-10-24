@@ -18,6 +18,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { loadWalletSessionStatus } from "@/lib/harbor-browser";
+import { usePublishHarnessPageSummary } from "@/components/harness-chat/page-context-provider";
 
 import { DepthChart, PoolComposition, RouteBars } from "./charts";
 import {
@@ -500,6 +501,27 @@ export function MarketsView() {
   const live = !demo && connection.status === "open";
   const liveCount = quotedRows.filter((row) => row.state === "ready").length;
   const failed = !demo && connection.status === "failed";
+  const freshness = demo
+    ? "demo"
+    : snapshot && connection.status === "open" && liveCount === quotedRows.length
+      ? "live"
+      : snapshot && connection.status === "open"
+        ? "partial"
+        : snapshot
+          ? "stale"
+          : loadingSelected
+            ? "loading"
+            : failed || selectedState?.status === "error"
+              ? "error"
+              : "empty";
+  usePublishHarnessPageSummary({
+    network: demo ? "testnet" : network,
+    pair: selectedPair.label,
+    base_asset: base,
+    quote_asset: quote,
+    panel: openKey ? selectedRoute : "market_index",
+    freshness,
+  });
   const statusChip = demo
     ? { label: "Demo snapshot", tone: tone.info }
     : connection.status === "open"

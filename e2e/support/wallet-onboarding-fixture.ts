@@ -41,6 +41,8 @@ export async function installWalletOnboardingRoutes(
   options: WalletOnboardingRouteOptions,
 ): Promise<void> {
   let walletState = options.walletSession ?? "anonymous";
+  let oauthConnected = options.oauthConnected === true;
+  let modelSelected = oauthConnected;
   let logoutObserved = false;
   const expectedOrigin = new URL(options.baseURL).origin;
 
@@ -132,6 +134,8 @@ export async function installWalletOnboardingRoutes(
         return;
       }
       walletState = "anonymous";
+      oauthConnected = false;
+      modelSelected = false;
       await route.fulfill({ json: { authenticated: false } });
       return;
     }
@@ -170,9 +174,20 @@ export async function installWalletOnboardingRoutes(
   await page.route("**/api/auth/openrouter/session", async (route) => {
     const method = route.request().method();
     const authenticated = walletState !== "anonymous";
-    const connected = method === "GET" && authenticated && options.oauthConnected === true;
+    if (method === "DELETE") {
+      oauthConnected = false;
+      modelSelected = false;
+      await route.fulfill({
+        status: authenticated ? 200 : 401,
+        json: { connected: false, selected: false },
+      });
+      return;
+    }
+    if (method === "POST") modelSelected = true;
+    const connected = method === "GET" && authenticated && oauthConnected;
     const response = {
       connected,
+      selected: modelSelected,
       mode: connected ? "oauth" : "demo",
       model: WALLET_FIXTURE_MODEL,
       demo: {
@@ -197,6 +212,9 @@ export async function installSyntheticGemWallet(
     installed?: boolean;
     network?: "Mainnet" | "Testnet";
     account?: string;
+    connectOutcomes?: Array<"success" | "rejected">;
+    proofOutcomes?: Array<"success" | "rejected">;
+    proofDelayMs?: number;
   } = {},
 ): Promise<void> {
   await page.addInitScript((fixture) => {
@@ -206,6 +224,8 @@ export async function installSyntheticGemWallet(
     };
     fixtureWindow.__pilotWalletOnboardingFixtureCalls = [];
     const installed = fixture.installed !== false;
+    const connectOutcomes = [...fixture.connectOutcomes];
+    const proofOutcomes = [...fixture.proofOutcomes];
     if (installed) {
       fixtureWindow.gemWallet = true;
     }
@@ -217,9 +237,12 @@ export async function installSyntheticGemWallet(
       if (request.type === "REQUEST_IS_INSTALLED/V3") {
         response = { isInstalled: installed };
       } else if (installed && request.type === "REQUEST_GET_PUBLIC_KEY/V3") {
-        response = fixture.account
-          ? { result: { address: fixture.account, publicKey: "fixture-public-key" } }
-          : { result: {} };
+        const outcome = connectOutcomes.shift() ?? "success";
+        response = outcome === "rejected"
+          ? { type: "reject" }
+          : fixture.account
+            ? { result: { address: fixture.account, publicKey: "fixture-public-key" } }
+            : { result: {} };
       } else if (installed && request.type === "REQUEST_GET_NETWORK/V3") {
         response = {
           result: {
@@ -229,19 +252,30 @@ export async function installSyntheticGemWallet(
           },
         };
       } else if (installed && request.type === "REQUEST_SIGN_TRANSACTION/V3") {
-        response = { result: { signature: "DEADBEEF" } };
+        const outcome = proofOutcomes.shift() ?? "success";
+        response = outcome === "rejected"
+          ? { type: "reject" }
+          : { result: { signature: "DEADBEEF" } };
       }
       if (!response) return;
-      window.postMessage({
-        source: "GEM_WALLET_MSG_RESPONSE",
-        messagedId: request.messageId,
-        ...response,
-      }, window.location.origin);
+      const postResponse = () => window.postMessage({
+          source: "GEM_WALLET_MSG_RESPONSE",
+          messagedId: request.messageId,
+          ...response,
+        }, window.location.origin);
+      if (request.type === "REQUEST_SIGN_TRANSACTION/V3" && fixture.proofDelayMs > 0) {
+        window.setTimeout(postResponse, fixture.proofDelayMs);
+      } else {
+        postResponse();
+      }
     });
   }, {
     installed: options.installed ?? true,
     network: options.network ?? "Testnet",
     account: options.account ?? WALLET_FIXTURE_ACCOUNT,
+    connectOutcomes: options.connectOutcomes ?? [],
+    proofOutcomes: options.proofOutcomes ?? [],
+    proofDelayMs: options.proofDelayMs ?? 0,
   });
 }
 

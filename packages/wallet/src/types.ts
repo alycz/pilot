@@ -43,6 +43,8 @@ export interface PilotWallet {
   /** Sign without submitting and return a serialized signed transaction. */
   signOnly(txJson: Record<string, unknown>): Promise<string>;
   readonly custody?: "hardware" | "software";
+  /** Present only for Ledger facades so callers can label custody truthfully. */
+  readonly ledgerTransport?: "webhid" | "virtual";
   verifyAddressOnDevice?(): Promise<void>;
   onDeviceState?(listener: (state: LedgerDeviceState) => void): () => void;
   /** Record independently verified owner revocation before destructive cleanup. */

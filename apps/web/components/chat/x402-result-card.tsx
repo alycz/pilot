@@ -3,6 +3,7 @@
 import type { X402PaymentEvent } from "@pilot/agent";
 import { AlertTriangle, CheckCircle2, RotateCcw } from "lucide-react";
 import React from "react";
+import { xrplTestnetTransactionUrl } from "../../lib/xrpl-explorer";
 
 function short(value: string, leading = 8, trailing = 6): string {
   return value.length <= leading + trailing + 1
@@ -51,6 +52,7 @@ export function X402ResultCard({
   }
 
   const fixture = event.mode === "fixture";
+  const explorerUrl = fixture ? undefined : xrplTestnetTransactionUrl(event.result.tx_hash);
   const merchantJson = JSON.stringify(event.result.merchant.body, null, 2);
   return (
     <section
@@ -76,6 +78,7 @@ export function X402ResultCard({
             <div><dt className="text-muted-foreground">Transaction</dt><dd className="mt-1 font-mono">{short(event.result.tx_hash)}</dd></div>
             <div><dt className="text-muted-foreground">Journal</dt><dd className="mt-1">{event.journal_status === "recorded" ? "Recorded" : event.journal_status === "failed" ? "Write failed" : "Fixture only"}</dd></div>
           </dl>
+          {explorerUrl ? <a href={explorerUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-11 items-center text-primary underline underline-offset-4">Open validated transaction in XRPL Testnet Explorer</a> : null}
           {event.journal_error ? <p className="mt-3 text-xs text-blocked">{event.journal_error}</p> : null}
           {!fixture && event.journal_status === "failed" ? (
             <p className="mt-3 text-xs leading-5 text-approval">

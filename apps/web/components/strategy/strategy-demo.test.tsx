@@ -86,7 +86,13 @@ describe("signed-out strategy demo surface", () => {
     const markup = renderToStaticMarkup(createElement(SignedOutStrategyDemo));
     for (const text of [
       "Illustrative simulation · client only",
-      "Explore a bounded rebalancer",
+      "Explore bounded autonomous strategies",
+      "Supported declarative grammar",
+      "Scheduled fixed-size trade",
+      "Price-threshold buy or sell",
+      "Allocation-drift rebalance",
+      "Rules are ordered and first-match",
+      "the agent cannot load code",
       "The simulator itself uses no wallet, live prices, model, network-dependent sample data, scheduler, or trading authority",
       "Policy → simulation → approval",
       "Within band · Allocation band",

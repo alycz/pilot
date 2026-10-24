@@ -8,6 +8,7 @@ import type {
   StrategyExecuteResult,
   StrategyExecutionAdapter,
   StrategyReconcileResult,
+  StrategyValidatedReceipt,
 } from "./runner";
 import type { StrategyObservation } from "./engine";
 import type { UnresolvedStrategyExecution } from "./store";
@@ -20,6 +21,7 @@ type ProductionAdapterInput = {
 };
 
 const SCALE = 1_000_000_000_000_000n;
+const UPPER_TRANSACTION_HASH = /^[A-F0-9]{64}$/;
 
 function record(value: unknown, message: string): Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error(message);
@@ -95,6 +97,32 @@ function amountDrops(value: string, price: string): string {
   return drops.toString();
 }
 
+export function validateStrategyTestnetReceipt(
+  executionValue: unknown,
+  statusValue: unknown,
+): StrategyValidatedReceipt {
+  const execution = record(executionValue, "tx.execute result is malformed");
+  const status = record(statusValue, "tx.status result is malformed");
+  if (execution.status !== "executed" || execution.result !== "success" ||
+      execution.signed_by !== "delegate" || typeof execution.hash !== "string" ||
+      !UPPER_TRANSACTION_HASH.test(execution.hash) ||
+      !Number.isSafeInteger(execution.ledger_index) || Number(execution.ledger_index) <= 0) {
+    throw new Error("tx.execute omitted a strict validated delegate receipt");
+  }
+  if (status.hash !== execution.hash || status.network !== "testnet" || status.validated !== true ||
+      status.ledger_index !== execution.ledger_index || status.engine_result !== "tesSUCCESS") {
+    throw new Error("tx.status did not confirm the exact validated Testnet receipt");
+  }
+  return {
+    txHash: execution.hash,
+    network: "testnet",
+    ledgerIndex: Number(execution.ledger_index),
+    validated: true,
+    engineResult: "tesSUCCESS",
+    result: "success",
+  };
+}
+
 export function createProductionStrategyAdapter(input: ProductionAdapterInput): StrategyExecutionAdapter {
   const registry = new OpRegistry(generatedOps);
   const provider = createHarborProvider(registry, {
@@ -158,6 +186,11 @@ export function createProductionStrategyAdapter(input: ProductionAdapterInput): 
       if (typeof feeDrops !== "string") throw new Error("fee response is malformed");
       const serverInfo = record(server.info, "server_info is malformed");
       const validated = record(serverInfo.validated_ledger, "validated ledger reserve is missing");
+      if (!Number.isSafeInteger(validated.seq) || Number(validated.seq) !== ledger ||
+          !Number.isSafeInteger(validated.age) || Number(validated.age) < 0 ||
+          Number(validated.age) > strategy.mandate.limits.max_quote_age_seconds) {
+        throw new Error("validated ledger head is missing, contradictory, or stale");
+      }
       const reserveBase = decimal(String(validated.reserve_base_xrp), "reserve base is malformed") * 1_000_000n / SCALE;
       const reserveIncrement = decimal(String(validated.reserve_inc_xrp), "reserve increment is malformed") * 1_000_000n / SCALE;
       let permissions: unknown = [];
@@ -233,7 +266,11 @@ export function createProductionStrategyAdapter(input: ProductionAdapterInput): 
         throw error;
       }
       const result = record(raw, "tx.execute result is malformed");
-      if (result.status === "executed" && typeof result.hash === "string") return { status: "executed", txHash: result.hash };
+      if (result.status === "executed") {
+        const hash = typeof result.hash === "string" ? result.hash : "";
+        const status = unwrap(await provider.invoke("tx.status", { hash }));
+        return { status: "executed", ...validateStrategyTestnetReceipt(result, status) };
+      }
       if (result.status === "needs_approval") return { status: "needs_approval",
         ...(typeof result.approval_id === "string" ? { harborExecutionId: result.approval_id } : {}) };
       if (result.status === "failed" && result.engine_result === "SUBMISSION_PENDING") return { status: "pending_reconciliation" };
@@ -266,8 +303,19 @@ export function createProductionStrategyAdapter(input: ProductionAdapterInput): 
         throw error;
       }
       const result = record(raw, "tx.execute reconciliation is malformed");
-      if (result.status === "executed" && typeof result.hash === "string") {
-        return { status: "validated", evidence: { tx_hash: result.hash, durable_status: "executed" } };
+      if (result.status === "executed") {
+        const hash = typeof result.hash === "string" ? result.hash : "";
+        const status = unwrap(await provider.invoke("tx.status", { hash }));
+        const receipt = validateStrategyTestnetReceipt(result, status);
+        return { status: "validated", evidence: {
+          tx_hash: receipt.txHash,
+          network: receipt.network,
+          ledger_index: receipt.ledgerIndex,
+          validated: receipt.validated,
+          engine_result: receipt.engineResult,
+          result: receipt.result,
+          durable_status: "executed",
+        } };
       }
       if (result.status === "failed" && result.engine_result === "SUBMISSION_PENDING") return { status: "pending" };
       if (result.status === "needs_approval" && typeof result.approval_id === "string") {

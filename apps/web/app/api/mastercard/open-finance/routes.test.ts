@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   OPEN_FINANCE_SESSION_COOKIE,
@@ -14,9 +14,18 @@ import {
 } from "./_lib/handlers";
 import { GET as mockConnect } from "./mock-connect/route";
 
-function request(path: string, cookie?: string): NextRequest {
+function request(
+  path: string,
+  cookie?: string,
+  headers: Record<string, string> = {},
+): NextRequest {
   return new NextRequest(`https://pilot.example${path}`, {
-    headers: cookie ? { cookie: `${OPEN_FINANCE_SESSION_COOKIE}=${encodeURIComponent(cookie)}` } : {},
+    method: "POST",
+    headers: {
+      origin: "https://pilot.example",
+      ...(cookie ? { cookie: `${OPEN_FINANCE_SESSION_COOKIE}=${encodeURIComponent(cookie)}` } : {}),
+      ...headers,
+    },
   });
 }
 
@@ -24,11 +33,16 @@ describe("Mastercard Open Finance routes", () => {
   beforeAll(() => {
     process.env.SESSION_SECRET =
       "test-session-secret-that-is-longer-than-thirty-two-characters";
+    process.env.PILOT_DEPLOYMENT_PROFILE = "hosted";
+    process.env.PILOT_PUBLIC_ORIGIN = "https://pilot.example";
   });
 
   it("runs the complete mock flow without exposing raw PII", async () => {
     const service = new OpenFinanceService(new MockOpenFinanceTransport());
-    const start = await startOpenFinance(service);
+    const start = await startOpenFinance(
+      request("/api/mastercard/open-finance/start"),
+      service,
+    );
     expect(start.status).toBe(200);
     expect(await start.json()).toEqual({
       mode: "mock",
@@ -87,6 +101,61 @@ describe("Mastercard Open Finance routes", () => {
     const service = new OpenFinanceService(new MockOpenFinanceTransport());
     expect((await refreshOpenFinance(request("/refresh"), service)).status).toBe(401);
     expect((await summarizeOpenFinance(request("/summary"), service)).status).toBe(401);
+  });
+
+  it("rejects missing and cross-origin mutation requests before side effects", async () => {
+    const service = new OpenFinanceService(new MockOpenFinanceTransport());
+    const start = vi.spyOn(service, "start");
+    const refresh = vi.spyOn(service, "refresh");
+
+    const missingOrigin = new NextRequest(
+      "https://pilot.example/api/mastercard/open-finance/start",
+      { method: "POST" },
+    );
+    expect((await startOpenFinance(missingOrigin, service)).status).toBe(403);
+    expect(start).not.toHaveBeenCalled();
+
+    expect((await startOpenFinance(request(
+      "/api/mastercard/open-finance/start",
+      undefined,
+      { origin: "https://attacker.example" },
+    ), service)).status).toBe(403);
+    expect(start).not.toHaveBeenCalled();
+
+    expect((await refreshOpenFinance(request(
+      "/api/mastercard/open-finance/refresh",
+      undefined,
+      { origin: "https://attacker.example" },
+    ), service)).status).toBe(403);
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("derives hosted authority from configuration, never request or forwarded hosts", async () => {
+    const service = new OpenFinanceService(new MockOpenFinanceTransport());
+    const start = vi.spyOn(service, "start");
+    const internalUrl = "http://next-internal:3000/api/mastercard/open-finance/start";
+
+    const spoofedAuthority = new NextRequest(internalUrl, {
+      method: "POST",
+      headers: {
+        origin: "https://attacker.example",
+        "x-forwarded-host": "attacker.example",
+        "x-forwarded-proto": "https",
+      },
+    });
+    expect((await startOpenFinance(spoofedAuthority, service)).status).toBe(403);
+    expect(start).not.toHaveBeenCalled();
+
+    const configuredAuthority = new NextRequest(internalUrl, {
+      method: "POST",
+      headers: {
+        origin: "https://pilot.example",
+        "x-forwarded-host": "attacker.example",
+        "x-forwarded-proto": "http",
+      },
+    });
+    expect((await startOpenFinance(configuredAuthority, service)).status).toBe(200);
+    expect(start).toHaveBeenCalledTimes(1);
   });
 
   it("serves the mandatory mock Data Connect banner", async () => {

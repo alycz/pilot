@@ -14,12 +14,6 @@ export const metadata: Metadata = {
 
 export default function HomePage() {
   return (
-    <>
-      <LandingPage />
-      <AwsTrustSection />
-      <LedgerApprovalSection
-        trustSetDevicePreview={<SimulatedDevice transcript={trustSetTranscript} />}
-      />
-    </>
+    <LandingPage integrations={<><AwsTrustSection /><LedgerApprovalSection trustSetDevicePreview={<SimulatedDevice transcript={trustSetTranscript} />} /></>} />
   );
 }

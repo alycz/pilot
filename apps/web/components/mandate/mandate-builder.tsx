@@ -33,8 +33,8 @@ export function MandateBuilder({
   }
 
   return (
-    <section aria-labelledby="mandate-builder-title" className="border border-slate-300 bg-white p-5 text-slate-950">
-      <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-sky-700">XRPL Testnet</p>
+    <section aria-labelledby="mandate-builder-title" className="border border-slate-300 bg-white p-5 text-slate-950 rounded-xl overflow-hidden">
+      <p className="text-[13px] font-bold text-sky-700">XRPL Testnet</p>
       <h3 className="mt-1 text-xl font-semibold" id="mandate-builder-title">Set the agent&apos;s hard limits</h3>
       <p className="mt-2 text-sm leading-6 text-slate-600">
         You may lower the verified ${maximumTotalUsd} proposal. Pilot cannot raise it or pay a merchant you do not select.
@@ -51,7 +51,7 @@ export function MandateBuilder({
         <legend className="text-sm font-semibold">Allowed merchants</legend>
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
           {availablePayees.map((payee) => (
-            <label className="flex cursor-pointer items-center gap-3 border border-slate-200 px-3 py-2.5 text-sm" key={payee.id}>
+            <label className="flex cursor-pointer items-center gap-3 border border-slate-200 px-3 py-2.5 text-sm rounded-xl" key={payee.id}>
               <input
                 checked={value.payees.includes(payee.id)}
                 className="size-4 accent-sky-700"
@@ -67,7 +67,7 @@ export function MandateBuilder({
       <label className="mt-5 block text-sm font-semibold">
         Mandate expiry
         <input
-          className="mt-2 block w-full border border-slate-300 bg-white px-3 py-2 text-sm"
+          className="mt-2 block w-full border border-slate-300 bg-white px-3 py-2 text-sm rounded-md"
           disabled={disabled}
           onChange={(event) => update("expiresAt", event.target.value)}
           type="datetime-local"
@@ -83,7 +83,7 @@ function MoneyField({ label, max, value, onChange }: { label: string; max?: stri
     <label className="text-sm font-semibold">
       {label} (USD)
       <input
-        className="mt-2 block w-full border border-slate-300 bg-white px-3 py-2 font-mono text-sm"
+        className="mt-2 block w-full border border-slate-300 bg-white px-3 py-2 font-mono text-sm rounded-md"
         inputMode="decimal"
         max={max}
         min="0.01"

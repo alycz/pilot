@@ -6,6 +6,7 @@
 import type { CardEvent, CardState, Intent, PolicyResult } from "@pilot/contracts";
 
 import { demoAwsTrust, demoIntent, fixtureEvent } from "../../app/chat/fixtures";
+import { classifyDemoStrategy, DEMO_STRATEGY_PROMPTS, demoStrategyPlan, type DemoStrategyPlan } from "../strategy/demo-strategy";
 import type { RecommendedRequestMode } from "./request-mode";
 
 export type DemoScenarioId =
@@ -15,6 +16,7 @@ export type DemoScenarioId =
   | "compare"
   | "limits"
   | "portfolio"
+  | "strategy"
   | "fallback";
 
 export type DemoBlock =
@@ -40,6 +42,8 @@ export type DemoPlan = {
   events: CardEvent[];
   /** Short line appended after the card sequence finishes. */
   followUp?: string;
+  /** An autonomous or recurring strategy proposal, shown as a strategy card. */
+  strategy?: DemoStrategyPlan;
 };
 
 export type DemoSuggestion = { prompt: string; scenario: DemoScenarioId };
@@ -48,6 +52,7 @@ export const DEMO_SUGGESTIONS: DemoSuggestion[] = [
   { prompt: "Review the recorded Ledger approval", scenario: "swap" },
   { prompt: "Swap 80 RLUSD for XRP, max 1% slippage", scenario: "swap" },
   { prompt: "Swap 1,000 XRP to RLUSD at the best rate", scenario: "swap" },
+  { prompt: DEMO_STRATEGY_PROMPTS.rebalance, scenario: "strategy" },
   { prompt: "Compare AMM vs order book for 1,000 XRP", scenario: "compare" },
   { prompt: "Deposit 100 XRP into the vault", scenario: "vault" },
   { prompt: "Why would FREEMONEY be blocked?", scenario: "blocked" },
@@ -92,6 +97,7 @@ export function classifyDemoPrompt(prompt: string): DemoScenarioId {
   const text = prompt.toLowerCase();
   if (text === "review the recorded ledger approval") return "swap";
   if (/freemoney|\bblocked?\b|blocklist|scam/.test(text)) return "blocked";
+  if (/rebalanc|\bdrifts?\b|\bstrateg|\bdca\b|\brecurring\b/.test(text)) return "strategy";
   if (/compare|\bvs\.?\b|versus|best route|order ?book|which route/.test(text)) return "compare";
   if (/limit|policy|budget|allowance|spend/.test(text)) return "limits";
   if (/portfolio|balance|holdings|positions?|my account/.test(text)) return "portfolio";
@@ -114,20 +120,14 @@ export function routeDemoPrompt(
       followUp: "No transaction, schedule, or mandate was created.",
     };
   }
-  if (mode === "recurring") {
+  if (mode === "recurring" || mode === "autonomous" || classifyDemoPrompt(prompt) === "strategy") {
+    const plan = demoStrategyPlan(mode === "recurring" ? "recurring" : classifyDemoStrategy(prompt));
     return {
-      scenario: "fallback",
-      reply: "Recurring mode would draft a bounded schedule for review: exact interval, action, Testnet account and assets, cumulative value and fee caps, trade count, cooldown, and expiry. This signed-out simulation does not create or run that schedule.",
+      scenario: "strategy",
+      reply: `This signed-out simulation drafted ${plan.kind === "rebalance" ? "a rebalancing strategy" : plan.kind === "recurring" ? "a recurring buy" : "a price trigger"} for review. Choosing a mode is not approval. This signed-out simulation cannot activate or execute it, and nothing here connects a wallet, creates a mandate, submits an order or touches the ledger.`,
       events: [],
-      followUp: "Review and owner approval would be separate. Nothing touched a wallet or ledger.",
-    };
-  }
-  if (mode === "autonomous") {
-    return {
-      scenario: "fallback",
-      reply: "Autonomous mode would draft a supported declarative strategy for immutable review: ordered rules, exact Testnet account and assets, actions, limits, expiry, semantics version, and digest. Choosing the mode is not approval, and this signed-out simulation cannot activate or execute it.",
-      events: [],
-      followUp: "No mandate, wallet proof, transaction, or ledger submission was created.",
+      strategy: plan,
+      followUp: "A live setup would require separate owner review and approval. No mandate, wallet proof, transaction, schedule, or ledger submission was created.",
     };
   }
   if (prompt.trim().toLowerCase() === "review the recorded ledger approval") {
@@ -456,6 +456,7 @@ export type DemoStep =
   | { kind: "text"; delay: number; text: string }
   | { kind: "blocks"; delay: number }
   | { kind: "event"; delay: number; index: number }
+  | { kind: "strategy"; delay: number; phase: "drafting" | "proposed" }
   | { kind: "followUp"; delay: number }
   | { kind: "done"; delay: number };
 
@@ -467,6 +468,7 @@ export const DEMO_THINKING: Record<DemoScenarioId, string[]> = {
   blocked: ["Looking up the FREEMONEY issuer…", "Checking issuer allowlist…"],
   limits: ["Reading Pilot/Policy.md…", "Summing today's spend…"],
   portfolio: ["Reading balances…", "Reading positions…"],
+  strategy: ["Turning your request into rules…", "Checking rules against your limits…", "Previewing against today's prices…"],
   fallback: ["Reading your question…", "Planning a response…"],
 };
 
@@ -550,6 +552,12 @@ export function buildDemoTimeline(
     const dwell = index === 0 ? [500, 800] as [number, number] : STATE_DWELL[previous!] ?? [800, 1200];
     steps.push({ kind: "event", delay: cap(between(rng, dwell)), index });
   });
+
+  // 4b. Strategy proposal: a short drafting state, then the plan.
+  if (plan.strategy) {
+    steps.push({ kind: "strategy", delay: cap(between(rng, [500, 800])), phase: "drafting" });
+    steps.push({ kind: "strategy", delay: cap(between(rng, [1_300, 1_800])), phase: "proposed" });
+  }
 
   // 5. Closing line, then done.
   if (plan.followUp) steps.push({ kind: "followUp", delay: cap(between(rng, plan.events.length ? [600, 900] : [500, 800])) });

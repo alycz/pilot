@@ -11,8 +11,8 @@ import {
   type LedgerDeviceState,
   type PilotWallet,
 } from "@pilot/wallet";
-import { ArrowLeftRight, ArrowUp, BarChart3, Bot, FlaskConical, Info, Landmark, type LucideIcon, RotateCcw, Scale, ShieldAlert, Square, UserRound, Wallet } from "lucide-react";
-import { usePathname } from "next/navigation";
+import { ArrowLeftRight, ArrowUp, BarChart3, Bot, FlaskConical, Info, Landmark, type LucideIcon, Navigation2, RotateCcw, Scale, ShieldAlert, Square, UserRound, Wallet } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -25,8 +25,12 @@ import {
 } from "@/components/approval/approval-modal";
 import { ApprovalSubmissionScope } from "@/components/approval/approval-scope";
 import { normalizeIssuedCurrencyCodes } from "@/components/approval/normalize-transaction";
-import { Ap4mReceiptCard, IntentCard, type LedgerOwnerSigner } from "@/components/cards";
+import { Ap4mReceiptCard, DeclinedCard, IntentCard, type LedgerOwnerSigner } from "@/components/cards";
 import { DeviceStatus } from "@/components/ledger/device-status";
+import { DEMO_STRATEGY_PROMPTS } from "@/components/strategy/demo-strategy";
+import { StrategyHubProvider, useStrategyHub } from "@/components/strategy/strategy-hub";
+import { StrategyManagerPanel } from "@/components/strategy/strategy-manager-panel";
+import { StrategySidebarBlock } from "@/components/strategy/strategy-sidebar";
 import { ledgerFlowName } from "@/components/ledger/provenance";
 import { useHarnessPageContext } from "@/components/harness-chat/page-context-provider";
 import { useHarnessWalletSession } from "@/components/harness-chat/session-context";
@@ -39,6 +43,7 @@ import {
   type PublicPilotConfig,
   type WalletSessionStatus,
 } from "@/lib/harbor-browser";
+import { CardStatesDialog } from "./card-states-dialog";
 import { DemoApprovalDialog } from "./demo-approval-dialog";
 import { DemoBlocks } from "./demo-blocks";
 import {
@@ -50,7 +55,6 @@ import {
   type DemoBlock,
   type DemoScenarioId,
 } from "./demo-script";
-import { CardStatesDialog } from "./card-states-dialog";
 import { DemoBanner } from "./chat-notice";
 import {
   configuredWalletMetadata,
@@ -74,6 +78,8 @@ import {
 import { fixtureQuickNodeFreezeNotice } from "../../app/chat/fixtures";
 import { bindApprovalTransaction } from "./approval-binding";
 import { X402ResultCard } from "./x402-result-card";
+import { parseStrategyProposalOutput } from "./strategy-proposal";
+import { StrategyTurnCard, type ChatStrategyTurn } from "./strategy-turn-card";
 import { RequestModeControl } from "./request-mode-control";
 import {
   ChatRequestGate,
@@ -120,6 +126,8 @@ type ChatTurn = {
   followUp?: string;
   /** Request-scoped interpretation only; never an approval or authority grant. */
   requestMode?: RequestModeResolution;
+  /** A strategy proposal from `propose_strategy` (or the scripted demo). */
+  strategy?: ChatStrategyTurn;
 };
 
 const suggestions = [
@@ -141,6 +149,7 @@ const demoSuggestionIcons: Record<DemoScenarioId, { icon: LucideIcon; tone: stri
   compare: { icon: Scale, tone: "text-chart-4" },
   limits: { icon: BarChart3, tone: "text-muted-foreground" },
   portfolio: { icon: Wallet, tone: "text-muted-foreground" },
+  strategy: { icon: Bot, tone: "text-primary" },
   fallback: { icon: Bot, tone: "text-muted-foreground" },
 };
 
@@ -155,7 +164,17 @@ const openingTurn: ChatTurn = {
 };
 
 export function ChatView() {
+  return (
+    <StrategyHubProvider>
+      <ChatViewInner />
+    </StrategyHubProvider>
+  );
+}
+
+function ChatViewInner() {
   const pathname = usePathname();
+  const router = useRouter();
+  const strategyHub = useStrategyHub();
   const pageContext = useHarnessPageContext();
   const hostedWalletSession = useHarnessWalletSession();
   const harbor = useMemo(() => createBrowserHarborClient(), []);
@@ -271,8 +290,6 @@ export function ChatView() {
   }, []);
 
   const [sidebarSlot, setSidebarSlot] = useState<HTMLElement | null>(null);
-  const [cardStatesOpen, setCardStatesOpen] = useState(false);
-  const closeCardStates = useCallback(() => setCardStatesOpen(false), []);
   useEffect(() => {
     setSidebarSlot(document.getElementById(SHELL_SIDEBAR_FOOTER_SLOT_ID));
   }, [pathname]);
@@ -321,6 +338,10 @@ export function ChatView() {
   );
   const [reducedMotion, setReducedMotion] = useState(false);
   const [demoApproval, setDemoApproval] = useState<{ event: CardEvent; seed: number }>();
+  // Demo trades the visitor turned down at the approval step.
+  const [demoDeclined, setDemoDeclined] = useState<ReadonlySet<string>>(() => new Set());
+  const [cardStatesOpen, setCardStatesOpen] = useState(false);
+  const closeCardStates = useCallback(() => setCardStatesOpen(false), []);
   const demoSeqRef = useRef(0);
   const demoTimersRef = useRef<Array<{ timer: number; finish: () => void }>>([]);
 
@@ -774,6 +795,7 @@ export function ChatView() {
       if (response.ok && response.body) {
         let receivedCard = false;
         let receivedX402 = false;
+        const strategyToolCalls = new Set<string>();
         let streamedText = "";
         await consumePilotStream(response, {
           signal: controller.signal,
@@ -875,6 +897,26 @@ export function ChatView() {
             receivedCard = true;
             updateTurn(id, { ap4m: event, source: "api" });
           },
+          onToolInputStart: (toolCallId, toolName) => {
+            if (runRef.current !== runId || toolName !== "propose_strategy") return;
+            strategyToolCalls.add(toolCallId);
+            receivedCard = true;
+            updateTurn(id, { strategy: { source: "api", status: "drafting" }, source: "api" });
+          },
+          onToolOutput: (toolCallId, output) => {
+            if (runRef.current !== runId || !strategyToolCalls.has(toolCallId)) return;
+            const proposal = parseStrategyProposalOutput(output);
+            updateTurn(id, {
+              strategy: proposal
+                ? { source: "api", status: "proposal", proposal }
+                : { source: "api", status: "error", message: "Pilot couldn't read this plan. Ask it to draft the strategy again." },
+              source: "api",
+            });
+          },
+          onToolError: (toolCallId, errorText) => {
+            if (runRef.current !== runId || !strategyToolCalls.has(toolCallId)) return;
+            updateTurn(id, { strategy: { source: "api", status: "error", message: errorText }, source: "api" });
+          },
         });
         if (runRef.current !== runId) return;
         if (operationId && !receivedX402 && x402Scope) {
@@ -887,7 +929,7 @@ export function ChatView() {
           }
         }
         updateTurn(id, {
-          response: streamedText || (receivedCard ? "Harbor returned the transaction update below." : "Pilot finished the request."),
+          response: streamedText || (receivedCard ? "Here's the update below." : "Pilot finished the request."),
           streaming: false,
           source: "api",
         });
@@ -1017,6 +1059,9 @@ export function ChatView() {
               updateTurn(id, { event, events: [event] });
               break;
             }
+            case "strategy":
+              if (plan.strategy) updateTurn(id, { strategy: { source: "demo", status: step.phase === "drafting" ? "drafting" : "proposal", plan: plan.strategy } });
+              break;
             case "followUp":
               updateTurn(id, { followUp: plan.followUp });
               break;
@@ -1047,6 +1092,36 @@ export function ChatView() {
     });
   }, []);
 
+  const startStrategy = useCallback(() => {
+    if (pathname !== "/chat") {
+      router.push("/chat?mode=autonomous");
+      return;
+    }
+    // This mode change is a direct in-page user action. URL state never grants
+    // authority or silently changes the request scope.
+    setRequestMode("autonomous");
+    fillComposer(DEMO_STRATEGY_PROMPTS.rebalance);
+  }, [fillComposer, pathname, router]);
+
+  // URL modes only configure reviewable UI. They never submit, sign, create,
+  // activate, or grant authority.
+  const { openManager } = strategyHub;
+  useEffect(() => {
+    if (pathname !== "/chat") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("mode") === "autonomous") setRequestMode("autonomous");
+    if (params.get("strategy") === "manage") openManager();
+    // Other pages hand off a prepared request (e.g. "Cancel my open offer #41") for the person to review and send.
+    const prepared = params.get("draft");
+    if (prepared) {
+      fillComposer(prepared.slice(0, 500));
+      // Consume the handoff once so account/session remounts cannot replay it.
+      params.delete("draft");
+      const query = params.toString();
+      window.history.replaceState(window.history.state, "", query ? `${pathname}?${query}` : pathname);
+    }
+  }, [fillComposer, openManager, pathname]);
+
   const replaceDemoEvent = useCallback((next: CardEvent, followUp?: string) => {
     setTurns((current) => current.map((turn) => {
       if (!turn.events?.some((event) => event.intent_id === next.intent_id)) return turn;
@@ -1058,6 +1133,16 @@ export function ChatView() {
       };
     }));
   }, []);
+
+  const declineDemoEvent = useCallback((event: CardEvent) => {
+    setDemoDeclined((current) => new Set(current).add(event.intent_id));
+    replaceDemoEvent(event, "No problem. Try another prompt or ask for something else.");
+    window.setTimeout(() => textareaRef.current?.focus(), 0);
+  }, [replaceDemoEvent]);
+
+  // In the demo, new suggestions wait until the visitor signs or declines the open trade.
+  const demoAwaitingDecision = demoMode && turns.some((turn) => turn.source === "demo" && (turn.events ?? (turn.event ? [turn.event] : []))
+    .some((event) => event.state === "awaiting_approval" && !demoDeclined.has(event.intent_id)));
 
   const completeApproval = useCallback((submission: ApprovalSubmission) => {
     if (!approvalEvent) return;
@@ -1095,8 +1180,8 @@ export function ChatView() {
             <DemoBanner reason={sessionUi.notice} />
           ) : (
             <>
-              <p className={`inline-flex items-center gap-2 border px-2 py-1 font-mono text-[11px] uppercase tracking-wide ${walletReady ? "border-executed/30 bg-executed/10 text-executed" : "border-border text-muted-foreground"}`}>
-                <span aria-hidden="true" className={`h-1.5 w-1.5 ${walletReady ? "bg-executed" : "bg-muted-foreground"}`} />
+              <p className={`inline-flex items-center gap-2 rounded-md border px-2 py-1 text-xs ${walletReady ? "border-executed/30 bg-executed/10 text-executed" : "border-border text-muted-foreground"}`}>
+                <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${walletReady ? "bg-executed" : "bg-muted-foreground"}`} />
                 {walletReady ? "Harbor is ready" : "Preview · live chat locked"}
               </p>
               <p className="label-mono ml-auto hidden truncate lg:block">Simulate · check policy · owner signs</p>
@@ -1106,36 +1191,35 @@ export function ChatView() {
             type="button"
             onClick={() => setCardStatesOpen(true)}
             aria-haspopup="dialog"
-            className="bracket bracket-light inline-flex h-8 pointer-coarse:h-11 pointer-coarse:min-w-11 shrink-0 items-center justify-center gap-1.5 border border-border bg-white/[0.03] px-2.5 font-mono text-[10px] font-medium uppercase tracking-wide text-muted-foreground transition hover:bg-white/[0.06] hover:text-foreground"
+            className="bracket bracket-light inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-white/[0.03] px-2.5 text-xs text-muted-foreground transition hover:bg-white/[0.06] hover:text-foreground pointer-coarse:h-11 pointer-coarse:min-w-11"
           >
             <Info className="h-3.5 w-3.5" aria-hidden="true" />
             <span className="sr-only sm:not-sr-only">Card states</span>
           </button>
         </div>
-
         <div ref={conversationRef} className={`pilot-chat-conversation mx-auto w-full min-w-0 max-w-4xl flex-1 px-4 pt-8 sm:px-6 lg:px-8 ${demoMode ? "pb-56" : "pb-60"}`}>
           <h2 className="sr-only">Conversation</h2>
           <div className="space-y-9" aria-live="polite">
             {turns.map((turn) => (
               <article key={turn.id} className="min-w-0 space-y-5">
                 <MessageBubble role="user">{turn.prompt}</MessageBubble>
-                {turn.requestMode ? <div aria-label="Request scope" className="ml-auto max-w-2xl border border-border bg-surface px-3 py-2 text-xs leading-5 text-muted-foreground">
-                  <span className="font-mono font-medium uppercase text-foreground">{turn.requestMode.selection === "auto" ? `Let agent choose · ${turn.requestMode.label}` : turn.requestMode.label}</span>
+                {turn.requestMode ? <div aria-label="Request scope" className="ml-auto max-w-2xl rounded-xl border border-border bg-surface px-3 py-2 text-xs leading-5 text-muted-foreground">
+                  <span className="font-medium text-foreground">{turn.requestMode.selection === "auto" ? `Let agent choose · ${turn.requestMode.label}` : turn.requestMode.label}</span>
                   <span className="block">{turn.requestMode.review}</span>
                 </div> : null}
                 <div className="flex min-w-0 items-start gap-3">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center border border-border bg-card text-foreground" role="img" aria-label="Pilot"><Bot className="h-[18px] w-[18px]" strokeWidth={1.75} /></span>
+                  <span className="grid h-9 w-9 shrink-0 place-items-center border border-border bg-card text-foreground rounded-md" role="img" aria-label="Pilot"><Navigation2 className="h-[18px] w-[18px] rotate-45" strokeWidth={1.75} aria-hidden="true" /></span>
                   <div className="min-w-0 flex-1">
                     <div
                       className={
                         !turn.response && (turn.status || turn.streaming)
                           ? "flex min-h-6 min-w-0 items-center gap-2 text-sm leading-6 text-foreground/90"
                           : // Pilot's reply sits in a box like the user's message (cards stay outside it).
-                            "flex w-fit max-w-full min-w-0 items-center gap-2 border border-border bg-white/[0.05] px-4 py-3 text-sm leading-6 text-foreground"
+                            "flex w-fit max-w-full min-w-0 items-center gap-2 border border-border bg-white/[0.05] px-4 py-3 text-sm leading-6 text-foreground rounded-xl"
                       }
                     >
                       {!turn.response && turn.status ? (
-                        <span className="min-w-0 font-mono text-[11px] uppercase tracking-wide text-muted-foreground [overflow-wrap:anywhere]">{turn.status}</span>
+                        <span className="min-w-0 text-[13px] text-muted-foreground [overflow-wrap:anywhere]">{turn.status}</span>
                       ) : (
                         <span className="min-w-0 [overflow-wrap:anywhere]">{turn.id === "opening" && demoMode ? demoOpeningResponse : turn.response || "Thinking through the safest path"}</span>
                       )}
@@ -1152,19 +1236,16 @@ export function ChatView() {
                       const ledgerReady = ledgerDeviceReady(ledgerPrepared, ledgerDeviceState);
                       return (
                         <div key={event.intent_id} className="mt-3">
-                          {turn.source === "demo" ? (
-                            <>
-                              <IntentCard
-                                event={event}
-                                realLedgerReceipt={false}
-                                onApprove={(candidate) => setDemoApproval({ event: candidate, seed: demoSeqRef.current * 97 + candidate.intent_id.length })}
-                                onCancel={() => interrupt(true)}
-                              />
-                              <p className="flex items-center gap-1.5 border border-t-0 border-border bg-white/[0.02] px-3 py-1.5 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-                                <FlaskConical className="h-3 w-3 text-primary" aria-hidden="true" />
-                                Simulated · no wallet or ledger transaction
-                              </p>
-                            </>
+                          {turn.source === "demo" && demoDeclined.has(event.intent_id) ? (
+                            <div className="pilot-card-enter"><DeclinedCard event={event} /></div>
+                          ) : turn.source === "demo" ? (
+                            <IntentCard
+                              event={event}
+                              realLedgerReceipt={false}
+                              hideSigningNote
+                              onApprove={(candidate) => setDemoApproval({ event: candidate, seed: demoSeqRef.current * 97 + candidate.intent_id.length })}
+                              onCancel={(candidate) => declineDemoEvent(candidate)}
+                            />
                           ) : (
                             <>
                               <IntentCard
@@ -1182,7 +1263,7 @@ export function ChatView() {
                                     onClick={() => void (ledgerPrepared
                                       ? openLedgerApproval(event)
                                       : prepareLedger(event))}
-                                    className="h-9 bg-approval px-3.5 font-mono text-[11px] font-semibold uppercase tracking-wide text-approval-foreground transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-45"
+                                    className="h-9 bg-primary px-3.5 text-[13px] font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-45 rounded-md"
                                   >
                                     {ledgerPrepared
                                       ? "Build and approve"
@@ -1195,9 +1276,16 @@ export function ChatView() {
                               ) : null}
                             </>
                           )}
+                          {turn.source === "demo" ? (
+                            <p className="flex items-center gap-1.5 rounded-b-xl border border-t-0 border-border bg-white/[0.02] px-3 py-1.5 text-xs text-muted-foreground">
+                              <FlaskConical className="h-3 w-3 text-primary" aria-hidden="true" />
+                              Simulated · no wallet or ledger transaction
+                            </p>
+                          ) : null}
                         </div>
                       );
                     })}
+                    {turn.strategy ? <div className="pilot-card-enter mt-3"><StrategyTurnCard cardId={turn.id} strategy={turn.strategy} /></div> : null}
                     {turn.followUp ? <p className="mt-3 text-sm leading-6 text-muted-foreground">{turn.followUp}</p> : null}
                     {turn.guardrailNotices?.length ? (
                       <div className="mt-3">
@@ -1214,21 +1302,21 @@ export function ChatView() {
                     ))}
                     {turn.x402 ? <X402ResultCard event={turn.x402} onRetry={turn.operationId && pendingX402?.operation_id === turn.operationId && (turn.x402.result.status === "settlement_unknown" || turn.x402.journal_status === "failed") ? () => void submit(X402_RECOVERY_PROMPT, { x402: true, expectedOperationId: turn.operationId, requestMode: "one_time" }) : undefined} /> : null}
                     {turn.ap4m ? <Ap4mReceiptCard receipt={turn.ap4m.receipt} evidence={turn.ap4m.evidence} /> : null}
-                    {turn.source === "fixture" && turn.id !== "opening" ? <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Local mock stream</p> : null}
+                    {turn.source === "fixture" && turn.id !== "opening" ? <p className="mt-2 text-xs font-semibold text-muted-foreground">Local mock stream</p> : null}
                   </div>
                 </div>
               </article>
             ))}
-            {demoMode && !running ? (
-              <div className="sm:pl-10">
-                <p className="label-mono mb-3 text-[10px]">{turns.length <= 1 ? "Try asking" : "Try another"}</p>
+            {demoMode && !running && !demoAwaitingDecision ? (
+              <div className="pilot-card-enter sm:pl-10">
+                <p className="label-mono mb-3">{turns.length <= 1 ? "Try asking" : "Try another"}</p>
                 <div className="flex min-w-0 flex-wrap gap-2.5">
                   {DEMO_SUGGESTIONS.map(({ prompt, scenario }, index) => {
                     const { icon: Icon, tone } = demoSuggestionIcons[scenario];
                     // After the first reply, phones show three suggestions instead of all seven.
                     const compact = turns.length > 1 && index >= 3 ? "max-sm:hidden " : "";
                     return (
-                      <button key={prompt} type="button" onClick={() => fillComposer(prompt)} className={compact + "inline-flex bracket bracket-light max-w-full items-center gap-2 border border-border bg-card px-3 py-2 text-left font-mono text-[11px] uppercase tracking-wide text-muted-foreground transition hover:bg-white/[0.05] hover:text-foreground pointer-coarse:min-h-11"}>
+                      <button key={prompt} type="button" onClick={() => { setRequestMode(scenario === "strategy" ? "autonomous" : "auto"); fillComposer(prompt); }} className={compact + "inline-flex bracket bracket-light max-w-full items-center gap-2 border border-border bg-card px-3 py-2 text-left text-[13px] text-muted-foreground transition hover:bg-white/[0.05] hover:text-foreground pointer-coarse:min-h-11 rounded-md"}>
                         <Icon className={`h-3.5 w-3.5 shrink-0 ${tone}`} aria-hidden="true" />
                         <span className="min-w-0 sm:truncate">{prompt}</span>
                       </button>
@@ -1239,12 +1327,12 @@ export function ChatView() {
             ) : null}
             {!demoMode && turns.length <= 1 ? (
               <div className="pl-10">
-                <p className="label-mono mb-3 text-[10px]">Try asking</p>
+                <p className="label-mono mb-3">Try asking</p>
                 <div className="flex min-w-0 flex-wrap gap-2.5">
               {suggestions.map((suggestion, index) => {
                 const { icon: Icon, tone } = suggestionIcons[index] ?? suggestionIcons[0];
                 return (
-                  <button key={suggestion} type="button" disabled={running || !walletReady} onClick={() => void submit(suggestion)} className={`inline-flex bracket bracket-light max-w-full items-center gap-2 border border-border bg-background/70 px-3 py-2 font-mono text-[11px] uppercase tracking-wide text-muted-foreground transition hover:bg-white/[0.05] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-background/70 disabled:hover:text-muted-foreground`}>
+                  <button key={suggestion} type="button" disabled={running || !walletReady} onClick={() => void submit(suggestion)} className={`inline-flex bracket bracket-light max-w-full items-center gap-2 border border-border bg-background/70 px-3 py-2 text-[13px] text-muted-foreground transition hover:bg-white/[0.05] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-background/70 disabled:hover:text-muted-foreground rounded-xl`}>
                     <Icon className={`h-3.5 w-3.5 shrink-0 ${tone}`} aria-hidden="true" />
                     <span className="truncate">{suggestion}</span>
                   </button>
@@ -1258,17 +1346,16 @@ export function ChatView() {
 
         </div>
 
-        <div className="pilot-chat-composer fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 px-3 pb-3 pt-3 backdrop-blur-md sm:px-4 sm:pb-4 lg:left-64 [@media(max-height:520px)]:pb-2 [@media(max-height:520px)]:pt-2">
+        <div className="pilot-chat-composer fixed inset-x-0 bottom-0 z-20 bg-gradient-to-t from-background from-70% to-transparent px-3 pb-3 pt-6 sm:px-4 sm:pb-4 lg:left-64 [@media(max-height:520px)]:pb-2 [@media(max-height:520px)]:pt-2">
           <div className="mx-auto max-w-4xl">
-            {!demoMode && pendingX402 ? <div className="mb-2 flex items-center justify-between gap-3 border border-approval/25 bg-approval/8 px-3 py-2 text-xs text-approval"><span>{pendingX402.phase === "paid_journal_pending" ? "Payment is validated; durable journal recovery is pending." : pendingX402.phase === "recovering" ? "x402 settlement recovery is pending." : "An x402 recovery identity is reserved."}</span><button type="button" disabled={running || !walletReady} onClick={() => void submit(X402_RECOVERY_PROMPT, { x402: true, expectedOperationId: pendingX402.operation_id, requestMode: "one_time" })} className="font-semibold underline disabled:opacity-40">Resume same operation</button></div> : null}
+            {!demoMode && pendingX402 ? <div className="mb-2 flex items-center justify-between gap-3 border border-approval/25 bg-approval/8 px-3 py-2 text-xs text-approval rounded-xl"><span>{pendingX402.phase === "paid_journal_pending" ? "Payment is validated; durable journal recovery is pending." : pendingX402.phase === "recovering" ? "x402 settlement recovery is pending." : "An x402 recovery identity is reserved."}</span><button type="button" disabled={running || !walletReady} onClick={() => void submit(X402_RECOVERY_PROMPT, { x402: true, expectedOperationId: pendingX402.operation_id, requestMode: "one_time" })} className="font-semibold underline disabled:opacity-40">Resume same operation</button></div> : null}
             {!demoMode && x402RecoveryError ? <p className="mb-2 px-1 text-xs text-blocked">{x402RecoveryError}</p> : null}
             {!demoMode && sessionUi.notice === "onboarding" ? <p className="mb-2 px-1 text-xs text-muted-foreground">Live chat is locked until a wallet proves control through <a className="font-semibold text-primary hover:underline" href="/onboarding">onboarding</a>.</p> : null}
             {!demoMode && sessionUi.notice === "unavailable" ? <p className="mb-2 px-1 text-xs text-blocked">Wallet session status is unavailable. Reload the page to retry.</p> : null}
             {!demoMode && sessionUi.notice === "proof" ? <p className="mb-2 px-1 text-xs text-blocked">Local wallet proof prerequisites are not configured. Set the server-only session secret and replay-state directory, then reload.</p> : null}
             {!demoMode && sessionUi.notice === "configuration" ? <p className="mb-2 px-1 text-xs text-blocked">Pilot configuration is unavailable. Reload the page to retry.</p> : null}
-            {!demoMode ? <div className="mb-2 flex min-w-0 flex-wrap gap-2 pb-1"><button type="button" disabled={running || !walletReady || !x402Scope} onClick={() => void submit("Purchase the approved local Testnet premium venue comparison.", { x402: true, requestMode: "one_time" })} className="bracket bracket-light inline-flex max-w-full border border-primary/20 bg-primary/5 px-3 py-1.5 text-[11px] text-primary hover:border-primary/40 disabled:opacity-40">Premium comparison · x402</button></div> : null}
-            <form onSubmit={(event) => { event.preventDefault(); send(draft); }} className="bracket bracket-focus min-w-0 border border-border-strong bg-card">
-              <RequestModeControl value={requestMode} resolution={draftRequestMode} disabled={running} onChange={setRequestMode} />
+            {!demoMode ? <div className="mb-2 flex min-w-0 flex-wrap gap-2 pb-1"><button type="button" disabled={running || !walletReady || !x402Scope} onClick={() => void submit("Purchase the approved local Testnet premium venue comparison.", { x402: true, requestMode: "one_time" })} className="bracket bracket-light inline-flex max-w-full border border-primary/20 bg-primary-soft px-3 py-1.5 text-[11px] text-primary hover:border-primary/40 disabled:opacity-40 rounded-xl">Premium comparison · x402</button></div> : null}
+            <form onSubmit={(event) => { event.preventDefault(); send(draft); }} className="bracket bracket-focus min-w-0 border border-border-strong bg-card rounded-xl">
               <textarea
                 ref={textareaRef}
                 value={draft}
@@ -1278,47 +1365,62 @@ export function ChatView() {
                 aria-label="Message Pilot"
                 disabled={!walletReady && !demoMode}
                 placeholder={demoMode ? "Ask Pilot anything" : sessionUi.placeholder}
-                className="block max-h-40 min-h-16 w-full min-w-0 resize-none bg-transparent px-4 py-3 text-sm leading-6 pointer-coarse:text-base outline-none placeholder:text-muted-foreground/80 disabled:cursor-not-allowed sm:min-h-[4.5rem] [@media(max-height:520px)]:max-h-20 [@media(max-height:520px)]:min-h-10 [@media(max-height:520px)]:py-2"
+                className="block max-h-40 min-h-[4.5rem] w-full min-w-0 resize-none bg-transparent px-4 py-3 text-sm leading-6 pointer-coarse:text-base outline-none placeholder:text-muted-foreground/80 disabled:cursor-not-allowed sm:min-h-[5rem] [@media(max-height:520px)]:max-h-20 [@media(max-height:520px)]:min-h-10 [@media(max-height:520px)]:py-2"
               />
               <div className="flex min-w-0 items-center gap-2 border-t border-border bg-white/[0.015] px-2.5 py-2 [@media(max-height:520px)]:py-1">
-                <span className="hidden items-center gap-1.5 border border-border px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-muted-foreground sm:inline-flex">
-                  <span aria-hidden="true" className={`h-1.5 w-1.5 ${publicConfig ? "bg-executed" : "bg-muted-foreground"}`} />
-                  {publicConfig === undefined ? "Checking…" : publicConfig?.network ?? "Unavailable"}
-                </span>
+                <button
+                  type="button"
+                  onClick={() => setCardStatesOpen(true)}
+                  aria-haspopup="dialog"
+                  className="inline-flex h-8 shrink-0 items-center gap-1.5 border border-border-strong bg-foreground/[0.05] px-2.5 text-xs text-foreground/85 transition hover:bg-foreground/[0.09] hover:text-foreground pointer-coarse:h-11 rounded-md"
+                >
+                  <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span className="max-sm:sr-only">Card states</span>
+                </button>
                 <div className="ml-auto flex shrink-0 items-center gap-1.5">
-                  <button type="button" onClick={() => send(lastPrompt, lastRequestMode)} disabled={running || (!walletReady && !demoMode)} className="inline-flex h-8 items-center gap-1.5 px-2 font-mono text-[10px] uppercase tracking-wide text-muted-foreground transition hover:text-foreground pointer-coarse:h-11 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:text-muted-foreground"><RotateCcw className="h-3 w-3" aria-hidden="true" />Repeat</button>
+                  <RequestModeControl value={requestMode} resolution={draftRequestMode} disabled={running} onChange={setRequestMode} />
+                  <button
+                    type="button"
+                    onClick={() => send(lastPrompt, lastRequestMode)}
+                    disabled={running || (!walletReady && !demoMode)}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition hover:bg-foreground/[0.04] hover:text-foreground pointer-coarse:h-11 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+                  >
+                    <RotateCcw className="h-3 w-3" aria-hidden="true" />
+                    <span className="max-sm:sr-only">Repeat</span>
+                  </button>
                   {running ? (
-                    <button type="button" onClick={() => interrupt(true)} className="bracket bracket-light grid h-8 w-8 shrink-0 place-items-center border border-border bg-white/[0.04] text-foreground hover:bg-white/[0.08] pointer-coarse:h-11 pointer-coarse:w-11" aria-label="Stop streaming"><Square className="h-3 w-3 fill-current" /></button>
+                    <button type="button" onClick={() => interrupt(true)} className="bracket bracket-light grid h-8 w-8 shrink-0 place-items-center border border-border bg-white/[0.04] text-foreground hover:bg-white/[0.08] pointer-coarse:h-11 pointer-coarse:w-11 rounded-md" aria-label="Stop streaming"><Square className="h-3 w-3 fill-current" /></button>
                   ) : (
-                    <button type="submit" disabled={!draft.trim() || (!walletReady && !demoMode)} className="bracket bracket-light grid h-8 w-8 shrink-0 place-items-center border border-border-strong bg-foreground text-background pointer-coarse:h-11 pointer-coarse:w-11 transition hover:bg-foreground/90 disabled:cursor-not-allowed disabled:border-border disabled:bg-white/[0.04] disabled:text-muted-foreground" aria-label="Send message"><ArrowUp className="h-3.5 w-3.5" /></button>
+                    <button type="submit" disabled={!draft.trim() || (!walletReady && !demoMode)} className="bracket bracket-light grid h-8 w-8 shrink-0 place-items-center border border-border-strong bg-primary text-primary-foreground pointer-coarse:h-11 pointer-coarse:w-11 transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:border-border disabled:bg-white/[0.04] disabled:text-muted-foreground rounded-md" aria-label="Send message"><ArrowUp className="h-3.5 w-3.5" /></button>
                   )}
                 </div>
               </div>
             </form>
-            {demoMode ? null : <p className="label-mono mt-3 text-center text-[10px]">Pilot never holds your owner key.</p>}
+            {demoMode ? null : <p className="label-mono mt-3 text-center">Pilot never holds your owner key.</p>}
           </div>
         </div>
       </section>
 
       {sidebarSlot ? createPortal(
-      <section aria-label="Session context" className="space-y-3">
-          <div className="space-y-3">
-            <div className="border border-border">
-              <p className="label-mono border-b border-border px-3 py-2.5">Live context</p>
-              <dl className="divide-y divide-border text-xs">
-                <ContextRow label="Network" value={publicConfig === undefined ? "Checking…" : publicConfig?.network ?? "Unavailable"} status={Boolean(publicConfig)} />
-                <ContextRow label="Wallet" value={demoMode ? "Not connected" : sessionUi.label} status={walletReady} />
-                <ContextRow label="Daily budget" value={demoMode ? "Policy" : "Live policy"} />
-              </dl>
-            </div>
+        <section aria-label="Session context" className="space-y-3">
+          <div className="overflow-hidden rounded-xl border border-border">
+            <p className="label-mono border-b border-border px-3 py-2.5">Live context</p>
+            <dl className="divide-y divide-border text-xs">
+              <ContextRow label="Network" value={publicConfig === undefined ? "Checking…" : publicConfig?.network ?? "Unavailable"} status={Boolean(publicConfig)} />
+              <ContextRow label="Wallet" value={demoMode ? "Not connected" : sessionUi.label} status={walletReady} />
+              <ContextRow label="Daily budget" value={demoMode ? "Policy" : "Live policy"} />
+            </dl>
           </div>
+          {!demoMode ? <StrategySidebarBlock onStart={startStrategy} /> : null}
         </section>,
         sidebarSlot,
       ) : null}
 
-      {cardStatesOpen ? <CardStatesDialog onClose={closeCardStates} /> : null}
+      <StrategyManagerPanel onStart={startStrategy} />
 
-      {approvalError ? <p className="fixed bottom-48 left-1/2 z-30 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 border border-blocked/40 bg-card px-4 py-3 text-sm text-blocked shadow-xl shadow-black/[0.1]" role="alert">{approvalError}</p> : null}
+      {approvalError ? <p className="fixed bottom-48 left-1/2 z-30 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 border border-blocked/40 bg-card px-4 py-3 text-sm text-blocked shadow-xl shadow-black/[0.1] rounded-xl" role="alert">{approvalError}</p> : null}
+
+      {cardStatesOpen ? <CardStatesDialog onClose={closeCardStates} /> : null}
 
       {demoApproval ? (
         <DemoApprovalDialog
@@ -1369,24 +1471,24 @@ export function ChatView() {
 function MessageBubble({ role, children }: { role: "user"; children: string }) {
   return (
     <div className="ml-auto flex min-w-0 max-w-[88%] items-start justify-end gap-2 sm:max-w-[78%]">
-      <p className="min-w-0 whitespace-pre-wrap border border-border bg-white/[0.05] px-4 py-3 text-sm leading-6 [overflow-wrap:anywhere]">{children}</p>
-      <span className="grid h-9 w-9 shrink-0 place-items-center border border-border text-muted-foreground" role="img" aria-label={role === "user" ? "You" : role}><UserRound className="h-[18px] w-[18px]" /></span>
+      <p className="min-w-0 whitespace-pre-wrap border border-border bg-white/[0.05] px-4 py-3 text-sm leading-6 [overflow-wrap:anywhere] rounded-xl">{children}</p>
+      <span className="grid h-9 w-9 shrink-0 place-items-center border border-border text-muted-foreground rounded-md" role="img" aria-label={role === "user" ? "You" : role}><UserRound className="h-[18px] w-[18px]" /></span>
     </div>
   );
 }
 
 function ContextRow({ label, value, status }: { label: string; value: string; status?: boolean }) {
-  return <div className="flex items-center justify-between gap-3 px-3 py-2"><dt className="label-mono text-[10px]">{label}</dt><dd className="flex min-w-0 items-center gap-1.5 truncate font-mono text-[10px] uppercase text-foreground">{status ? <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 bg-executed" /> : null}<span className="truncate">{value}</span></dd></div>;
+  return <div className="flex items-center justify-between gap-3 px-3 py-2"><dt className="label-mono text-[10px]">{label}</dt><dd className="flex min-w-0 items-center gap-1.5 truncate text-xs text-foreground">{status ? <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-executed" /> : null}<span className="truncate">{value}</span></dd></div>;
 }
 
 function LedgerBlindApprovalLegend({ request }: { request: ApprovalRequest }) {
   return (
-    <section aria-label="Ledger blind approval guide" className="border border-amber-300 bg-amber-50 p-3 text-slate-950">
-      <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber-900">Expected blind-sign screens</p>
+    <section aria-label="Ledger blind approval guide" className="border border-approval bg-approval/10 p-3 text-slate-950 rounded-xl overflow-hidden">
+      <p className="text-xs text-approval">Expected blind-sign screens</p>
       <p className="mt-2 text-xs leading-5">
         The XRP app may show this transaction type as Unknown. Approve only when the validated Pilot summary matches every value below.
       </p>
-      <dl className="mt-3 grid gap-px border border-amber-200 bg-amber-200 text-xs sm:grid-cols-2">
+      <dl className="mt-3 grid gap-px border border-approval bg-approval/10 text-xs sm:grid-cols-2 rounded-xl">
         <div className="bg-white p-2"><dt className="font-semibold">Action</dt><dd className="mt-1 font-mono">{request.summary.action}</dd></div>
         <div className="bg-white p-2"><dt className="font-semibold">Amount</dt><dd className="mt-1 font-mono">{request.summary.amounts.join(" · ") || "No asset movement"}</dd></div>
         <div className="bg-white p-2"><dt className="font-semibold">Destination</dt><dd className="mt-1 break-all font-mono">{request.summary.destination ?? "XRPL protocol"}</dd></div>

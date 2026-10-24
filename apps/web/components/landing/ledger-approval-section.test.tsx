@@ -70,19 +70,16 @@ describe("LedgerApprovalSection", () => {
     expect(markup).toContain("full delegate address shown");
   });
 
-  it("keeps the section light, sharp-cornered, and accessible", () => {
+  it("keeps the section light, soft-cornered, and accessible", () => {
     const markup = renderSection();
 
     expect(markup).toContain('aria-labelledby="ledger-approval-heading"');
     expect(markup).toContain('aria-label="Ledger approval path"');
     expect(markup).toContain('aria-label="Simulated Ledger clear-signing a TrustSet"');
-    expect(markup).toContain("bg-slate-50");
-    // The app intentionally remaps Tailwind's `white` token to ink for alpha
-    // overlays. This section owns several solid `bg-white` paper surfaces, so
-    // it restores the real white token locally before rendering them.
-    expect(markup).toContain("[--color-white:#fff]");
-    expect(markup.match(/bg-white/g)).toHaveLength(12);
-    expect(markup).not.toContain("rounded");
+    expect(markup).toContain("bg-card");
+    expect(markup).not.toContain("bg-white");
+    expect(markup).toContain("rounded-xl");
+    expect(markup).toContain('href="/integrations/ledger"');
   });
 
   it("lands after the existing AWS section with LG-5's exact TrustSet replay", () => {
@@ -90,7 +87,7 @@ describe("LedgerApprovalSection", () => {
       fileURLToPath(new URL("../../app/page.tsx", import.meta.url)),
       "utf8",
     );
-    const landing = source.indexOf("<LandingPage />");
+    const landing = source.indexOf("<LandingPage");
     const aws = source.indexOf("<AwsTrustSection />");
     const ledger = source.indexOf("<LedgerApprovalSection");
 

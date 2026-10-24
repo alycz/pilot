@@ -239,7 +239,7 @@ export function WorkflowLessonsPanel({ scopeKey }: { scopeKey: string }) {
   return (
     <section className="rounded-2xl border border-white/8 bg-card/72 p-4" aria-labelledby="workflow-lessons-title">
       <div className="flex items-start gap-3">
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary">
           <GraduationCap className="h-4 w-4" />
         </span>
         <div>
@@ -268,10 +268,10 @@ export function WorkflowLessonsPanel({ scopeKey }: { scopeKey: string }) {
 
       <div className="mt-4 space-y-3">
         {records.map((record) => (
-          <article key={record.id} className="rounded-xl border border-white/8 bg-background/25 p-3">
+          <article key={record.id} className="rounded-xl border border-white/8 bg-background/25 p-3 overflow-hidden">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-primary">
+                <p className="text-xs font-semibold text-primary">
                   {title(record.target.category)}
                 </p>
                 <p className="mt-1 text-xs font-semibold">{title(record.target.value)}</p>
@@ -291,7 +291,7 @@ export function WorkflowLessonsPanel({ scopeKey }: { scopeKey: string }) {
               </div>
             ) : (
               <div className="mt-3 space-y-2">
-                <label className="block text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground" htmlFor={`lesson-correction-${record.id}`}>Correct this lesson</label>
+                <label className="block text-xs font-semibold text-muted-foreground" htmlFor={`lesson-correction-${record.id}`}>Correct this lesson</label>
                 <select id={`lesson-correction-${record.id}`} value={corrections[record.id] ?? ""} onChange={(event) => setCorrections((current) => ({ ...current, [record.id]: event.target.value }))} className="w-full rounded-lg border border-white/10 bg-background/40 px-3 py-2 text-xs outline-none focus:border-primary/50">
                   <option value="">Choose a replacement</option>
                   {WORKFLOW_LESSON_OPTIONS[record.target.category]

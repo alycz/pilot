@@ -158,7 +158,7 @@ export function DemoApprovalDialog({
         ref={dialogRef}
         aria-labelledby={titleId}
         aria-modal="true"
-        className="flex max-h-[94dvh] w-full flex-col overflow-hidden border border-border-strong bg-card shadow-2xl shadow-black/[0.14] sm:max-w-lg"
+        className="flex max-h-[94dvh] w-full flex-col overflow-hidden rounded-xl border border-border-strong bg-card shadow-2xl shadow-black/[0.14] sm:max-w-lg"
         role="dialog"
         tabIndex={-1}
       >
@@ -175,7 +175,7 @@ export function DemoApprovalDialog({
           </div>
           <button
             aria-label="Close approval"
-            className="grid h-8 w-8 shrink-0 place-items-center border border-border text-muted-foreground transition hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 pointer-coarse:h-11 pointer-coarse:w-11"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-border text-muted-foreground transition hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 pointer-coarse:h-11 pointer-coarse:w-11"
             disabled={busy}
             onClick={onClose}
             type="button"
@@ -185,12 +185,12 @@ export function DemoApprovalDialog({
         </header>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5 sm:px-6 [@media(max-height:520px)]:py-3" tabIndex={0} role="region" aria-label="Transaction details">
-          <div className="border border-border bg-background/50 p-4">
+          <div className="rounded-xl border border-border bg-background/50 p-4">
             <p className="label-mono">Action</p>
             <p className="mt-2 text-base font-medium tracking-tight">{summary?.action ?? "XRPL transaction"}</p>
           </div>
 
-          <dl className="grid min-w-0 gap-px border border-border bg-border text-sm sm:grid-cols-2">
+          <dl className="grid min-w-0 gap-px overflow-hidden rounded-xl border border-border bg-border text-sm sm:grid-cols-2">
             <div className="min-w-0 bg-card px-3.5 py-3">
               <dt className="label-mono">Amount</dt>
               <dd className="mt-1 break-words font-mono text-xs text-foreground">{summary?.amounts.join(" · ") ?? "—"}</dd>

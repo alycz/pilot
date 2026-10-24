@@ -10,16 +10,16 @@ export function DemoBlocks({ blocks }: { blocks: DemoBlock[] }) {
       {blocks.map((block, index) => {
         if (block.kind === "table") {
           return (
-            <div key={index} className="overflow-x-auto border border-border bg-card" tabIndex={0}>
+            <div key={index} className="overflow-x-auto border border-border bg-card rounded-xl" tabIndex={0}>
               <table className="w-full min-w-[34rem] text-left text-xs">
-                <caption className="label-mono border-b border-border px-3.5 py-2.5 text-left text-[10px]">{block.caption}</caption>
+                <caption className="label-mono border-b border-border px-3.5 py-2.5 text-left">{block.caption}</caption>
                 <thead className="bg-white/[0.025]">
                   <tr>
                     {block.columns.map((column, columnIndex) => (
                       <th
                         key={column}
                         scope="col"
-                        className={`label-mono px-3.5 py-2 text-[10px] font-medium ${block.numeric?.includes(columnIndex) ? "text-right" : ""}`}
+                        className={`label-mono px-3.5 py-2 font-medium ${block.numeric?.includes(columnIndex) ? "text-right" : ""}`}
                       >
                         {column}
                       </th>
@@ -38,7 +38,7 @@ export function DemoBlocks({ blocks }: { blocks: DemoBlock[] }) {
                           >
                             {cell}
                             {cellIndex === 0 && best ? (
-                              <span className="ml-2 border border-executed/35 bg-executed/10 px-1 py-px font-mono text-[9px] uppercase tracking-wide text-executed">Best</span>
+                              <span className="ml-2 border border-executed/35 bg-executed/10 px-1 py-px text-xs text-executed rounded capitalize">Best</span>
                             ) : null}
                           </td>
                         ))}
@@ -52,10 +52,10 @@ export function DemoBlocks({ blocks }: { blocks: DemoBlock[] }) {
         }
         if (block.kind === "stats") {
           return (
-            <dl key={index} className="grid gap-px border border-border bg-border sm:grid-cols-3">
+            <dl key={index} className="grid gap-px border border-border bg-border sm:grid-cols-3 rounded-xl overflow-hidden">
               {block.items.map((item) => (
                 <div key={item.label} className="bg-card px-3.5 py-3">
-                  <dt className="label-mono text-[10px]">{item.label}</dt>
+                  <dt className="label-mono">{item.label}</dt>
                   <dd className="mt-1 font-mono text-[13px] tabular-nums text-foreground">{item.value}</dd>
                 </div>
               ))}
@@ -66,7 +66,7 @@ export function DemoBlocks({ blocks }: { blocks: DemoBlock[] }) {
           <Link
             key={index}
             href={block.href}
-            className="link-dashed inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wide text-foreground"
+            className="link-dashed inline-flex items-center gap-1.5 text-[13px] text-foreground"
           >
             {block.label}
             <ArrowUpRight className="h-3 w-3" aria-hidden="true" />

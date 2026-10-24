@@ -44,10 +44,10 @@ export function DeviceFrame({
       aria-label={controlsLabel}
       tabIndex={disabled ? -1 : 0}
       onKeyDown={onKeyDown}
-      className="w-fit border border-slate-300 bg-slate-100 p-4 text-slate-950 shadow-[5px_5px_0_rgba(15,23,42,0.14)] outline-none focus-visible:ring-2 focus-visible:ring-sky-600"
+      className="w-fit border border-slate-300 bg-slate-100 p-4 text-slate-950 shadow-[5px_5px_0_rgba(15,23,42,0.14)] outline-none focus-visible:ring-2 focus-visible:ring-sky-600 rounded-xl"
     >
       <div className="flex items-center gap-4">
-        <div className="border border-slate-800 bg-black p-2">
+        <div className="border border-slate-800 bg-black p-2 rounded-xl">
           <img
             src={screenSrc}
             alt={screenAlt}
@@ -67,13 +67,13 @@ export function DeviceFrame({
             disabled={disabled}
             aria-label={button.label}
             onClick={() => void onButton(button.value)}
-            className="grid h-10 min-w-12 place-items-center border border-slate-400 bg-white px-3 text-base font-semibold text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
+            className="grid h-10 min-w-12 place-items-center border border-slate-400 bg-white px-3 text-base font-semibold text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45 rounded-md"
           >
             {button.glyph}
           </button>
         ))}
       </div>
-      <p className="mt-2 text-center font-mono text-[10px] uppercase tracking-[0.12em] text-slate-600">
+      <p className="mt-2 text-center text-xs text-slate-600">
         Keyboard: ← · Enter/↓ · →
       </p>
     </div>

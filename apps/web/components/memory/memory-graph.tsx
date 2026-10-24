@@ -29,7 +29,7 @@ export function MemoryGraph({
   const byId = new Map(nodes.map((node) => [node.id, node]));
 
   return (
-    <section className="min-w-0 overflow-hidden border border-border bg-card" aria-labelledby="graph-title">
+    <section className="min-w-0 overflow-hidden border border-border bg-card rounded-xl" aria-labelledby="graph-title">
       <header className="flex min-h-[5.75rem] items-center justify-between gap-4 border-b border-border p-5">
         <div>
           <div className="flex items-center gap-2">
@@ -38,11 +38,10 @@ export function MemoryGraph({
           </div>
           <p className="label-mono mt-1.5">Select a node to open its source note.</p>
         </div>
-        <span className="shrink-0 border border-border px-2 py-1 font-mono text-[11px] uppercase tracking-[0.04em] text-muted-foreground">{nodes.length} nodes · {edges.length} links</span>
+        <span className="shrink-0 border border-border px-2 py-1 text-[13px] text-muted-foreground rounded-xl">{nodes.length} nodes · {edges.length} links</span>
       </header>
 
       <div className="relative p-3 sm:p-5">
-        <div aria-hidden="true" className="bg-rules pointer-events-none absolute inset-0" />
         <svg viewBox="0 0 500 360" className="relative h-[18rem] w-full sm:h-[22rem]" role="group" aria-labelledby="graph-svg-title graph-svg-desc">
           <title id="graph-svg-title">Pilot memory note relationships</title>
           <desc id="graph-svg-desc">A graph linking the profile, policy, journal, recent trade, reflection, venue, and token notes.</desc>
@@ -89,7 +88,7 @@ export function MemoryGraph({
             );
           })}
         </svg>
-        <div className="pointer-events-none absolute bottom-3 left-3 flex h-7 items-center gap-1.5 border border-border bg-background/80 px-2 font-mono text-[10px] uppercase tracking-[0.04em] text-muted-foreground sm:bottom-5 sm:left-5">
+        <div className="pointer-events-none absolute bottom-3 left-3 flex h-7 items-center gap-1.5 border border-border bg-background/80 px-2 text-xs text-muted-foreground sm:bottom-5 sm:left-5 rounded-md">
           <Waypoints className="h-3 w-3" aria-hidden="true" /> Obsidian-compatible wikilinks
         </div>
       </div>

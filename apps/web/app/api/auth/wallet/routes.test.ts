@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Wallet } from "xrpl";
 import { chmod, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -447,29 +447,38 @@ describe("wallet auth route deployment boundary", () => {
   });
 
   it("durably consumes one signed authentication proof before issuing a session", async () => {
-    configure("local-wallet", "1");
-    const wallet = Wallet.generate();
-    const origin = "http://127.0.0.1:3003";
-    const challengeResponse = await issueChallenge(challengeRequest(
-      `${origin}/api/auth/wallet/challenge`,
-      wallet,
-    ));
-    const challengeCookie = challengeResponse.cookies.get(WALLET_CHALLENGE_COOKIE)?.value;
-    const challengeBody = await challengeResponse.json() as { tx_json: Record<string, unknown> };
-    const txBlob = wallet.sign(challengeBody.tx_json as never).tx_blob;
-    const post = () => createSession(request(`${origin}/api/auth/wallet/session`, {
-      method: "POST",
-      headers: { "content-type": "application/json", origin },
-      body: JSON.stringify({ tx_blob: txBlob }),
-      cookies: { [WALLET_CHALLENGE_COOKIE]: challengeCookie! },
-    }));
+    // This test isolates same-instant atomic consumption. A separate clock-race
+    // test verifies that a newer durable fence may fail the older request
+    // closed after publication, so do not let scheduler latency mix the two
+    // invariants here.
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_800_000_000_000);
+    try {
+      configure("local-wallet", "1");
+      const wallet = Wallet.generate();
+      const origin = "http://127.0.0.1:3003";
+      const challengeResponse = await issueChallenge(challengeRequest(
+        `${origin}/api/auth/wallet/challenge`,
+        wallet,
+      ));
+      const challengeCookie = challengeResponse.cookies.get(WALLET_CHALLENGE_COOKIE)?.value;
+      const challengeBody = await challengeResponse.json() as { tx_json: Record<string, unknown> };
+      const txBlob = wallet.sign(challengeBody.tx_json as never).tx_blob;
+      const post = () => createSession(request(`${origin}/api/auth/wallet/session`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin },
+        body: JSON.stringify({ tx_blob: txBlob }),
+        cookies: { [WALLET_CHALLENGE_COOKIE]: challengeCookie! },
+      }));
 
-    const responses = await Promise.all([post(), post()]);
-    expect(responses.filter((response) => response.status === 200)).toHaveLength(1);
-    expect(responses.every((response) => [200, 401, 503].includes(response.status))).toBe(true);
-    expect(responses.filter(
-      (response) => response.cookies.get(WALLET_SESSION_COOKIE)?.value,
-    )).toHaveLength(1);
+      const responses = await Promise.all([post(), post()]);
+      expect(responses.filter((response) => response.status === 200)).toHaveLength(1);
+      expect(responses.every((response) => [200, 401, 503].includes(response.status))).toBe(true);
+      expect(responses.filter(
+        (response) => response.cookies.get(WALLET_SESSION_COOKIE)?.value,
+      )).toHaveLength(1);
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it.each([undefined, "https://localhost."])(

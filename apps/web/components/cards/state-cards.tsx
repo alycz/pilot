@@ -15,9 +15,10 @@ import {
   ShieldCheck,
   Sparkles,
   TriangleAlert,
+  XCircle,
 } from "lucide-react";
 
-import { CardFrame, DetailGrid, shorten } from "./card-frame";
+import { CardFrame, DetailGrid, intentLabel, shorten } from "./card-frame";
 
 const RULE_LABELS: Record<string, string> = {
   max_per_tx_usd: "Per-trade limit",
@@ -96,7 +97,7 @@ export function PolicyCheckedCard({ event, onCancel }: StateCardProps) {
         {reasons.slice(0, 3).map((reason) => (
           <li key={reason.rule} className="flex items-start gap-2 text-xs leading-5">
             <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))]" aria-hidden="true" />
-            <span><span className="font-mono text-[11px] uppercase tracking-wide">{ruleLabel(reason.rule)}</span><span className="text-muted-foreground"> · {reason.detail}</span></span>
+            <span><span className="text-[13px]">{ruleLabel(reason.rule)}</span><span className="text-muted-foreground"> · {reason.detail}</span></span>
           </li>
         ))}
       </ul>
@@ -117,7 +118,7 @@ export function ExecutingCard({ event, onCancel }: StateCardProps) {
       <div className="h-1 overflow-hidden bg-white/[0.07]">
         <span className="block h-full w-2/3 animate-pulse bg-info" />
       </div>
-      <p className="mt-2 font-mono text-[11px] uppercase tracking-wide text-muted-foreground">Signing with the delegate · your owner key never leaves your wallet</p>
+      <p className="mt-2 text-[13px] text-muted-foreground">Signing with the delegate · your owner key never leaves your wallet</p>
     </CardFrame>
   );
 }
@@ -134,7 +135,7 @@ export function AwaitingApprovalCard({ event, onApprove, onCancel, hideSigningNo
       footer={
         onApprove || onCancel ? (
           <div className="flex flex-wrap gap-2">
-            {onApprove ? <button type="button" onClick={() => onApprove(event)} className="h-9 bg-approval px-3.5 font-mono text-[11px] font-semibold uppercase tracking-wide text-approval-foreground hover:brightness-105">Review & sign</button> : null}
+            {onApprove ? <button type="button" onClick={() => onApprove(event)} className="h-9 bg-primary px-3.5 text-[13px] font-semibold text-primary-foreground hover:bg-primary/90 rounded-md">Review & sign</button> : null}
             {onCancel ? <CancelButton event={event} onCancel={onCancel} /> : null}
           </div>
         ) : undefined
@@ -146,7 +147,7 @@ export function AwaitingApprovalCard({ event, onApprove, onCancel, hideSigningNo
         { label: "Destination", value: destinationFor(event) },
         { label: "Max fee", value: `${summary?.fee_drops ?? "12"} drops` },
       ]} />
-      {hideSigningNote ? null : <p className="mt-3 border border-approval/30 bg-approval/[0.06] px-3 py-2 text-[11px] leading-4 text-[color-mix(in_oklab,var(--approval)_80%,var(--foreground))]">Your wallet only signs; it never broadcasts. Pilot checks the signature comes from your wallet, then sends the signed blob to Harbor&apos;s REST API (<span className="font-mono">tx.submit</span>). Harbor matches it to this exact approval before submitting it to the XRP Ledger.</p>}
+      {hideSigningNote ? null : <p className="mt-3 border border-approval/30 bg-approval/[0.06] px-3 py-2 text-[11px] leading-4 text-[color-mix(in_oklab,var(--approval)_80%,var(--foreground))] rounded-xl">Your wallet only signs; it never broadcasts. Pilot checks the signature comes from your wallet, then sends the signed blob to Harbor&apos;s REST API (<span className="font-mono">tx.submit</span>). Harbor matches it to this exact approval before submitting it to the XRP Ledger.</p>}
     </CardFrame>
   );
 }
@@ -161,7 +162,7 @@ export function BlockedCard({ event }: StateCardProps) {
         {reasons.map((reason) => (
           <li key={`${reason.rule}-${reason.detail}`} className="flex items-start gap-2 text-xs leading-5">
             <AlertOctagon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" aria-hidden="true" />
-            <span><span className="font-mono text-[11px] uppercase tracking-wide">{ruleLabel(reason.rule)}</span><span className="text-muted-foreground"> · {reason.detail}</span></span>
+            <span><span className="text-[13px]">{ruleLabel(reason.rule)}</span><span className="text-muted-foreground"> · {reason.detail}</span></span>
           </li>
         ))}
       </ul>
@@ -172,7 +173,7 @@ export function BlockedCard({ event }: StateCardProps) {
 export function SubmittedCard({ event }: StateCardProps) {
   return (
     <CardFrame event={event} title="Submitted to XRPL" subtitle="The transaction is waiting for a validated ledger." icon={Send} tone="active">
-      <div className="flex min-w-0 items-center gap-2 border border-border bg-white/[0.02] px-3 py-2 font-mono text-[11px] text-muted-foreground">
+      <div className="flex min-w-0 items-center gap-2 border border-border bg-white/[0.02] px-3 py-2 font-mono text-[11px] text-muted-foreground rounded-xl">
         <Radio className="h-3.5 w-3.5 shrink-0 animate-pulse text-info" aria-hidden="true" />
         <span className="min-w-0 truncate">{event.hash ?? "A19F…80C2"}</span>
       </div>
@@ -195,6 +196,18 @@ export function ValidatedCard({ event }: StateCardProps) {
   );
 }
 
+/** A trade the owner turned down at the approval step. Nothing was signed. */
+export function DeclinedCard({ event }: StateCardProps) {
+  return (
+    <CardFrame event={event} badge="declined" title="Declined" subtitle="You turned this trade down. Nothing was signed or sent." icon={XCircle} tone="neutral">
+      <DetailGrid items={[
+        { label: "Action", value: event.build?.summary.action ?? intentLabel(event.intent) },
+        { label: "Amount", value: event.build?.summary.amounts.join(event.intent.kind === "swap" ? " → " : " + ") ?? intentLabel(event.intent) },
+      ]} />
+    </CardFrame>
+  );
+}
+
 export function FailedCard({ event }: StateCardProps) {
   const detail = event.error ?? (event.exec?.status === "failed" ? event.exec.detail : "The ledger rejected the transaction.");
   const code = event.exec?.status === "failed" ? event.exec.engine_result : "tecFAILED_PROCESSING";
@@ -207,7 +220,7 @@ export function FailedCard({ event }: StateCardProps) {
 }
 
 function CancelButton({ event, onCancel, label = "Cancel" }: { event: CardEvent; onCancel: (event: CardEvent) => void; label?: string }) {
-  return <button type="button" onClick={() => onCancel(event)} className="bracket bracket-light h-9 border border-border bg-white/[0.03] px-3.5 font-mono text-[11px] uppercase tracking-wide text-muted-foreground hover:bg-white/[0.06] hover:text-foreground">{label}</button>;
+  return <button type="button" onClick={() => onCancel(event)} className="bracket bracket-light h-9 border border-border bg-white/[0.03] px-3.5 text-[13px] text-muted-foreground hover:bg-white/[0.06] hover:text-foreground rounded-md">{label}</button>;
 }
 
 function destinationFor(event: CardEvent) {

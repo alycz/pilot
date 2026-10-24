@@ -119,7 +119,7 @@ export function ModelPicker({
         ref={triggerRef}
         aria-expanded={open}
         aria-haspopup="listbox"
-        className="flex w-full min-w-0 items-center justify-between gap-4 border border-border bg-white/[0.03] px-4 py-3.5 text-left transition hover:border-border-strong hover:bg-white/[0.05] focus-visible:outline-offset-[-1px] disabled:cursor-not-allowed disabled:opacity-45"
+        className="flex w-full min-w-0 items-center justify-between gap-4 border border-border bg-white/[0.03] px-4 py-3.5 text-left transition hover:border-border-strong hover:bg-white/[0.05] focus-visible:outline-offset-[-1px] disabled:cursor-not-allowed disabled:opacity-45 rounded-md"
         disabled={disabled}
         onClick={() => setOpen((current) => !current)}
         type="button"
@@ -132,7 +132,7 @@ export function ModelPicker({
       </button>
 
       {open ? (
-        <div className="absolute z-30 mt-1 w-full overflow-hidden border border-border-strong bg-popover shadow-xl shadow-black/[0.08]">
+        <div className="absolute z-30 mt-1 w-full overflow-hidden border border-border-strong bg-popover shadow-xl shadow-black/[0.08] rounded-xl">
           <label className="flex items-center gap-2 border-b border-border px-3 py-2.5">
             <Search className="size-4 text-muted-foreground" aria-hidden="true" />
             <span className="sr-only">Search models</span>
@@ -147,7 +147,7 @@ export function ModelPicker({
           <div className="max-h-64 overflow-y-auto" role="listbox" aria-label="Models">
             {filtered.map((group) => (
               <div aria-label={group.label} key={group.id} role="group">
-                <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                <p className="px-3 pb-1 pt-2 text-xs font-semibold text-muted-foreground">
                   {group.label}
                 </p>
                 {group.models.map((model) => (

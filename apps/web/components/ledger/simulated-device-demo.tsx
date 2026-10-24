@@ -63,27 +63,27 @@ export function SimulatedDeviceDemo() {
     <main className="min-h-dvh bg-[#f5f3ec] px-5 py-8 text-[#171814] sm:px-8 lg:px-12">
       <div className="mx-auto w-full max-w-6xl">
         <header className="border-b border-[#171814]/20 pb-6">
-          <p className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-[#235a52]">
+          <p className="text-xs font-semibold text-[#235a52]">
             Ledger · logged-out demo
           </p>
           <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
             <div>
-              <h1 className="text-3xl font-semibold tracking-[-0.035em] sm:text-5xl">
+              <h1 className="text-3xl font-semibold tracking-[-0.035em] sm:text-5xl font-display">
                 See every screen before you sign.
               </h1>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-[#4c5048] sm:text-base">
                 Recorded screens from Ledger&apos;s XRP app 2.8.2 replay locally. This page has no device, wallet, DMK, network, or signing capability.
               </p>
             </div>
-            <span className="w-fit border border-[#235a52]/30 bg-[#fbfaf6] px-3 py-1.5 font-mono text-[11px] font-semibold uppercase tracking-wide text-[#235a52]">
+            <span className="w-fit border border-[#235a52]/30 bg-[#fbfaf6] px-3 py-1.5 text-[13px] font-semibold text-[#235a52] rounded-xl">
               Simulated only
             </span>
           </div>
         </header>
 
-        <div className="mt-7 grid gap-px border border-[#171814]/20 bg-[#171814]/20 lg:grid-cols-[0.72fr_1.28fr]">
+        <div className="mt-7 grid gap-px border border-[#171814]/20 bg-[#171814]/20 lg:grid-cols-[0.72fr_1.28fr] rounded-xl">
           <section className="bg-[#fbfaf6] p-5 sm:p-7" aria-labelledby="ledger-demo-flow-title">
-            <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-[#6a6e65]">
+            <p className="text-[13px] font-semibold text-[#6a6e65]">
               Recorded flow
             </p>
             <h2 id="ledger-demo-flow-title" className="mt-2 text-xl font-semibold">
@@ -93,7 +93,7 @@ export function SimulatedDeviceDemo() {
               {FLOWS.map((flow) => (
                 <button
                   aria-pressed={flow.id === selected.id}
-                  className={`border px-3 py-3 text-left font-mono text-xs font-semibold uppercase tracking-wide transition ${
+                  className={`border px-3 py-3 text-left text-xs font-semibold transition rounded-md ${
                     flow.id === selected.id
                       ? "border-[#235a52] bg-[#235a52] text-[#fff]"
                       : "border-[#171814]/20 bg-[#fbfaf6] text-[#30332e] hover:border-[#235a52]/60"
@@ -110,7 +110,7 @@ export function SimulatedDeviceDemo() {
 
           <section className="bg-[#f0eee6] p-5 sm:p-7" aria-label="Simulated Ledger replay">
             <div className="mb-5 border-l-2 border-[#235a52] pl-4">
-              <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-[#235a52]">
+              <p className="text-[13px] font-semibold text-[#235a52]">
                 {selected.eyebrow}
               </p>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-[#4c5048]">
@@ -121,7 +121,7 @@ export function SimulatedDeviceDemo() {
           </section>
         </div>
 
-        <p className="mt-4 font-mono text-[10px] uppercase tracking-wide text-[#6a6e65]">
+        <p className="mt-4 text-xs text-[#6a6e65]">
           Recorded from Speculos with its public default test seed · no Testnet submission
         </p>
       </div>

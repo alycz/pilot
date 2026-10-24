@@ -159,7 +159,7 @@ export function LivePortfolioDashboard() {
       return () => { cancelled = true; };
     }
     if (presentation.kind === "demo" || access.kind !== "live") {
-      const detail = presentation.kind === "demo" ? presentation.detail : "Simulated demo portfolio.";
+      const detail = presentation.kind === "demo" ? presentation.detail : "Demo portfolio.";
       setSnapshot(undefined);
       setConnection({ kind: "connecting", detail: "Loading the demo portfolio.", accountCount: 0 });
       void loadPortfolioSnapshot().then(

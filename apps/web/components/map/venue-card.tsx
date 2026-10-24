@@ -1,5 +1,5 @@
 import type { Network, Venue } from "@pilot/contracts";
-import { ArrowUpRight, Braces, ChevronRight, RadioTower } from "lucide-react";
+import { Braces, ChevronRight, RadioTower } from "lucide-react";
 
 import { StatusBadge } from "@/components/map/status-badge";
 import {
@@ -53,7 +53,7 @@ export function VenueCard({ venue, network, onSelect }: VenueCardProps) {
 
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
             <StatusBadge status={status} compact discovery={venue.kind === "discovery-venue"} />
-            <span className="border border-border px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            <span className="border border-border px-1.5 py-0.5 text-xs font-medium text-muted-foreground rounded capitalize">
               {labelToken(venue.layer)}
             </span>
           </div>
@@ -62,14 +62,15 @@ export function VenueCard({ venue, network, onSelect }: VenueCardProps) {
             {venue.category.map((category) => (
               <span
                 key={category}
-                className="bg-white/[0.05] px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-foreground/80"
+                className="bg-white/[0.05] px-1.5 py-0.5 text-xs text-foreground/80"
               >
                 {labelToken(category)}
               </span>
             ))}
           </div>
 
-          <div className="mt-4 grid w-full grid-cols-2 border-t border-border pt-3 sm:mt-auto">
+          <div aria-hidden="true" className="min-h-4 flex-1" />
+          <div className="grid w-full grid-cols-2 border-t border-border pt-3">
             <div className="min-w-0">
               <p className="label-mono">Read surfaces</p>
               <p className="mt-1 font-mono text-[13px] text-foreground">{venue.reads.length}</p>
@@ -80,10 +81,6 @@ export function VenueCard({ venue, network, onSelect }: VenueCardProps) {
             </div>
           </div>
 
-          <span className="link-dashed mt-3 hidden items-center gap-1.5 font-mono text-[11px] uppercase tracking-wide text-muted-foreground transition group-hover:text-foreground sm:inline-flex">
-            Inspect catalog detail
-            <ArrowUpRight aria-hidden="true" className="size-3.5" />
-          </span>
         </div>
       </button>
     </article>

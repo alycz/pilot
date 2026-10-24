@@ -33,11 +33,11 @@ export function MandateApprovalCard({
     : `Approve ${promptCount} transactions in wallet`;
 
   return (
-    <article aria-labelledby="mandate-approval-title" className="border-2 border-sky-700 bg-slate-50 text-slate-950">
+    <article aria-labelledby="mandate-approval-title" className="border-2 border-sky-700 bg-slate-50 text-slate-950 rounded-xl overflow-hidden">
       <header className="border-b border-slate-200 bg-white p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-sky-700">XRPL Testnet · one mandate approval</p>
+            <p className="text-[13px] font-bold text-sky-700">XRPL Testnet · one mandate approval</p>
             <h3 className="mt-1 text-xl font-semibold" id="mandate-approval-title">Authorize once, transact within limits</h3>
           </div>
           <ShieldCheck aria-hidden="true" className="size-7 text-sky-700" />
@@ -68,7 +68,7 @@ export function MandateApprovalCard({
         <p className="mt-1 text-xs leading-5 text-slate-500">Channel collateral stays locked for merchants until mandate expiry plus one day.</p>
         <ul className="mt-3 space-y-2">
           {channels.map((channel) => (
-            <li className="border border-slate-200 p-3 text-sm" key={channel.merchantId}>
+            <li className="border border-slate-200 p-3 text-sm rounded-xl" key={channel.merchantId}>
               <span className="font-medium">{channel.merchantName}</span>
               <span className="mt-1 block font-mono text-xs text-slate-600">{channel.amountDrops} drops · locked until {new Date(channel.lockedUntil).toLocaleString()}</span>
             </li>
@@ -83,7 +83,7 @@ export function MandateApprovalCard({
             : `This wallet does not support Batch. Sequential mode is selected before signing and requires ${promptCount} sign-only prompts. Pilot will stop on cancellation or an uncertain result and will not retry automatically.`}
         </p>
         <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
-          {onBack ? <button className="border border-slate-300 px-4 py-3 text-sm font-semibold" disabled={disabled} onClick={onBack} type="button">Back</button> : <span />}
+          {onBack ? <button className="border border-slate-300 px-4 py-3 text-sm font-semibold rounded-md" disabled={disabled} onClick={onBack} type="button">Back</button> : <span />}
           <button className="bg-sky-700 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50" disabled={disabled} onClick={onApprove} type="button">{approvalLabel}</button>
         </div>
       </footer>
@@ -92,5 +92,5 @@ export function MandateApprovalCard({
 }
 
 function Limit({ label, value }: { label: string; value: string }) {
-  return <div className="bg-white p-4"><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{label}</p><p className="mt-1 font-mono text-sm font-semibold">{value}</p></div>;
+  return <div className="bg-white p-4"><p className="text-xs font-bold text-slate-500">{label}</p><p className="mt-1 font-mono text-sm font-semibold">{value}</p></div>;
 }

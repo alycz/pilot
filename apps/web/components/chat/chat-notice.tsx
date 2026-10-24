@@ -19,21 +19,17 @@ const demoReason: Record<ChatNoticeKind, string> = {
 export function DemoBanner({ reason }: { reason: ChatNoticeKind }) {
   return (
     <div role="status" className="flex min-w-0 flex-1 items-center gap-3">
-      <span aria-hidden="true" className="grid h-6 w-6 shrink-0 place-items-center border border-primary/30 bg-primary/[0.06] text-primary">
+      <span aria-hidden="true" className="grid h-6 w-6 shrink-0 place-items-center border border-primary/30 bg-primary-soft text-primary rounded-xl">
         <FlaskConical className="h-3.5 w-3.5" />
       </span>
       <p className="min-w-0 truncate text-[13px] leading-5 text-foreground">
-        <span className="sm:hidden">Simulated demo.</span>
-        <span className="hidden sm:inline lg:hidden">You&apos;re exploring a simulated demo. Create an account to trade on Testnet for real.</span>
-        <span className="hidden font-mono text-[11px] uppercase tracking-wide lg:inline">Simulated replies</span>
+        <span className="sm:hidden">Demo mode.</span>
+        <span className="hidden sm:inline lg:hidden">You&apos;re in demo mode. Create an account to use your own wallet.</span>
+        <span className="hidden text-[13px] lg:inline">Demo mode</span>
       </p>
-      {process.env.NODE_ENV === "production" ? null : (
-        // Setup hint for developers running locally; visitors never see it.
-        <p className="label-mono ml-auto hidden shrink-0 truncate text-[10px] xl:block">Live chat off · {demoReason[reason]}</p>
-      )}
       <Link
         href="/onboarding"
-        className="link-dashed ml-auto inline-flex shrink-0 lg:hidden items-center gap-1.5 font-mono text-[11px] font-medium uppercase tracking-wide text-foreground pointer-coarse:min-h-11"
+        className="link-dashed ml-auto inline-flex shrink-0 lg:hidden items-center gap-1.5 text-[13px] font-medium text-foreground pointer-coarse:min-h-11"
       >
         Get started <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
       </Link>
@@ -57,7 +53,7 @@ export function ChatNotice({ kind, children }: { kind: ChatNoticeKind; children:
   return (
     <div
       role="status"
-      className={`mb-3 flex items-start gap-3 border px-3.5 py-3 text-xs leading-5 ${
+      className={`mb-3 flex items-start gap-3 border px-3.5 py-3 text-xs leading-5 rounded-xl ${
         tone === "blocked"
           ? "border-approval/30 bg-approval/[0.06]"
           : "border-border bg-white/[0.03]"
@@ -65,14 +61,14 @@ export function ChatNotice({ kind, children }: { kind: ChatNoticeKind; children:
     >
       <span
         aria-hidden="true"
-        className={`mt-0.5 grid h-6 w-6 shrink-0 place-items-center border ${
+        className={`mt-0.5 grid h-6 w-6 shrink-0 place-items-center border rounded-xl ${
           tone === "blocked" ? "border-approval/30 text-approval" : "border-border text-muted-foreground"
         }`}
       >
         <Icon className="h-3.5 w-3.5" />
       </span>
       <div className="min-w-0">
-        <p className="font-mono text-[11px] font-medium uppercase tracking-wide text-foreground">{title}</p>
+        <p className="text-[13px] font-medium text-foreground">{title}</p>
         <p className="mt-0.5 text-muted-foreground">{children}</p>
       </div>
     </div>

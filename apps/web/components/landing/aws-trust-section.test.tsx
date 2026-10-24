@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { AwsTrustSection } from "./aws-trust-section";
 
 describe("AwsTrustSection", () => {
-  it("renders exactly three named AWS protections in a light section", () => {
+  it("renders exactly three named AWS protections in the site's light style", () => {
     const markup = renderToStaticMarkup(createElement(AwsTrustSection));
 
     expect(markup).toContain("Built on AWS");
@@ -13,7 +13,10 @@ describe("AwsTrustSection", () => {
     expect(markup).toContain("Amazon Bedrock models");
     expect(markup).toContain("AWS KMS");
     expect(markup.match(/data-protection="aws"/g)).toHaveLength(3);
-    expect(markup).toContain("bg-slate-50");
+    expect(markup).toContain("bg-card");
+    expect(markup).not.toContain("bg-white");
+    expect(markup).toContain("rounded-xl");
+    expect(markup).toContain('href="/integrations/aws"');
   });
 
   it("describes the architecture as an accessible ordered trust path", () => {

@@ -18,8 +18,9 @@ import {
 } from "./market-index";
 import { formatBps, formatCompact, formatPrice } from "./markets-data";
 import { handleRadioKeys } from "./radio-keys";
+import { SelectMenu } from "../ui/select-menu";
 
-const chip = "inline-flex items-center gap-1.5 border px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wide whitespace-nowrap";
+const chip = "inline-flex items-center gap-1.5 border px-1.5 py-0.5 text-xs font-medium whitespace-nowrap rounded capitalize";
 const tone = {
   neutral: "border-border text-muted-foreground",
   executed: "border-executed/30 bg-executed/10 text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))]",
@@ -58,6 +59,7 @@ export function MarketIndexTable({
   footnote,
   catalogState,
   onRetryCatalog,
+  showCatalog = true,
 }: {
   rows: MarketRow[];
   totals: { quoted: number; catalog: number };
@@ -83,23 +85,25 @@ export function MarketIndexTable({
   footnote: string;
   catalogState: { status: "loading" | "ok" | "error"; message?: string };
   onRetryCatalog: () => void;
+  /** False hides venues Pilot doesn't price (they stay on Map). */
+  showCatalog?: boolean;
 }) {
   const quotedRows = rows.filter((row): row is QuotedMarketRow => row.kind === "quoted");
   const catalogRows = rows.filter((row) => row.kind === "catalog");
   const showGroups = sort.key === "default";
 
   return (
-    <section aria-labelledby="market-index-title" className="bracket border border-border bg-card">
+    <section aria-labelledby="market-index-title" className="bracket border border-border bg-card rounded-xl">
       <header className="flex flex-col gap-3 border-b border-border px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
           <h2 id="market-index-title" className="text-sm font-medium">All markets</h2>
-          <p className="label-mono text-[10px]">
-            {totals.quoted} quoted · {catalogState.status === "loading" ? "…" : totals.catalog} catalogued
+          <p className="label-mono">
+            {showCatalog ? <>{totals.quoted} quoted · {catalogState.status === "loading" ? "…" : totals.catalog} catalogued</> : <>{totals.quoted} quoted</>}
           </p>
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {networkControl}
-          <div role="radiogroup" aria-label="Market source" className="flex border border-border">
+          {showCatalog ? <div role="radiogroup" aria-label="Market source" className="flex border border-border rounded-xl">
             {FILTERS.map((option) => (
               <button
                 key={option.value}
@@ -109,27 +113,22 @@ export function MarketIndexTable({
                 tabIndex={filter === option.value ? 0 : -1}
                 onKeyDown={(event) => handleRadioKeys(event, FILTERS.map((entry) => entry.value), filter, onFilter)}
                 onClick={() => onFilter(option.value)}
-                className={`h-8 pointer-coarse:h-11 border-r border-border px-3 font-mono text-[10px] uppercase tracking-wide transition last:border-r-0 ${
+                className={`h-8 pointer-coarse:h-11 border-r border-border px-3 text-xs transition last:border-r-0 ${
                   filter === option.value ? "bg-white/[0.08] text-foreground" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {option.label}
               </button>
             ))}
-          </div>
-          <label className="min-w-0">
-            <span className="sr-only">Market type</span>
-            <select
-              value={type}
-              onChange={(event) => onType(event.target.value as MarketType | "all")}
-              className="h-8 pointer-coarse:h-11 border border-input bg-background/60 px-2 font-mono text-[10px] pointer-coarse:text-base uppercase tracking-wide text-foreground"
-            >
-              <option value="all">All types</option>
-              {types.map((value) => (
-                <option key={value} value={value}>{MARKET_TYPE_LABELS[value]}</option>
-              ))}
-            </select>
-          </label>
+          </div> : null}
+          <SelectMenu
+            size="sm"
+            className="shrink-0"
+            label="Market type"
+            value={type}
+            onChange={onType}
+            options={[{ value: "all" as MarketType | "all", label: "All types" }, ...types.map((value) => ({ value: value as MarketType | "all", label: MARKET_TYPE_LABELS[value] }))]}
+          />
           <label className="bracket bracket-focus relative w-full min-w-0 sm:w-52">
             <span className="sr-only">Search markets</span>
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
@@ -138,30 +137,28 @@ export function MarketIndexTable({
               value={query}
               onChange={(event) => onQuery(event.target.value)}
               placeholder="Search venues"
-              className="h-8 pointer-coarse:h-11 w-full border border-input bg-background/60 pl-8 pr-2 text-xs pointer-coarse:text-base text-foreground placeholder:text-muted-foreground/70"
+              className="h-8 pointer-coarse:h-11 w-full border border-input bg-background/60 pl-8 pr-2 text-xs pointer-coarse:text-base text-foreground placeholder:text-muted-foreground/70 rounded-md"
             />
           </label>
         </div>
       </header>
 
       <div className="overflow-x-auto" role="region" aria-label="Markets table" tabIndex={0}>
-        <table className="w-full border-collapse text-left xl:min-w-[46rem]">
+        <table className="w-full border-collapse text-left xl:min-w-[46rem] xl:table-fixed">
           <caption className="sr-only">
-            Live markets for {pairLabel}, followed by catalogued venues Pilot does not quote yet. Sortable by market, type and status.
+            Live markets for {pairLabel}{showCatalog ? ", followed by catalogued venues Pilot does not quote yet" : ""}. Sortable by market, type and status.
           </caption>
           <thead className="bg-white/[0.02]">
             <tr className="border-b border-border">
-              <SortHeader label="Market" sortKey="name" sort={sort} onSort={onSort} className="pl-4" />
-              <SortHeader label="Type" sortKey="type" sort={sort} onSort={onSort} className="hidden sm:table-cell" />
-              <th scope="col" className="label-mono px-3 py-2.5 text-right text-[10px] font-medium">Price</th>
-              <th scope="col" className="label-mono hidden px-3 py-2.5 text-right text-[10px] font-medium md:table-cell lg:hidden xl:table-cell">Cost</th>
-              <th scope="col" className="label-mono hidden px-3 py-2.5 text-right text-[10px] font-medium md:table-cell">Liquidity</th>
-              <SortHeader label="Status" sortKey="status" sort={sort} onSort={onSort} className="hidden sm:table-cell" />
-              <th scope="col" className="hidden px-4 py-2.5 xl:table-cell"><span className="sr-only">Action</span></th>
+              <SortHeader label="Market" sortKey="name" sort={sort} onSort={onSort} className="pl-[2.125rem] xl:w-1/6" />
+              <SortHeader label="Type" sortKey="type" sort={sort} onSort={onSort} className="hidden sm:table-cell xl:w-1/6" />
+              <th scope="col" className="label-mono px-3 py-2.5 font-medium xl:w-1/6">Price</th>
+              <th scope="col" className="label-mono hidden px-3 py-2.5 font-medium md:table-cell lg:hidden xl:table-cell xl:w-1/6">Cost</th>
+              <th scope="col" className="label-mono hidden px-3 py-2.5 font-medium md:table-cell xl:w-1/6">Liquidity</th>
+              <SortHeader label="Status" sortKey="status" sort={sort} onSort={onSort} className="hidden sm:table-cell xl:w-1/6" />
             </tr>
           </thead>
           <tbody>
-            {showGroups && quotedRows.length ? <GroupRow label={quotedGroupLabel} /> : null}
             {(showGroups ? quotedRows : rows).map((row) =>
               row.kind === "quoted" ? (
                 <QuotedRow key={row.key} row={row} pairLabel={row.pairLabel ?? pairLabel} selected={row.key === selectedKey} sourceLabel={sourceLabel} sourceTone={sourceTone} offline={offline} onSelect={onSelect} />
@@ -169,30 +166,30 @@ export function MarketIndexTable({
                 <CatalogRow key={row.key} row={row} network={networkLabel} />
               ),
             )}
-            {showGroups && (catalogRows.length || catalogState.status !== "ok") && filter !== "quoted" ? (
+            {showCatalog && showGroups && (catalogRows.length || catalogState.status !== "ok") && filter !== "quoted" ? (
               <GroupRow label="Catalogued venues · listed by Harbor, not priced here yet" />
             ) : null}
-            {showGroups ? catalogRows.map((row) => row.kind === "catalog" ? <CatalogRow key={row.key} row={row} network={networkLabel} /> : null) : null}
-            {catalogState.status === "loading" && filter !== "quoted" ? (
-              <tr><td colSpan={7} className="px-4 py-3"><span className="inline-block h-3 w-48 animate-pulse bg-white/[0.07] motion-reduce:animate-none" role="img" aria-label="Loading venue catalog" /></td></tr>
+            {showCatalog && showGroups ? catalogRows.map((row) => row.kind === "catalog" ? <CatalogRow key={row.key} row={row} network={networkLabel} /> : null) : null}
+            {showCatalog && catalogState.status === "loading" && filter !== "quoted" ? (
+              <tr><td colSpan={6} className="px-4 py-3"><span className="inline-block h-3 w-48 animate-pulse bg-white/[0.07] motion-reduce:animate-none" role="img" aria-label="Loading venue catalog" /></td></tr>
             ) : null}
-            {catalogState.status === "error" && filter !== "quoted" ? (
+            {showCatalog && catalogState.status === "error" && filter !== "quoted" ? (
               <tr>
-                <td colSpan={7} className="px-4 py-3 font-mono text-[11px] text-muted-foreground">
+                <td colSpan={6} className="px-4 py-3 font-mono text-[11px] text-muted-foreground">
                   Venue catalog unavailable: {catalogState.message}{" "}
-                  <button type="button" onClick={onRetryCatalog} className="link-dashed uppercase tracking-wide text-foreground">Retry</button>
+                  <button type="button" onClick={onRetryCatalog} className="link-dashed text-foreground">Retry</button>
                 </td>
               </tr>
             ) : null}
-            {!rows.length && catalogState.status !== "loading" ? (
-              <tr><td colSpan={7} className="px-4 py-8 text-center font-mono text-[11px] uppercase tracking-wide text-muted-foreground">No markets match these filters.</td></tr>
+            {!rows.length && (!showCatalog || catalogState.status !== "loading") ? (
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-[13px] text-muted-foreground">No markets match these filters.</td></tr>
             ) : null}
           </tbody>
         </table>
       </div>
       <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2.5">
-        <p className="label-mono text-[10px]">{footnote}</p>
-        <Link href="/map" className="link-dashed inline-flex items-center gap-1 pointer-coarse:min-h-11 font-mono text-[10px] uppercase tracking-wide text-muted-foreground hover:text-foreground">
+        <p className="label-mono">{footnote}</p>
+        <Link href="/map" className="link-dashed inline-flex items-center gap-1 pointer-coarse:min-h-11 text-xs text-muted-foreground hover:text-foreground">
           Full venue map <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
         </Link>
       </footer>
@@ -220,7 +217,7 @@ function SortHeader({
       <button
         type="button"
         onClick={() => onSort(sortKey)}
-        className={`label-mono inline-flex items-center gap-1 py-1 pointer-coarse:min-h-11 text-[10px] font-medium transition hover:text-foreground ${active ? "text-foreground" : ""}`}
+        className={`label-mono inline-flex items-center gap-1 py-1 pointer-coarse:min-h-11 font-medium transition hover:text-foreground ${active ? "text-foreground" : ""}`}
       >
         {label}
         <Icon className="h-3 w-3" aria-hidden="true" />
@@ -232,7 +229,7 @@ function SortHeader({
 function GroupRow({ label }: { label: string }) {
   return (
     <tr className="border-b border-border bg-background/40">
-      <th scope="colgroup" colSpan={7} className="label-mono px-4 py-2 text-[10px] font-medium">{label}</th>
+      <th scope="colgroup" colSpan={6} className="label-mono px-4 py-2 font-medium">{label}</th>
     </tr>
   );
 }
@@ -263,40 +260,38 @@ function QuotedRow({
         ? `${row.cost.toFixed(3)}%`
         : formatBps(row.cost);
   return (
-    <tr onClick={() => onSelect(row)} className={`group cursor-pointer border-b border-border transition ${selected ? "bracket bracket-accent bg-primary/[0.06]" : "hover:bg-white/[0.03]"}`}>
+    <tr onClick={() => onSelect(row)} className={`group cursor-pointer border-b border-border transition ${selected ? "bracket bracket-accent bg-primary-soft" : "hover:bg-white/[0.03]"}`}>
       <td className="py-0 pl-4 pr-3">
         <button
           type="button"
-          aria-haspopup="dialog"
-          aria-expanded={selected}
           onClick={(event) => { event.stopPropagation(); onSelect(row); }}
           className="flex w-full min-w-0 items-center gap-3 py-3 text-left focus-visible:outline-offset-[-2px] pointer-coarse:min-h-11"
         >
-          <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 ${selected ? "bg-primary" : offline ? "border border-muted-foreground" : "bg-executed"}`} />
+          <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 ${selected ? "bg-primary" : offline ? "border border-muted-foreground rounded-xl" : "bg-executed"}`} />
           <span className="min-w-0">
             <span className="block truncate text-sm font-medium">{pairLabel}</span>
-            <span className="block break-words font-mono text-[10px] uppercase tracking-wide text-muted-foreground sm:truncate">{row.venueName}<span className="sm:hidden"> · {MARKET_TYPE_LABELS[row.type]} · {row.state === "error" ? errorLabel : sourceLabel}</span></span>
+            <span className="block break-words text-xs leading-4 text-muted-foreground">{row.venueName}<span className="sm:hidden"> · {MARKET_TYPE_LABELS[row.type]} · {row.state === "error" ? errorLabel : sourceLabel}</span></span>
           </span>
         </button>
       </td>
       <td className="hidden px-3 py-3 sm:table-cell"><span className={`${chip} ${tone.neutral}`}>{MARKET_TYPE_LABELS[row.type]}</span></td>
-      <td className="px-3 py-3 text-right">
+      <td className="px-3 py-3">
         {row.state === "loading" ? (
-          <span className="ml-auto inline-block h-3 w-14 animate-pulse bg-white/[0.07] motion-reduce:animate-none" role="img" aria-label="Loading" />
+          <span className="inline-block h-3 w-14 animate-pulse bg-white/[0.07] motion-reduce:animate-none" role="img" aria-label="Loading" />
         ) : (
           <>
             <span className="block font-mono text-sm tabular-nums">{formatPrice(row.price)}</span>
-            <span className="block whitespace-nowrap font-mono text-[10px] uppercase tracking-wide text-muted-foreground">{row.state === "error" ? errorLabel : row.priceBasis}</span>
+            <span className="block whitespace-nowrap text-xs text-muted-foreground">{row.state === "error" ? errorLabel : row.priceBasis}</span>
           </>
         )}
       </td>
-      <td className="hidden px-3 py-3 text-right md:table-cell lg:hidden xl:table-cell">
+      <td className="hidden px-3 py-3 md:table-cell lg:hidden xl:table-cell">
         <span className="block font-mono text-xs tabular-nums">{row.state === "loading" ? "…" : cost}</span>
-        <span className="block font-mono text-[10px] uppercase tracking-wide text-muted-foreground">{row.costLabel}</span>
+        <span className="block text-xs text-muted-foreground">{row.costLabel}</span>
       </td>
-      <td className="hidden px-3 py-3 text-right md:table-cell">
+      <td className="hidden px-3 py-3 md:table-cell">
         <span className="block whitespace-nowrap font-mono text-xs tabular-nums">{row.state === "loading" ? "…" : row.liquidity === null ? "—" : `${formatCompact(row.liquidity)} ${row.liquidityUnit}`}</span>
-        <span className="block font-mono text-[10px] uppercase tracking-wide text-muted-foreground">{row.liquidityLabel}</span>
+        <span className="block text-xs text-muted-foreground">{row.liquidityLabel}</span>
       </td>
       <td className="hidden px-3 py-3 sm:table-cell">
         {row.state === "error" ? (
@@ -304,9 +299,6 @@ function QuotedRow({
         ) : sourceLabel ? (
           <span className={`${chip} ${tone[sourceTone]}`}>{sourceLabel}</span>
         ) : null}
-      </td>
-      <td className="hidden px-4 py-3 text-right xl:table-cell">
-        <span className={`whitespace-nowrap font-mono text-[10px] uppercase tracking-wide ${selected ? "text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))]" : "text-muted-foreground"}`}>{selected ? "Open" : "View →"}</span>
       </td>
     </tr>
   );
@@ -324,27 +316,22 @@ function CatalogRow({ row, network }: { row: Extract<MarketRow, { kind: "catalog
     <tr className="border-b border-border transition last:border-b-0 hover:bg-white/[0.02]">
       <td className="py-3 pl-4 pr-3">
         <div className="flex min-w-0 items-center gap-3">
-          <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 border border-muted-foreground/60" />
+          <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 border border-muted-foreground/60 rounded-xl" />
           <span className="min-w-0">
             <Link href="/map" className="block truncate text-sm pointer-coarse:-my-3 pointer-coarse:py-3 text-foreground/90 underline-offset-2 hover:underline">{row.venueName}<span className="sr-only"> (venue map)</span></Link>
-            <span className="block break-words font-mono text-[10px] uppercase tracking-wide text-muted-foreground sm:truncate">
+            <span className="block break-words text-xs text-muted-foreground sm:truncate">
               {labelToken(row.layer)}<span className="sm:hidden"> · {MARKET_TYPE_LABELS[row.type]} · {statusText}</span>
             </span>
           </span>
         </div>
       </td>
       <td className="hidden px-3 py-3 sm:table-cell"><span className={`${chip} ${tone.neutral}`}>{MARKET_TYPE_LABELS[row.type]}</span></td>
-      <td className="px-3 py-3 text-right">
+      <td className="px-3 py-3">
         <span className="block font-mono text-sm text-muted-foreground">—</span>
       </td>
-      <td className="hidden px-3 py-3 text-right font-mono text-xs text-muted-foreground md:table-cell lg:hidden xl:table-cell">—</td>
-      <td className="hidden px-3 py-3 text-right font-mono text-xs text-muted-foreground md:table-cell">—</td>
+      <td className="hidden px-3 py-3 font-mono text-xs text-muted-foreground md:table-cell lg:hidden xl:table-cell">—</td>
+      <td className="hidden px-3 py-3 font-mono text-xs text-muted-foreground md:table-cell">—</td>
       <td className="hidden px-3 py-3 sm:table-cell"><span className={`${chip} ${availabilityTone}`}>{statusText}</span></td>
-      <td className="hidden px-4 py-3 text-right xl:table-cell">
-        <Link href="/map" className="link-dashed font-mono text-[10px] uppercase tracking-wide text-muted-foreground hover:text-foreground">
-          Map<span className="sr-only"> entry for {row.venueName}</span>
-        </Link>
-      </td>
     </tr>
   );
 }

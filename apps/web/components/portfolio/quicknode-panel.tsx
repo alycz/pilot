@@ -38,13 +38,15 @@ export function QuickNodePanel({
     : [];
 
   return (
-    <section aria-labelledby="quicknode-status-title" className="border border-border bg-card">
+    <section aria-labelledby="quicknode-status-title" className="border border-border bg-card rounded-xl overflow-hidden">
       <div className="flex h-12 items-center gap-2.5 border-b border-border px-4 sm:px-5">
         <RadioTower aria-hidden="true" className="h-4 w-4 text-muted-foreground" />
         <h2 id="quicknode-status-title" className="text-sm font-medium tracking-tight">QuickNode</h2>
-        <span className="ml-auto border border-info/30 bg-info/10 px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wide text-info">
-          {state}
-        </span>
+        {state ? (
+          <span className="ml-auto border border-info/30 bg-info/10 px-1.5 py-0.5 text-xs font-medium text-info rounded capitalize">
+            {state}
+          </span>
+        ) : null}
       </div>
       {status ? (
         <dl className="divide-y divide-border">

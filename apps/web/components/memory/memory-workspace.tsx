@@ -222,10 +222,9 @@ export function MemoryWorkspace() {
     <div className="w-full min-w-0">
       {demo ? <DemoBand reason={demoReason} /> : null}
       <section className="relative flex min-w-0 flex-col gap-6 overflow-hidden border-b border-border px-4 py-8 sm:px-6 sm:py-10 lg:flex-row lg:items-end lg:justify-between lg:px-8" aria-labelledby="memory-overview-title">
-        <div aria-hidden="true" className="bg-rules pointer-events-none absolute inset-0" />
         <div className="relative min-w-0">
           <p className="label-mono flex items-center gap-2"><Sparkles className="h-3.5 w-3.5 text-primary" aria-hidden="true" />Persistent context</p>
-          <h1 id="memory-overview-title" className="mt-3 text-[1.75rem] font-normal leading-tight tracking-[-0.02em]">Your agent&apos;s working memory</h1>
+          <h1 id="memory-overview-title" className="mt-3 text-[1.75rem] font-semibold leading-tight tracking-[-0.02em] font-display">Your agent&apos;s working memory</h1>
           <p className="label-mono mt-3 max-w-2xl leading-6">{demo ? "Explore a simulated vault of Markdown notes and the execution policy Pilot follows." : "Inspect stored Markdown notes and the execution policy for the authenticated owner and network."}</p>
           {snapshot ? <p className="mt-3 break-all font-mono text-[11px] text-muted-foreground">{snapshot.network} · {snapshot.owner} · snapshot {new Date(snapshot.generatedAt).toLocaleString()}</p> : null}
         </div>
@@ -258,7 +257,7 @@ export function MemoryWorkspace() {
               <NoteLibrary notes={notes} selectedId={selectedNote.id} onSelect={setSelectedNoteId} />
             </>
           ) : (
-            <section className="border border-border bg-card p-10 text-center">
+            <section className="border border-border bg-card p-10 text-center rounded-xl overflow-hidden">
               <BookOpenText className="mx-auto h-5 w-5 text-muted-foreground" aria-hidden="true" />
               <h2 className="mt-3 text-sm font-medium">No vault notes</h2>
               <p className="label-mono mt-2 normal-case tracking-normal">The authenticated owner&apos;s vault snapshot contains no supported Pilot Markdown notes.</p>
@@ -298,13 +297,13 @@ function DemoBand({ reason }: { reason?: string }) {
       <p className="flex min-w-0 items-start gap-2.5 text-[13px] leading-5 text-muted-foreground">
         <span aria-hidden="true" className="mt-[7px] h-1.5 w-1.5 shrink-0 bg-primary" />
         <span>
-          <span className="font-medium text-foreground">You&apos;re viewing a simulated demo vault.</span> Connect a wallet to see your own notes and policy.
+          <span className="font-medium text-foreground">You&apos;re viewing a demo vault.</span> Connect a wallet to see your own notes and policy.
           {reason ? <span className="mt-0.5 block text-xs">{reason}</span> : null}
         </span>
       </p>
       <Link
         href="/onboarding"
-        className="link-dashed inline-flex shrink-0 items-center gap-1.5 self-start font-mono text-[11px] font-medium uppercase tracking-wide text-foreground sm:self-auto pointer-coarse:py-3.5"
+        className="link-dashed inline-flex shrink-0 items-center gap-1.5 self-start text-[13px] font-medium text-foreground sm:self-auto pointer-coarse:py-3.5"
       >
         Get started <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
       </Link>
@@ -314,7 +313,7 @@ function DemoBand({ reason }: { reason?: string }) {
 
 function StatusBanner({ children, icon: Icon, spin = false, tone }: { children: React.ReactNode; icon: typeof AlertCircle; spin?: boolean; tone: "info" | "error" }) {
   return (
-    <div role={tone === "error" ? "alert" : "status"} className={`mb-5 flex items-start gap-2.5 border px-3.5 py-3 text-xs leading-5 ${tone === "error" ? "border-blocked/35 bg-blocked/[0.07] text-blocked" : "border-border bg-card text-muted-foreground"}`}>
+    <div role={tone === "error" ? "alert" : "status"} className={`mb-5 flex items-start gap-2.5 border px-3.5 py-3 text-xs leading-5 rounded-xl ${tone === "error" ? "border-blocked/35 bg-blocked/[0.07] text-blocked" : "border-border bg-card text-muted-foreground"}`}>
       <Icon className={`mt-px h-3.5 w-3.5 shrink-0 ${spin ? "animate-spin" : ""}`} aria-hidden="true" />
       <span>{children}</span>
     </div>

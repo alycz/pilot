@@ -86,19 +86,14 @@ describe("signed-out strategy demo surface", () => {
     const markup = renderToStaticMarkup(createElement(SignedOutStrategyDemo));
     for (const text of [
       "Illustrative simulation · client only",
-      "Explore bounded autonomous strategies",
-      "Supported declarative grammar",
-      "Scheduled fixed-size trade",
-      "Price-threshold buy or sell",
-      "Allocation-drift rebalance",
-      "Rules are ordered and first-match",
-      "the agent cannot load code",
-      "The simulator itself uses no wallet, live prices, model, network-dependent sample data, scheduler, or trading authority",
-      "Policy → simulation → approval",
-      "Within band · Allocation band",
+      "Set the rules once. Pilot trades inside them.",
+      "Three kinds of strategy",
+      "Recurring buy",
+      "Price trigger",
+      "Rebalance",
+      "Checked before every trade",
       "this simulation never grants trading authority",
       "Connect account for Testnet setup",
-      "No performance or return is estimated",
     ]) expect(markup).toContain(text);
     expect(markup).not.toMatch(/guaranteed|profit|live performance/i);
   });
@@ -106,13 +101,14 @@ describe("signed-out strategy demo surface", () => {
   it("renders native, named controls and a responsive timeline without hidden network affordances", () => {
     const markup = renderToStaticMarkup(createElement(SignedOutStrategyDemo));
     for (const control of [
-      "Play simulation",
-      "Step to next event",
-      "Reset simulation",
-      'aria-label="Target XRP allocation"',
-      'aria-label="Allowed drift on either side"',
+      ">Play<",
+      ">Next event<",
+      ">Reset<",
+      'aria-label="Target XRP share"',
+      'aria-label="Allowed drift either way"',
       'aria-valuetext="50%"',
-      'aria-label="Illustrative event timeline"',
+      'aria-labelledby="event-timeline-title"',
+      "Event timeline",
     ]) expect(markup).toContain(control);
     expect(markup).toContain("motion-reduce:transition-none");
     expect(markup).toContain('data-upcoming="true"');

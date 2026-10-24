@@ -91,7 +91,7 @@ export function X402ResultCard({
             </button>
           ) : null}
           <div className="mt-4 rounded-xl border border-white/8 bg-black/15 p-3">
-            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Merchant JSON data</p>
+            <p className="text-xs font-bold text-muted-foreground">Merchant JSON data</p>
             <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-foreground/85">{merchantJson}</pre>
           </div>
         </div>

@@ -13,7 +13,7 @@ export function VirtualDevicePanel({ enabled = true }: { enabled?: boolean }) {
   return (
     <section
       aria-label="Virtual Ledger"
-      className="border border-slate-300 bg-white p-4 text-slate-950"
+      className="border border-slate-300 bg-white p-4 text-slate-950 rounded-xl overflow-hidden"
     >
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
@@ -22,7 +22,7 @@ export function VirtualDevicePanel({ enabled = true }: { enabled?: boolean }) {
             Use the on-screen controls or the keyboard while this panel is focused.
           </p>
         </div>
-        <span className="border border-slate-300 bg-slate-50 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-slate-600">
+        <span className="border border-slate-300 bg-slate-50 px-2 py-1 text-xs text-slate-600 rounded">
           {device.connected ? "Live events" : "300 ms refresh"}
         </span>
       </div>

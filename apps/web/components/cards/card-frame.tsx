@@ -40,8 +40,11 @@ export function CardFrame({
   tone = "neutral",
   children,
   footer,
+  badge,
 }: {
   event: CardEvent;
+  /** Overrides the state tag, e.g. "declined" for a trade the owner turned down. */
+  badge?: string;
   title: string;
   subtitle: string;
   icon: LucideIcon;
@@ -52,22 +55,22 @@ export function CardFrame({
   const style = toneStyles[tone];
   return (
     <article
-      data-card-state={event.state}
+      data-card-state={badge ?? event.state}
       aria-label={`${title}: ${intentLabel(event.intent)}`}
-      className={`min-w-0 overflow-hidden border ${style.border} bg-card`}
+      className={`min-w-0 overflow-hidden border rounded-xl ${style.border} bg-card`}
     >
       <div className="flex min-w-0 items-start gap-3 p-4">
-        <span className={`grid h-8 w-8 shrink-0 place-items-center border bg-white/[0.02] ${style.icon}`}>
+        <span className={`grid h-8 w-8 shrink-0 place-items-center border bg-white/[0.02] rounded-md ${style.icon}`}>
           <Icon className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">
           {/* The state tag always sits under the subtitle, so every card reads the same. */}
           <h3 className="text-sm font-medium tracking-tight">{title}</h3>
           <p className="mt-0.5 text-balance break-words text-xs leading-relaxed text-muted-foreground">{subtitle}</p>
-          <span className={`mt-2 inline-block border px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.08em] ${style.badge}`}>
-            {event.state.replaceAll("_", " ")}
+          <span className={`mt-2 inline-block border px-1.5 py-0.5 text-xs font-medium rounded ${style.badge}`}>
+            {sentenceCase(badge ?? event.state.replaceAll("_", " "))}
           </span>
-          <p className="mt-3 break-words font-mono text-xs uppercase leading-5 tracking-wide text-foreground/90">{intentLabel(event.intent)}</p>
+          <p className="mt-3 break-words text-xs leading-5 text-foreground/90">{intentLabel(event.intent)}</p>
         </div>
       </div>
       {children ? <div className="border-t border-border px-4 py-3.5">{children}</div> : null}
@@ -107,13 +110,17 @@ export function shorten(value: string, leading = 7, trailing = 5) {
 
 export function DetailGrid({ items }: { items: { label: string; value: string; mono?: boolean }[] }) {
   return (
-    <dl className="grid min-w-0 grid-cols-2 gap-px border border-border bg-border">
+    <dl className="grid min-w-0 grid-cols-2 gap-px border border-border bg-border rounded-xl overflow-hidden">
       {items.map((item) => (
         <div key={item.label} className="min-w-0 bg-card px-3 py-2.5">
-          <dt className="label-mono text-[10px]">{item.label}</dt>
+          <dt className="label-mono">{item.label}</dt>
           <dd className={`mt-1 break-words text-xs ${item.mono ? "font-mono" : "font-medium"}`}>{item.value}</dd>
         </div>
       ))}
     </dl>
   );
+}
+
+function sentenceCase(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }

@@ -23,13 +23,13 @@ export function BlindSignLegend({
   return (
     <section
       aria-label="Ledger blind-signing guide"
-      className="grid gap-4 border border-amber-300 bg-amber-50 p-4 text-slate-950 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]"
+      className="grid gap-4 border border-approval bg-approval/10 p-4 text-slate-950 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] rounded-xl overflow-hidden"
     >
       <div>
-        <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber-900">
+        <p className="text-xs text-approval">
           Expected Ledger screens
         </p>
-        <dl className="mt-3 grid gap-px border border-amber-200 bg-amber-200 text-xs">
+        <dl className="mt-3 grid gap-px border border-approval bg-approval/10 text-xs rounded-xl">
           <div className="bg-white p-2">
             <dt className="font-semibold">Type</dt>
             <dd className="mt-1 font-mono">Unknown</dd>
@@ -63,7 +63,7 @@ export function BlindSignLegend({
           <li>Approve only when the values match Pilot exactly.</li>
           <li>After delegation is validated, return to Settings and disable Blind signing.</li>
         </ol>
-        <p className="mt-3 border border-amber-300 bg-white p-3 text-xs font-medium text-amber-950">
+        <p className="mt-3 border border-approval bg-white p-3 text-xs font-medium text-approval rounded-xl">
           The device may label this transaction and its permissions as Unknown. Pilot never hides that limitation.
         </p>
       </div>

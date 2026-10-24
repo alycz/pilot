@@ -57,6 +57,8 @@ function useConversationSession(enabled: boolean): ConversationSession | undefin
     const controller = new ConversationSessionController(
       (signal) => loadWalletSessionStatus(globalThis.fetch, signal),
       setResolved,
+      // A slow first check (for example while the dev server compiles) shows the demo instead of a loading screen.
+      1_500,
     );
     const refresh = () => controller.refresh();
     const refreshAfterSessionChange = () => controller.refreshAfterSessionChange();
@@ -202,7 +204,7 @@ export function HarnessChatHost({ children }: { children: ReactNode }) {
           className={`harness-chat-toggle ${presentation.open ? "harness-chat-toggle--open" : ""}`}
         >
           {presentation.open ? <PanelLeftClose aria-hidden="true" /> : <MessageCircle aria-hidden="true" />}
-          <span>Harness</span>
+          <span>Ask Pilot</span>
         </button>
         ) : null}
 

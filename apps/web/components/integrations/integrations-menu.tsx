@@ -2,7 +2,7 @@
 
 import { ChevronDown } from "lucide-react";
 import Link from "next/link";
-import React, { useEffect, useId, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 import { integrationLinks } from "./integration-links";
 import type { IntegrationSlug } from "./types";
@@ -20,8 +20,8 @@ export function IntegrationsMenu({
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const itemRefs = useRef<Array<HTMLAnchorElement | null>>([]);
-  const id = useId();
-  const menuId = `integrations-menu-${id.replaceAll(":", "")}`;
+  // One menu per page, so a fixed id keeps server and client markup identical.
+  const menuId = "integrations-menu";
 
   useEffect(() => {
     if (!open) return;
@@ -61,7 +61,7 @@ export function IntegrationsMenu({
           setOpen(true);
           requestAnimationFrame(() => focusItem(event.key === "ArrowDown" ? 0 : -1));
         }}
-        className="inline-flex min-h-11 items-center gap-1.5 px-2 font-mono text-[11px] uppercase tracking-[0.06em] text-muted-foreground transition-colors hover:text-foreground aria-expanded:text-foreground"
+        className="inline-flex min-h-11 items-center gap-1.5 px-2 text-[13px] text-muted-foreground transition-colors hover:text-foreground aria-expanded:text-foreground"
       >
         Integrations
         <ChevronDown
@@ -74,9 +74,9 @@ export function IntegrationsMenu({
           id={menuId}
           role="menu"
           aria-label="Integrations"
-          className={`absolute top-[calc(100%+0.5rem)] z-50 w-72 border border-border-strong bg-popover p-1.5 shadow-xl shadow-black/[0.08] ${
+          className={`absolute top-[calc(100%+0.5rem)] z-50 w-72 border border-border-strong bg-popover p-1.5 shadow-xl shadow-black/[0.08] rounded-xl ${
             align === "start" ? "left-0" : "right-0"
-          }`}
+          } max-sm:fixed max-sm:inset-x-4 max-sm:top-[3.75rem] max-sm:w-auto`}
           onKeyDown={(event) => {
             const currentIndex = itemRefs.current.findIndex((item) => item === document.activeElement);
             if (event.key === "ArrowDown") {
@@ -102,12 +102,12 @@ export function IntegrationsMenu({
               href={item.href}
               aria-current={current === item.slug ? "page" : undefined}
               onClick={() => setOpen(false)}
-              className={`bracket-hover block min-h-11 border-b border-border px-3 py-2.5 last:border-b-0 hover:bg-white/[0.04] focus-visible:outline-offset-[-2px] ${
-                current === item.slug ? "bracket bracket-accent bg-white/[0.05]" : ""
+              className={`bracket bracket-hover bracket-accent block min-h-11 border-b border-border px-3 py-2.5 transition-colors last:border-b-0 hover:bg-white/[0.05] focus-visible:bg-white/[0.05] focus-visible:outline-offset-[-2px] rounded-md ${
+                current === item.slug ? "bg-white/[0.03]" : ""
               }`}
             >
               <span className="block text-sm text-foreground">{item.label}</span>
-              <span className="mt-0.5 block font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+              <span className="mt-0.5 block text-xs text-muted-foreground">
                 {item.detail}
               </span>
             </Link>

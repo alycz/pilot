@@ -31,7 +31,7 @@ export default function OpenRouterFinalizePage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center gap-4 px-6">
       <p className="label-mono">OpenRouter</p>
-      <h1 className="text-2xl font-normal">Finalizing the wallet-bound session</h1>
+      <h1 className="text-2xl font-semibold font-display">Finalizing the wallet-bound session</h1>
       {error ? (
         <>
           <p role="alert" className="text-sm leading-6 text-destructive">{error}</p>

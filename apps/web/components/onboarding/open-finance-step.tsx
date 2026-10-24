@@ -77,7 +77,7 @@ export function OpenFinanceStep({ dailyCapUsd, onVerified }: OpenFinanceStepProp
 
   return (
     <section className="rounded-3xl border border-border bg-card p-5" aria-labelledby="open-finance-title">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">{label}</p>
+      <p className="text-xs font-semibold text-primary">{label}</p>
       <h3 id="open-finance-title" className="mt-2 text-xl font-semibold">Verify with Mastercard</h3>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">
         Link a mock or sandbox account to verify the owner and propose a bounded mandate budget.

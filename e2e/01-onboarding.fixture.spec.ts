@@ -25,17 +25,15 @@ test("golden 01 exposes the honest wallet and delegation preconditions without a
 
   await page.goto(pilotRoutes.onboarding);
   await expect(
-    page.getByRole("heading", { name: "Authenticate your budget wallet" }),
+    page.getByRole("heading", { name: "Connect your wallet", exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Check extension" })).toBeVisible();
-  await expect(page.getByText(
-    /separately sign .*AccountSet proof that cannot be submitted to the ledger/i,
-  )).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Choose model access/i })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Find my wallet" })).toBeVisible();
+  await expect(page.getByText(/sign a free message to prove the account is yours/i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Choose an AI model/i })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Testnet dev signer/i })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Gemwallet/i })).toBeVisible();
   await expect(page.getByRole("button", { name: /Crossmark/i })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Xaman/i })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /Xaman/i })).toHaveCount(0);
   await page.getByRole("button", { name: /^Ledger/i }).click();
   const simulatedLedger = page.getByRole("region", { name: "Simulated Ledger" });
   await expect(simulatedLedger.getByText("Recorded demo · no signing")).toBeVisible();

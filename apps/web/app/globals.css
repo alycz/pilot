@@ -2,48 +2,54 @@
 @import "tw-animate-css";
 
 /*
- * Neutral functional tokens for the twelve-PR reconstruction sequence.
- * Product branding and final visual design are applied only in the separately
- * authorized post-sequence stage. Semantic state colors remain distinct.
+ * Pilot design tokens use a warm paper foundation, off-white cards, soft
+ * corners, and hairline warm-grey borders. Inter handles reading text,
+ * Newsreader handles existing display roles, and Fragment Mono handles code.
+ * Blue is the primary action color; semantic states remain distinct.
  */
 :root {
   color-scheme: light;
 
-  --radius: 0px;
+  --radius: 0.75rem;
 
-  --background: #f5f5f5;
-  --foreground: #171717;
-  --surface: #eeeeee;
-  --card: #ffffff;
+  --background: #f3f1eb;
+  --foreground: #17191f;
+  --surface: #f5f3ee;
+  --card: #fcfbf8;
   --card-foreground: var(--foreground);
-  --popover: #ffffff;
+  --popover: #fcfbf8;
   --popover-foreground: var(--foreground);
 
-  --primary: #4b5563;
+  /* Primary actions, focus and selection. */
+  --primary: #1f56c7;
   --primary-foreground: #ffffff;
-  --bracket: #4b5563;
-  --bracket-muted: #a3a3a3;
+  /* Light blue wash for selected and highlighted surfaces. */
+  --primary-soft: #edf2fc;
+  --primary-soft-border: #c7d6f5;
+  --bracket: #1f56c7;
+  --bracket-muted: #d6d2c8;
 
-  --executed: #166534;
+  /* Semantic states. */
+  --executed: #137a3d;
   --executed-foreground: #ffffff;
-  --approval: #854d0e;
+  --approval: #5a4fcf;
   --approval-foreground: #ffffff;
-  --destructive: #b91c1c;
+  --destructive: #b42318;
   --destructive-foreground: #ffffff;
   --blocked: var(--destructive);
   --blocked-foreground: var(--destructive-foreground);
-  --info: #1d4ed8;
+  --info: #3f5f8f;
 
-  --secondary: #e5e5e5;
-  --secondary-foreground: #262626;
-  --muted: #e5e5e5;
-  --muted-foreground: #525252;
-  --accent: #e5e5e5;
-  --accent-foreground: #171717;
+  --secondary: #ece9e2;
+  --secondary-foreground: #17191f;
+  --muted: #ece9e2;
+  --muted-foreground: #596270;
+  --accent: #ece9e2;
+  --accent-foreground: #17191f;
 
-  --border: #d4d4d4;
-  --border-strong: #a3a3a3;
-  --input: #cbd5e1;
+  --border: #e4e1da;
+  --border-strong: #d3cfc5;
+  --input: #e4e1da;
   --ring: var(--primary);
 
   --chart-1: var(--executed);
@@ -52,16 +58,17 @@
   --chart-4: #6b7280;
   --chart-5: var(--blocked);
 
-  --sidebar: #f0f0f0;
+  --sidebar: #f3f1eb;
   --sidebar-foreground: var(--foreground);
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: #e5e5e5;
+  --sidebar-accent: #ece9e2;
   --sidebar-accent-foreground: var(--foreground);
   --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
 
-  --color-white: #171717;
+  /* Tailwind white-alpha overlays become ink tints on paper. */
+  --color-white: #17191f;
 }
 
 /* Dormant neutral dark tokens; no runtime selector enables them by default. */
@@ -129,8 +136,11 @@
 }
 
 @theme inline {
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: var(--font-newsreader), Georgia, "Times New Roman", serif;
+  /* Royco sets figures in Inter with tabular numerals; Fragment Mono is kept for code. */
+  --font-mono: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-code: var(--font-fragment-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -140,6 +150,8 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-soft-border: var(--primary-soft-border);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -178,15 +190,15 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* Square corners everywhere; rounded-full is kept only for status dots. */
-  --radius-xs: 0px;
-  --radius-sm: 0px;
-  --radius-md: 0px;
-  --radius-lg: 0px;
-  --radius-xl: 0px;
-  --radius-2xl: 0px;
-  --radius-3xl: 0px;
-  --radius-4xl: 0px;
+  /* Royco's corner scale: 6px controls, 12px cards. */
+  --radius-xs: 0.125rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
+  --radius-4xl: 2rem;
 }
 
 @layer base {
@@ -220,8 +232,8 @@
     font-family: var(--font-sans);
     font-synthesis: none;
     text-rendering: optimizeLegibility;
-    font-feature-settings: "ss01", "cv11";
-    letter-spacing: -0.005em;
+    font-feature-settings: "cv11";
+    letter-spacing: normal;
   }
 
   button,
@@ -250,7 +262,7 @@
   }
 
   :focus-visible {
-    outline: 1px solid var(--ring);
+    outline: 2px solid color-mix(in srgb, var(--ring) 70%, transparent);
     outline-offset: 2px;
   }
 
@@ -261,75 +273,43 @@
 }
 
 @layer components {
-  /* Uppercase monospace label used for eyebrows, table heads, metrics. */
+  /* Small label for eyebrows, table heads and metrics (Royco: Inter 12px, medium, muted). */
   .label-mono {
-    font-family: var(--font-mono);
-    font-size: 11px;
+    font-family: var(--font-sans);
+    font-size: 12px;
     font-weight: 500;
-    letter-spacing: 0.06em;
+    letter-spacing: normal;
     line-height: 1.4;
-    text-transform: uppercase;
+    text-transform: none;
     color: var(--muted-foreground);
   }
 
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+
+  pre,
+  code,
+  kbd,
+  samp {
+    font-family: var(--font-code);
+  }
+
+  /* Display headings use the serif, as Royco does for page and section titles. */
+  .font-display {
+    font-family: var(--font-display);
+    font-optical-sizing: auto;
+    /* Semibold everywhere the serif is used, whatever weight utility sits beside it. */
+    font-weight: 600 !important;
+    letter-spacing: normal;
+  }
+
   /*
-   * Corner brackets ("crop marks"). Add .bracket to a positioned element;
-   * .bracket-accent switches them to the focus color, .bracket-hover only
-   * shows them on hover/focus-within. Do not combine with other ::after use.
+   * The old corner brackets are retired: cards and controls now use soft
+   * rounded corners instead. The classes stay as no-ops so markup keeps working.
    */
   .bracket {
     position: relative;
-  }
-  .bracket::after {
-    --bc: var(--bracket-color, var(--bracket-muted));
-    --bl: 8px;
-    --bt: 1.5px;
-    content: "";
-    position: absolute;
-    inset: -1px;
-    pointer-events: none;
-    z-index: 2;
-    background:
-      linear-gradient(var(--bc), var(--bc)) top left / var(--bl) var(--bt) no-repeat,
-      linear-gradient(var(--bc), var(--bc)) top left / var(--bt) var(--bl) no-repeat,
-      linear-gradient(var(--bc), var(--bc)) top right / var(--bl) var(--bt) no-repeat,
-      linear-gradient(var(--bc), var(--bc)) top right / var(--bt) var(--bl) no-repeat,
-      linear-gradient(var(--bc), var(--bc)) bottom left / var(--bl) var(--bt) no-repeat,
-      linear-gradient(var(--bc), var(--bc)) bottom left / var(--bt) var(--bl) no-repeat,
-      linear-gradient(var(--bc), var(--bc)) bottom right / var(--bl) var(--bt) no-repeat,
-      linear-gradient(var(--bc), var(--bc)) bottom right / var(--bt) var(--bl) no-repeat;
-    transition: opacity 150ms ease;
-  }
-  .bracket-accent {
-    --bracket-color: var(--bracket);
-  }
-  /* Selected items sit above any parent group's muted corners. */
-  .bracket-accent::after {
-    z-index: 3;
-  }
-  .bracket-light {
-    --bracket-color: color-mix(in srgb, var(--foreground) 70%, transparent);
-  }
-  .bracket-hover::after {
-    opacity: 0;
-  }
-  .bracket-hover:hover::after,
-  .bracket-hover:focus-visible::after,
-  .bracket-hover:focus-within::after {
-    opacity: 1;
-  }
-  .bracket-focus:focus-within {
-    --bracket-color: var(--bracket);
-  }
-
-  /* Faint vertical rules behind hero areas. */
-  .bg-rules {
-    background-image: repeating-linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--foreground) 3.5%, transparent) 0 1px,
-      transparent 1px 7px
-    );
-    mask-image: radial-gradient(ellipse 70% 80% at 50% 45%, #000 30%, transparent 75%);
   }
 
   /* Dashed underline used for inline text actions ("See details"). */
@@ -352,4 +332,48 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Strategy cards, trades and the strategy manager panel. */
+@keyframes pilot-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes pilot-slide-in {
+  from { opacity: 0; transform: translateX(32px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes pilot-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.pilot-card-enter,
+.pilot-strategy-trade {
+  animation: pilot-rise 320ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.pilot-strategy-manager-panel {
+  animation: pilot-slide-in 280ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.pilot-strategy-manager-scrim {
+  animation: pilot-fade-in 200ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pilot-card-enter,
+  .pilot-strategy-trade,
+  .pilot-strategy-manager-panel,
+  .pilot-strategy-manager-scrim {
+    animation: none;
+  }
+}
+
+/* Pilot select menu */
+@keyframes pilot-menu-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+.pilot-select-menu {
+  animation: pilot-menu-in 140ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pilot-select-menu { animation: none; }
 }

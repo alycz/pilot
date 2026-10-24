@@ -118,7 +118,7 @@ const TRUST_SET_SCREENS = [
 
 function ExpectedScreens({ screens }: { screens: readonly string[] }) {
   return (
-    <section className="border border-border bg-white/[0.02] p-4" aria-label="Expected Ledger screens">
+    <section className="border border-border bg-white/[0.02] p-4 rounded-xl overflow-hidden" aria-label="Expected Ledger screens">
       <p className="label-mono text-foreground">Expected Ledger screens</p>
       <ul className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
         {screens.map((screen) => (
@@ -157,7 +157,7 @@ export function LedgerSigningGuide({
             delegateAddress={delegateAddress}
             permissions={LEDGER_PERMISSION_VALUES}
           />
-          <label className="flex items-start gap-3 border border-amber-300 bg-amber-50 p-4 text-sm text-slate-950">
+          <label className="flex items-start gap-3 border border-approval bg-approval/10 p-4 text-sm text-slate-950 rounded-xl">
             <input
               checked={blindSigningConfirmed ?? false}
               className="mt-0.5 size-4"
@@ -201,7 +201,7 @@ export function LedgerWalletStep({
 }) {
   const hidAvailable = ledgerWebHidAvailable();
   return (
-    <section className="space-y-4 border border-border bg-white/[0.02] p-4" aria-label="Ledger wallet setup">
+    <section className="space-y-4 border border-border bg-white/[0.02] p-4 rounded-xl overflow-hidden" aria-label="Ledger wallet setup">
       <div>
         <p className="label-mono text-foreground">Ledger device</p>
         <p className="mt-2 text-xs leading-5 text-muted-foreground">
@@ -214,7 +214,7 @@ export function LedgerWalletStep({
           const unavailable = !ledgerTransportAvailable(config, choice, hidAvailable);
           return (
             <button
-              className={`border p-3 text-left text-sm transition ${transport === choice ? "border-border-strong bg-primary/[0.06]" : "border-border bg-card"}`}
+              className={`border p-3 text-left text-sm transition rounded-md ${transport === choice ? "border-border-strong bg-primary-soft" : "border-border bg-card"}`}
               disabled={unavailable}
               key={choice}
               onClick={() => onTransportChange(choice)}
@@ -237,7 +237,7 @@ export function LedgerWalletStep({
         <fieldset className="space-y-2">
           <legend className="label-mono text-foreground">Choose an account</legend>
           {LEDGER_ONBOARDING_ACCOUNT_INDEXES.map((index) => (
-            <label className="flex cursor-pointer items-start gap-3 border border-border bg-card p-3" key={index}>
+            <label className="flex cursor-pointer items-start gap-3 border border-border bg-card p-3 rounded-xl" key={index}>
               <input
                 checked={accountIndex === index}
                 className="mt-0.5 size-4"

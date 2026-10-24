@@ -36,14 +36,18 @@ test("request mode is request-scoped across repeat, interruption, reload, naviga
   });
 
   await page.goto("/chat");
-  const mode = page.getByRole("combobox", { name: "Request mode" });
+  const mode = page.getByRole("button", { name: "Request mode" });
+  const chooseMode = async (label: "Let agent choose" | "One-time" | "Recurring" | "Autonomous") => {
+    await mode.click();
+    await page.getByRole("option", { name: label }).click();
+  };
   const composer = page.getByRole("textbox", { name: "Message Pilot" });
-  await expect(mode).toHaveValue("auto");
+  await expect(mode).toHaveAttribute("data-value", "auto");
   await expect(page.getByText(/Recommendation: Needs scope/)).toBeVisible();
 
   await composer.fill("Trade XRP");
   await expect(page.getByText(/Recommendation: Needs scope/)).toBeVisible();
-  await mode.selectOption("one_time");
+  await chooseMode("One-time");
   await composer.fill("Swap 10 RLUSD for XRP");
   await page.getByRole("button", { name: "Send message" }).click();
   await expect(page.getByText("Request scope received. No authority was created.")).toBeVisible();
@@ -52,12 +56,12 @@ test("request mode is request-scoped across repeat, interruption, reload, naviga
 
   // Changing the current selector must not reinterpret Repeat; it reuses the
   // original request's exact mode.
-  await mode.selectOption("autonomous");
+  await chooseMode("Autonomous");
   await page.getByRole("button", { name: "Repeat" }).click();
   await expect.poll(() => requests.length).toBe(2);
   expect(requests[1]?.request_mode).toBe("one_time");
 
-  await mode.selectOption("recurring");
+  await chooseMode("Recurring");
   await composer.fill("slow recurring buy of 10 RLUSD every day");
   await page.getByRole("button", { name: "Send message" }).click();
   await expect(page.getByRole("button", { name: "Stop streaming" })).toBeVisible();
@@ -66,20 +70,20 @@ test("request mode is request-scoped across repeat, interruption, reload, naviga
   await expect(page.getByLabel("Request scope").last()).toContainText("Recurring");
   expect(requests[2]?.request_mode).toBe("recurring");
 
-  await mode.selectOption("autonomous");
+  await chooseMode("Autonomous");
   await page.reload();
-  await expect(mode).toHaveValue("auto");
+  await expect(mode).toHaveAttribute("data-value", "auto");
 
-  await mode.selectOption("recurring");
+  await chooseMode("Recurring");
   activeAccount = ACCOUNT_B;
   await page.goto("/chat?account-switch=1");
-  await expect(mode).toHaveValue("auto");
+  await expect(mode).toHaveAttribute("data-value", "auto");
   await expect(page.getByText(/rPT1Sj…bpAYe/)).toBeVisible();
 
-  await mode.selectOption("autonomous");
+  await chooseMode("Autonomous");
   await page.goto("/");
   await page.goto("/chat?after-navigation=1");
-  await expect(mode).toHaveValue("auto");
+  await expect(mode).toHaveAttribute("data-value", "auto");
 
   for (const body of requests) {
     const serialized = JSON.stringify(body).toLowerCase();
@@ -109,9 +113,13 @@ test("signed-out mode choices stay single-flight, interruptible, simulated, and 
   });
 
   await page.goto("/chat");
-  const mode = page.getByRole("combobox", { name: "Request mode" });
+  const mode = page.getByRole("button", { name: "Request mode" });
+  const chooseMode = async (label: "Autonomous") => {
+    await mode.click();
+    await page.getByRole("option", { name: label }).click();
+  };
   const composer = page.getByRole("textbox", { name: "Message Pilot" });
-  await mode.selectOption("autonomous");
+  await chooseMode("Autonomous");
   await composer.fill("Rebalance XRP autonomously");
   await composer.locator("xpath=ancestor::form[1]").evaluate((form) => {
     form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
@@ -126,11 +134,12 @@ test("signed-out mode choices stay single-flight, interruptible, simulated, and 
   // gate. A later request can run once, still without crossing any authority
   // boundary.
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await mode.selectOption("autonomous");
+  await chooseMode("Autonomous");
   await composer.fill("Rebalance XRP autonomously after the interruption");
   await page.getByRole("button", { name: "Send message" }).click();
   await expect(page.getByText(/signed-out simulation cannot activate or execute/i)).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText(/No mandate, wallet proof, transaction, or ledger submission was created/i)).toBeVisible();
+  await expect(page.getByText(/nothing here connects a wallet, creates a mandate, submits an order or touches the ledger/i)).toBeVisible();
+  await expect(page.getByText(/No mandate, wallet proof, transaction, schedule, or ledger submission was created/i)).toBeVisible();
   await expect(page.getByText("Rebalance XRP autonomously after the interruption", { exact: true })).toHaveCount(1);
   await expect(page.getByText(/Simulated · no wallet or ledger transaction/)).toHaveCount(0);
   await expect(page.getByRole("link", { name: /XRPL Testnet Explorer/i })).toHaveCount(0);

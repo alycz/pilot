@@ -90,14 +90,14 @@ function ChartShell({
 }) {
   const status = coverage.status ?? "ready";
   return (
-    <figure className="m-0 min-w-0 border border-border bg-card" aria-label={title}>
+    <figure className="m-0 min-w-0 border border-border bg-card rounded-xl" aria-label={title}>
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3">
         <div className="min-w-0">
           <h3 className="text-sm font-medium text-foreground">{title}</h3>
           <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
         </div>
         <span
-          className={`border px-2 py-1 font-mono text-[10px] uppercase tracking-wide ${
+          className={`border px-2 py-1 text-xs rounded ${
             status === "ready"
               ? "border-executed/30 bg-executed/10 text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))]"
               : status === "stale" || status === "partial"
@@ -128,9 +128,9 @@ function ChartShell({
 
 function EmptyPlot({ label, detail }: { label: string; detail: string }) {
   return (
-    <div className="flex min-h-52 items-center justify-center border border-dashed border-border bg-background px-6 text-center">
+    <div className="flex min-h-52 items-center justify-center border border-dashed border-border bg-background px-6 text-center rounded-xl">
       <div>
-        <p className="font-mono text-[11px] uppercase tracking-wide text-foreground">{label}</p>
+        <p className="text-[13px] text-foreground">{label}</p>
         <p className="mt-2 max-w-md text-xs leading-relaxed text-muted-foreground">{detail}</p>
       </div>
     </div>
@@ -269,7 +269,7 @@ export function OrderBookDepthChart({
   const summary = `${validBids.length} bid levels and ${validAsks.length} ask levels. ${partial ? "Only one side was observed; spread and mid should not be inferred." : "Both sides were observed."}`;
   return (
     <ChartShell title={title} subtitle={subtitle} coverage={{ ...coverage, status: partial && coverage.status === "ready" ? "partial" : coverage.status }} summary={summary}>
-      <div className="mb-2 flex gap-4 font-mono text-[10px] uppercase tracking-wide text-muted-foreground" aria-hidden="true">
+      <div className="mb-2 flex gap-4 text-xs text-muted-foreground" aria-hidden="true">
         <span className="text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))]">— Bids</span>
         <span className="text-destructive">— Asks</span>
       </div>

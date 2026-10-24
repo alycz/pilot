@@ -952,6 +952,15 @@ export async function fetchLivePortfolioSnapshot(
 }
 
 /** Explicit fixture loader retained for mock mode and deterministic tests. */
+/** Extra resting offers that make the demo book look like a working account. */
+const DEMO_EXTRA_OFFERS: PortfolioOffer[] = [
+  { id: "demo-offer-buy-120", sequence: 42, side: "Buy", quantity: "60 RLUSD", receive: "120 XRP", price: "0.500000 RLUSD/XRP", status: "Open" },
+  { id: "demo-offer-sell-25", sequence: 43, side: "Sell", quantity: "25 XRP", receive: "13.25 RLUSD", price: "0.530000 RLUSD/XRP", status: "Open" },
+  { id: "demo-offer-buy-92", sequence: 44, side: "Buy", quantity: "45 RLUSD", receive: "92 XRP", price: "0.489130 RLUSD/XRP", status: "Open" },
+  { id: "demo-offer-sell-40", sequence: 45, side: "Sell", quantity: "40 XRP", receive: "21.60 RLUSD", price: "0.540000 RLUSD/XRP", status: "Open" },
+  { id: "demo-offer-sell-15", sequence: 46, side: "Sell", quantity: "15 XRP", receive: "8.40 RLUSD", price: "0.560000 RLUSD/XRP", status: "Open" },
+];
+
 export async function loadPortfolioSnapshot(): Promise<PortfolioSnapshot> {
   const accountInfoEnvelope = requireOk(fixture<AccountInfo>("ledger.account.info"), "ledger.account.info");
   const linesEnvelope = requireOk(fixture<AccountLines>("ledger.account.lines"), "ledger.account.lines");
@@ -984,9 +993,12 @@ export async function loadPortfolioSnapshot(): Promise<PortfolioSnapshot> {
       LOCAL_LP_VALUE_USD + LOCAL_VAULT_VALUE_USD,
     changeUsd: 18.42,
     changePercent: 1.64,
-    offers: objectsEnvelope.data.account_objects
-      .map(offerFromObject)
-      .filter((offer): offer is PortfolioOffer => offer !== undefined),
+    offers: [
+      ...objectsEnvelope.data.account_objects
+        .map(offerFromObject)
+        .filter((offer): offer is PortfolioOffer => offer !== undefined),
+      ...DEMO_EXTRA_OFFERS,
+    ],
     lpPositions: [{
       id: "xrpl-amm-xrp-rlusd",
       title: "XRP / RLUSD",

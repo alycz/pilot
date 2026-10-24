@@ -517,12 +517,12 @@ export function DelegationLifecycleGuard() {
   return (
     <aside
       aria-live="polite"
-      className="fixed inset-x-4 bottom-4 z-40 mx-auto flex max-w-2xl items-start gap-3 rounded-2xl border border-amber-400/30 bg-card/95 p-4 shadow-2xl backdrop-blur"
+      className="fixed inset-x-4 bottom-4 z-40 mx-auto flex max-w-2xl items-start gap-3 rounded-2xl border border-approval/30 bg-card/95 p-4 shadow-2xl backdrop-blur"
       role="status"
     >
       {verified
-        ? <ShieldCheck className="mt-0.5 size-5 shrink-0 text-amber-400" />
-        : <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-400" />}
+        ? <ShieldCheck className="mt-0.5 size-5 shrink-0 text-approval" />
+        : <AlertTriangle className="mt-0.5 size-5 shrink-0 text-approval" />}
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold">
           {verified
@@ -542,7 +542,7 @@ export function DelegationLifecycleGuard() {
         </p>
       </div>
       <Link
-        className="shrink-0 rounded-xl border border-amber-400/30 px-3 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-400/10"
+        className="shrink-0 rounded-xl border border-approval/30 px-3 py-2 text-xs font-semibold text-approval hover:bg-approval/10"
         href="/onboarding"
       >
         {pending ? "Resume safely" : recovery ? "Recover safely" : "Revoke safely"}

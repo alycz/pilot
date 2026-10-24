@@ -17,10 +17,10 @@ const samples = [
   {
     id: "mcp",
     label: "MCP",
-    caption: "Agents call Harbor's execute tool at {HARBOR_URL}/mcp",
+    caption: "Agents call the MCP server's execute tool from a sandbox with no internet access",
     body: (
       <>
-        <C>{"// tools/call → Harbor MCP server"}</C>
+        <C>{"// tools/call → Pilot MCP server"}</C>
         {"\n{\n  "}
         <K>&quot;name&quot;</K>: <S>&quot;execute&quot;</S>,{"\n  "}
         <K>&quot;arguments&quot;</K>: {"{\n    "}
@@ -44,11 +44,11 @@ const samples = [
   {
     id: "rest",
     label: "REST",
-    caption: "Apps call the same operation over HTTPS",
+    caption: "Apps call the same operation with POST /api/ops/{op}",
     body: (
       <>
-        <F>curl</F> -X POST <S>&quot;$HARBOR_URL/api/ops/venues.compare&quot;</S> \{"\n  "}
-        -H <S>&quot;Authorization: Bearer $HARBOR_API_KEY&quot;</S> \{"\n  "}
+        <F>curl</F> -X POST <S>&quot;$PILOT_API_URL/api/ops/venues.compare&quot;</S> \{"\n  "}
+        -H <S>&quot;Authorization: Bearer $PILOT_API_KEY&quot;</S> \{"\n  "}
         -H <S>&quot;Content-Type: application/json&quot;</S> \{"\n  "}
         -d <S>&apos;</S>
         {"{\n    "}
@@ -88,7 +88,7 @@ export function CodeSample() {
   const sample = samples[active];
 
   return (
-    <div className="bracket flex min-w-0 flex-col border border-border-strong bg-card">
+    <div className="bracket flex min-w-0 flex-col border border-border-strong bg-card rounded-xl">
       <div className="flex min-w-0 items-center justify-between gap-3 border-b border-border pr-3">
         <div role="tablist" aria-label="Integration surface" className="flex">
           {samples.map((entry, index) => {
@@ -107,7 +107,7 @@ export function CodeSample() {
                 tabIndex={selected ? 0 : -1}
                 onClick={() => setActive(index)}
                 onKeyDown={onKeyDown}
-                className={`h-11 border-r border-border px-4 font-mono text-[11px] uppercase tracking-[0.06em] transition focus-visible:outline-offset-[-2px] ${
+                className={`h-11 border-r border-border px-4 text-[13px] transition focus-visible:outline-offset-[-2px] ${
                   selected ? "bg-white/[0.05] text-foreground shadow-[inset_0_-1.5px_0_var(--primary)]" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -116,13 +116,13 @@ export function CodeSample() {
             );
           })}
         </div>
-        <span className="label-mono hidden truncate text-[10px] sm:block">venues.compare · XRP → RLUSD</span>
+        <span className="label-mono hidden truncate sm:block">venues.compare · XRP → RLUSD</span>
       </div>
       <div role="tabpanel" id={`code-panel-${sample.id}`} aria-labelledby={`code-tab-${sample.id}`} className="flex min-w-0 flex-1 flex-col">
         <pre tabIndex={0} aria-label={`${sample.label} example`} className="flex-1 overflow-x-auto whitespace-pre px-4 py-5 font-mono text-[12px] leading-6 text-foreground focus-visible:outline-offset-[-2px] sm:px-5 [scrollbar-width:thin]">
           <code>{sample.body}</code>
         </pre>
-        <p className="label-mono mt-auto flex items-center justify-between gap-3 border-t border-border bg-[color-mix(in_srgb,var(--foreground)_2.5%,var(--card))] px-4 py-3 text-[10px] sm:px-5">
+        <p className="label-mono mt-auto flex items-center justify-between gap-3 border-t border-border bg-[color-mix(in_srgb,var(--foreground)_2.5%,var(--card))] px-4 py-3 sm:px-5">
           <span>{sample.caption}</span>
         </p>
       </div>

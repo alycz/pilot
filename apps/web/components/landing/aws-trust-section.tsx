@@ -1,5 +1,6 @@
-import { Bot, KeyRound, ShieldCheck } from "lucide-react";
+import { ArrowRight, Bot, KeyRound, ShieldCheck } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import Link from "next/link";
 import React from "react";
 
 const protections: ReadonlyArray<{
@@ -19,7 +20,7 @@ const protections: ReadonlyArray<{
   },
   {
     title: "AWS KMS",
-    description: "Protects Harbor-held key material and records the signer mode without exposing credentials or key ARNs.",
+    description: "Protects the engine's signing key material and records the signer mode without exposing credentials or key ARNs.",
     icon: KeyRound,
   },
 ];
@@ -28,66 +29,53 @@ const architectureStages = ["Untrusted data", "Guardrails", "Bedrock", "Harbor p
 
 export function AwsTrustSection() {
   return (
-    <section
-      aria-labelledby="aws-trust-heading"
-      className="border-t border-slate-200 bg-slate-50 px-4 py-14 text-slate-950 sm:px-6 lg:px-8 lg:py-20"
-    >
-      <div className="mx-auto max-w-6xl">
-        <div className="max-w-3xl">
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-700">Built on AWS</p>
-          <h2 id="aws-trust-heading" className="mt-3 text-balance text-3xl font-bold tracking-tight sm:text-4xl">
-            Trust you can inspect, not just assume.
-          </h2>
-          <p className="mt-4 max-w-2xl text-pretty text-sm leading-6 text-slate-600 sm:text-base">
-            Pilot carries structured screening, model, and signer provenance from Harbor into each action receipt.
-          </p>
+    <section aria-labelledby="aws-trust-heading" className="border-b border-border bg-background">
+      <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
+        <div className="flex flex-wrap items-end justify-between gap-6" data-reveal>
+          <div className="max-w-3xl">
+            <p className="label-mono">Built on AWS</p>
+            <h2 id="aws-trust-heading" className="mt-3 text-balance text-[1.5rem] font-semibold leading-tight tracking-[-0.02em] text-foreground sm:text-[1.75rem] font-display">
+              Trust you can inspect, not just assume.
+            </h2>
+            <p className="mt-4 max-w-2xl text-[15px] leading-7 text-muted-foreground">
+              Pilot carries structured screening, model, and signer provenance from the engine into each action receipt.
+            </p>
+          </div>
+          <Link href="/integrations/aws" className="link-dashed inline-flex items-center gap-1.5 text-[13px] text-foreground pointer-coarse:min-h-11">
+            See how it works <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </Link>
         </div>
 
-        <ul className="mt-9 grid gap-4 md:grid-cols-3" aria-label="AWS trust protections">
+        <ul className="mt-10 grid gap-px border border-border bg-border md:grid-cols-3 rounded-xl overflow-hidden" aria-label="AWS trust protections" data-reveal-stagger>
           {protections.map(({ description, icon: Icon, title }) => (
-            <li
-              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-              data-protection="aws"
-              key={title}
-            >
-              <span className="grid h-10 w-10 place-items-center rounded-xl bg-cyan-50 text-cyan-700">
-                <Icon aria-hidden="true" className="h-5 w-5" />
+            <li className="bg-card p-5 sm:p-6" data-protection="aws" key={title}>
+              <span className="grid h-9 w-9 place-items-center border border-border-strong text-foreground rounded-md">
+                <Icon aria-hidden="true" className="h-4 w-4" strokeWidth={1.75} />
               </span>
-              <h3 className="mt-4 text-base font-bold tracking-tight">{title}</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
+              <h3 className="mt-4 text-[15px] font-medium text-foreground">{title}</h3>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
             </li>
           ))}
         </ul>
 
-        <figure
-          aria-labelledby="aws-architecture-title"
-          className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 p-5 text-white shadow-sm sm:p-7"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <figcaption id="aws-architecture-title" className="text-sm font-bold">
-              Trust path architecture
-            </figcaption>
-            <span className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-200">
-              Mock-first · event-ready
-            </span>
-          </div>
+        <figure aria-labelledby="aws-architecture-title" className="mt-6 overflow-hidden border border-border bg-card rounded-xl">
+          <figcaption id="aws-architecture-title" className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border px-5 py-4">
+            <span className="text-[15px] font-medium text-foreground">How a request travels</span>
+            <span className="text-[13px] text-muted-foreground">From untrusted text to an approved action on the ledger</span>
+          </figcaption>
           <p className="sr-only">
             Untrusted data passes through Bedrock Guardrails and a selected Bedrock model, then Harbor policy, before
             an approved action reaches XRPL Testnet.
           </p>
-          <ol className="mt-5 grid gap-2 sm:grid-cols-5" aria-label="AWS trust path">
+          <ol className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-5" aria-label="AWS trust path">
             {architectureStages.map((stage, index) => (
-              <li className="relative min-w-0" key={stage}>
-                <div className="flex h-full min-h-16 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.045] px-3 py-3">
-                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-cyan-300/12 font-mono text-[10px] font-bold text-cyan-200">
-                    {index + 1}
-                  </span>
-                  <span className="text-xs font-semibold leading-5 text-slate-100">{stage}</span>
-                </div>
+              <li className="flex items-baseline justify-between gap-2 bg-card px-5 py-4" key={stage}>
+                <span className="flex items-baseline gap-2.5 whitespace-nowrap">
+                  <span className="font-mono text-[15px] leading-none tabular-nums text-muted-foreground">0{index + 1}</span>
+                  <span className="text-[15px] leading-none text-foreground">{stage}</span>
+                </span>
                 {index < architectureStages.length - 1 ? (
-                  <span aria-hidden="true" className="absolute -bottom-2 left-1/2 text-xs text-cyan-300 sm:-right-2.5 sm:bottom-auto sm:left-auto sm:top-1/2 sm:-translate-y-1/2">
-                    →
-                  </span>
+                  <ArrowRight aria-hidden="true" className="hidden h-3.5 w-3.5 shrink-0 self-center text-muted-foreground lg:block" />
                 ) : null}
               </li>
             ))}

@@ -111,8 +111,8 @@ export type AnalyticsSnapshot = {
   amm?: AnalyticsAmmState | null;
 };
 
-const panel = "border border-border bg-card";
-const label = "font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground";
+const panel = "border border-border bg-card rounded-xl";
+const label = "text-xs font-medium text-muted-foreground";
 const value = "font-mono tabular-nums text-foreground";
 
 function finite(value: number | null | undefined): value is number {
@@ -216,7 +216,7 @@ export function DataStateNotice({ snapshot }: { snapshot: AnalyticsSnapshot }) {
       ? snapshot.unavailableReason ?? "No funded liquidity was observed for this pair."
       : snapshot.unavailableReason ?? "The source did not return a usable observation.";
   return (
-    <div className={`flex items-start gap-3 border px-4 py-3 ${snapshot.status === "error" ? "border-destructive/35 bg-destructive/[0.06]" : "border-approval/35 bg-approval/[0.06]"}`} role={snapshot.status === "error" ? "alert" : "status"}>
+    <div className={`flex items-start gap-3 border px-4 py-3 rounded-xl ${snapshot.status === "error" ? "border-destructive/35 bg-destructive/[0.06]" : "border-approval/35 bg-approval/[0.06]"}`} role={snapshot.status === "error" ? "alert" : "status"}>
       <AlertTriangle className={`mt-0.5 h-4 w-4 shrink-0 ${snapshot.status === "error" ? "text-destructive" : "text-approval"}`} aria-hidden="true" />
       <div>
         <p className={`${label} ${snapshot.status === "error" ? "text-destructive" : "text-approval"}`}>{snapshot.status} data</p>
@@ -251,7 +251,7 @@ export function PriceCoveragePanel({ snapshot }: { snapshot: AnalyticsSnapshot }
   const coverageDescription = snapshot.history.coverage === "sampled-live"
     ? "a session sample, not historical candles"
     : snapshot.history.coverage === "illustrative-fixture"
-      ? "an illustrative fixture, not a ledger observation"
+      ? "a snapshot"
       : "source-provided history";
   const description = `${snapshot.label} observed-price series with ${points.length} observations${coverageStart ? ` beginning ${formatObservedAt(coverageStart)}` : ""}. ${gapCount} explicit sampling gap${gapCount === 1 ? "" : "s"}. This is ${coverageDescription}.`;
 
@@ -295,10 +295,10 @@ export function PriceCoveragePanel({ snapshot }: { snapshot: AnalyticsSnapshot }
               <text x={pad.left} y={height - 8} fill="var(--muted-foreground)" fontSize="10" fontFamily="var(--font-mono)">{coverageStart ? formatObservedAt(coverageStart) : "start unavailable"}</text>
               <text x={width - pad.right} y={height - 8} textAnchor="end" fill="var(--muted-foreground)" fontSize="10" fontFamily="var(--font-mono)">{coverageEnd ? formatObservedAt(coverageEnd) : "end unavailable"}</text>
             </svg>
-            <figcaption className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+            <figcaption className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-xs text-muted-foreground">
               <span>{points.length} observations</span>
               <span>{snapshot.priceUnit}</span>
-              <span>{snapshot.history.coverage === "sampled-live" ? "Captured since this live session began" : snapshot.history.coverage === "illustrative-fixture" ? "Illustrative fixture · never live" : "Coverage reported by source"}{gapCount ? ` · ${gapCount} gap${gapCount === 1 ? "" : "s"}` : ""}</span>
+              <span>{snapshot.history.coverage === "sampled-live" ? "Captured since this live session began" : snapshot.history.coverage === "illustrative-fixture" ? "Snapshot" : "Coverage reported by source"}{gapCount ? ` · ${gapCount} gap${gapCount === 1 ? "" : "s"}` : ""}</span>
             </figcaption>
           </figure>
         ) : (
@@ -311,7 +311,7 @@ export function PriceCoveragePanel({ snapshot }: { snapshot: AnalyticsSnapshot }
 
 function CoverageBadge({ coverage, incomplete }: { coverage: AnalyticsSnapshot["history"]["coverage"]; incomplete?: boolean }) {
   return (
-    <span className={`border px-2 py-1 font-mono text-[10px] uppercase tracking-wide ${incomplete ? "border-approval/40 bg-approval/[0.07] text-approval" : "border-border text-muted-foreground"}`}>
+    <span className={`border px-2 py-1 text-xs rounded ${incomplete ? "border-approval/40 bg-approval/[0.07] text-approval" : "border-border text-muted-foreground"}`}>
       {coverage === "sampled-live" ? "sampled live" : coverage === "illustrative-fixture" ? "illustrative fixture" : "source history"}{incomplete ? " · incomplete" : ""}
     </span>
   );
@@ -377,7 +377,7 @@ export function SlippagePanel({ snapshot }: { snapshot: AnalyticsSnapshot }) {
               <MetricCell title="Average price" value={quote.available ? formatMetric(quote.averagePrice, 6) : "Unavailable"} suffix={quote.available ? snapshot.priceUnit : undefined} />
               <div className="flex items-end justify-between gap-3 sm:block">
                 <MetricCell title="Price impact" value={quote.available ? formatMetric(quote.priceImpactBps, 1) : "Unavailable"} suffix={quote.available && finite(quote.priceImpactBps) ? "bps" : undefined} />
-                <p className="mt-1 truncate font-mono text-[10px] uppercase tracking-wide text-muted-foreground" title={quote.reason ?? quote.route}>{quote.available ? quote.route : quote.reason ?? "No executable route"}</p>
+                <p className="mt-1 truncate text-xs text-muted-foreground" title={quote.reason ?? quote.route}>{quote.available ? quote.route : quote.reason ?? "No executable route"}</p>
               </div>
             </div>
           ))}
@@ -438,7 +438,7 @@ export function ComparisonScannerPanel({ snapshot, selectedId, onSelect }: { sna
                     <StatusMark status={row.status} />
                     <p className="truncate text-sm font-medium text-foreground">{row.label}</p>
                   </div>
-                  <p className="mt-1 truncate font-mono text-[10px] uppercase tracking-wide text-muted-foreground">{row.venue}</p>
+                  <p className="mt-1 truncate text-xs text-muted-foreground">{row.venue}</p>
                 </div>
                 <ScannerMetric label="Price" value={formatMetric(row.price, 6)} />
                 <ScannerMetric label="Spread" value={formatMetric(row.spreadBps, 1)} suffix={finite(row.spreadBps) ? "bps" : undefined} />
@@ -450,7 +450,7 @@ export function ComparisonScannerPanel({ snapshot, selectedId, onSelect }: { sna
                 </div>
               </>
             );
-            const className = `grid w-full gap-3 px-4 py-4 text-left sm:grid-cols-[minmax(9rem,1.3fr)_repeat(3,minmax(5rem,.7fr))_minmax(9rem,1fr)] sm:items-center sm:px-5 ${selected ? "bracket bracket-accent bg-primary/[0.05]" : interactive ? "hover:bg-white/[0.03]" : ""}`;
+            const className = `grid w-full gap-3 px-4 py-4 text-left sm:grid-cols-[minmax(9rem,1.3fr)_repeat(3,minmax(5rem,.7fr))_minmax(9rem,1fr)] sm:items-center sm:px-5 ${selected ? "bracket bracket-accent bg-primary-soft" : interactive ? "hover:bg-white/[0.03]" : ""}`;
             return (
               <li key={row.id}>
                 {interactive ? <button type="button" className={className} aria-pressed={selected} onClick={() => onSelect(row.id)}>{content}</button> : <div className={className}>{content}</div>}
@@ -482,7 +482,7 @@ export function PanelHeader({ icon, eyebrow, title, aside }: { icon: ReactNode; 
   return (
     <header className="flex min-w-0 items-center justify-between gap-4 border-b border-border bg-sidebar/40 px-4 py-3 sm:px-5">
       <div className="flex min-w-0 items-center gap-3">
-        <span className="grid h-8 w-8 shrink-0 place-items-center border border-border bg-white/[0.03] text-muted-foreground">{icon}</span>
+        <span className="grid h-8 w-8 shrink-0 place-items-center border border-border bg-white/[0.03] text-muted-foreground rounded-md">{icon}</span>
         <div className="min-w-0">
           <p className={label}>{eyebrow}</p>
           <h2 id={id} className="truncate text-sm font-semibold text-foreground">{title}</h2>

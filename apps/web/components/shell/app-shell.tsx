@@ -128,7 +128,7 @@ export function AppShell({
     <div className="min-h-dvh min-w-0 bg-background text-foreground">
       <a
         href="#main-content"
-        className="fixed left-3 top-3 z-50 -translate-y-24 bg-primary px-3 py-2 font-mono text-xs font-semibold uppercase tracking-wide text-primary-foreground transition focus:translate-y-0"
+        className="fixed left-3 top-3 z-50 -translate-y-24 bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground transition focus:translate-y-0"
       >
         Skip to content
       </a>
@@ -143,7 +143,8 @@ export function AppShell({
           </nav>
           {/* Page-specific context (e.g. chat session) is portalled in here. */}
           <div id={SHELL_SIDEBAR_SLOT_ID} className="mt-5 empty:hidden" />
-          <div className="mt-auto space-y-3 pt-5">
+          {/* Bottom padding keeps sidebar content clear of the Ask Pilot button, which sits in this corner. */}
+          <div className="mt-auto space-y-3 pt-5 lg:pb-14">
             {/* Page-specific footer context (e.g. chat's Live context) is portalled in here. */}
             <div id={SHELL_SIDEBAR_FOOTER_SLOT_ID} className="empty:hidden" />
             {signedOut ? <SidebarDemoCard /> : null}
@@ -208,7 +209,7 @@ export function AppShell({
             <Menu className="h-4 w-4" />
           </button>
           <div className="flex min-w-0 items-baseline gap-3">
-            {ownHeading ? <p className="truncate text-sm font-medium tracking-tight">{title}</p> : <h1 className="truncate text-sm font-medium tracking-tight">{title}</h1>}
+            {ownHeading ? <p className="truncate text-lg font-medium tracking-[-0.01em]">{title}</p> : <h1 className="truncate text-lg font-medium tracking-[-0.01em]">{title}</h1>}
             {eyebrow ? <p className="label-mono hidden truncate md:block">{eyebrow}</p> : null}
           </div>
           <div className="ml-auto flex min-w-0 items-center gap-5">
@@ -229,18 +230,18 @@ export function AppShell({
 
 function Brand() {
   return (
-    <Link href="/" className="flex items-center gap-2.5 focus-visible:outline-offset-4 pointer-coarse:min-h-11" aria-label="Workspace home">
-      <Navigation2 className="h-[1.05rem] w-[1.05rem] rotate-45 text-foreground" strokeWidth={1.75} aria-hidden="true" />
-      <span className="text-[15px] font-medium tracking-tight">Workspace</span>
+    <Link href="/" className="flex items-center gap-2.5 focus-visible:outline-offset-4 pointer-coarse:min-h-11" aria-label="Pilot home">
+      <Navigation2 className="h-5 w-5 rotate-45 text-foreground" strokeWidth={1.75} aria-hidden="true" />
+      <span className="text-lg font-medium tracking-tight">Pilot</span>
     </Link>
   );
 }
 
 function NavGroup({ active }: { active: NavKey }) {
   return (
-    <ul className="bracket border border-border">
+    <ul className="space-y-0.5">
       {navigation.map((item) => (
-        <li key={item.key} className="border-b border-border last:border-b-0">
+        <li key={item.key}>
           <NavItem item={item} active={active === item.key} />
         </li>
       ))}
@@ -254,10 +255,10 @@ function NavItem({ item, active }: { item: (typeof navigation)[number]; active: 
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
-      className={`group flex h-10 items-center gap-3 px-3 text-sm transition focus-visible:outline-offset-[-2px] ${
+      className={`group flex h-9 items-center gap-3 rounded-md px-2.5 text-sm font-medium transition focus-visible:outline-offset-[-2px] ${
         active
-          ? "bracket bracket-accent bg-white/[0.06] text-foreground"
-          : "text-muted-foreground hover:bg-white/[0.03] hover:text-foreground"
+          ? "bg-muted text-foreground"
+          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
       }`}
     >
       <Icon className={`h-4 w-4 ${active ? "text-primary" : ""}`} strokeWidth={1.75} aria-hidden="true" />
@@ -271,7 +272,7 @@ function DemoAccountCta() {
   return (
     <Link
       href="/onboarding"
-      className="inline-flex h-9 items-center gap-2 bg-foreground px-3 pointer-coarse:h-11 font-mono text-[11px] font-medium uppercase tracking-wide text-background transition hover:bg-foreground/90"
+      className="inline-flex h-9 items-center gap-2 bg-primary px-3 pointer-coarse:h-11 text-[13px] font-medium text-primary-foreground transition hover:bg-primary/90 rounded-md"
     >
       <span className="sm:hidden">Sign up</span>
       <span className="hidden sm:inline">Create account</span>
@@ -279,11 +280,29 @@ function DemoAccountCta() {
   );
 }
 
+/** Signed-out state stays explicit on every app page. */
+function SidebarDemoCard() {
+  return (
+    <div role="note" aria-label="Demo mode" className="bracket bracket-accent rounded-xl border border-primary/30 bg-[color-mix(in_srgb,var(--primary)_5%,var(--sidebar))] p-3">
+      <p className="label-mono flex items-center gap-2 text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))]">
+        <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+        Demo mode
+      </p>
+      <p className="mt-2 text-[12px] leading-[1.125rem] text-muted-foreground">
+        Chat, Portfolio and Memory run on sample data until you connect a wallet.
+      </p>
+      <Link href="/onboarding" className="link-dashed mt-3 inline-flex min-h-11 items-center gap-1.5 text-[13px] font-medium text-foreground">
+        Get started <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+      </Link>
+    </div>
+  );
+}
+
 function NetworkBadge({ identity }: { identity: ShellIdentityLabels }) {
   return (
-    <div className="flex items-center justify-between border border-border px-3 py-2.5">
+    <div className="flex items-center justify-between border border-border px-3 py-2.5 rounded-xl">
       <span className="label-mono">Network</span>
-      <span className="font-mono text-xs font-medium uppercase text-foreground">XRPL {identity.networkLabel}</span>
+      <span className="text-xs font-medium text-foreground">XRPL {identity.networkLabel}</span>
     </div>
   );
 }
@@ -301,12 +320,12 @@ function StatusStrip({ identity }: { identity: ShellIdentityLabels }) {
     <dl className="hidden min-w-0 items-center gap-5 xl:flex">
       <div className="flex items-center gap-2.5">
         <dt className="label-mono">Network</dt>
-        <dd className="font-mono text-xs uppercase text-foreground">{identity.networkLabel}</dd>
+        <dd className="text-xs text-foreground">{identity.networkLabel}</dd>
       </div>
       <span aria-hidden="true" className="h-4 w-px bg-border" />
       <div className="flex min-w-0 items-center gap-2.5">
         <dt className="label-mono">Wallet</dt>
-        <dd className="flex min-w-0 items-center gap-1.5 font-mono text-xs uppercase text-foreground">
+        <dd className="flex min-w-0 items-center gap-1.5 text-xs text-foreground">
           <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 ${walletTone[identity.walletStatus]}`} />
           <span className="truncate">{identity.walletLabel}</span>
         </dd>
@@ -386,34 +405,11 @@ function useDelegationStatus(): DelegationStatusState {
   return status;
 }
 
-/**
- * One place for the logged-out notice: pinned to the bottom of the sidebar on
- * every app page, instead of a band at the top of each page.
- */
-function SidebarDemoCard() {
-  return (
-    <div role="note" aria-label="Demo mode" className="bracket bracket-accent border border-primary/30 bg-[color-mix(in_srgb,var(--primary)_5%,var(--sidebar))] p-3">
-      <p className="label-mono flex items-center gap-2 text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))]">
-        <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 bg-primary" />
-        Demo mode
-      </p>
-      <p className="mt-2 text-[12px] leading-[1.125rem] text-muted-foreground">
-        Chat, Portfolio and Memory run on sample data until you connect a wallet.
-      </p>
-      <Link
-        href="/onboarding"
-        className="link-dashed mt-3 inline-flex items-center gap-1.5 font-mono text-[11px] font-medium uppercase tracking-wide text-foreground pointer-coarse:min-h-11"
-      >
-        Get started <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-      </Link>
-    </div>
-  );
-}
 
 function DelegationStatus({ status }: { status: DelegationStatusState }) {
   return (
     <div
-      className="border border-border p-3"
+      className="border border-border p-3 rounded-xl"
       aria-live="polite"
       aria-label={`Delegation: ${status.label}`}
     >
@@ -588,7 +584,7 @@ function SettingsMenu({ identity }: { identity: ShellIdentityLabels }) {
         aria-expanded={open}
         aria-controls="pilot-settings"
         onClick={() => setOpen((value) => !value)}
-        className="bracket bracket-light flex h-9 items-center gap-2 border border-border bg-white/[0.03] px-2.5 text-[13px] text-foreground transition hover:bg-white/[0.06] sm:px-3"
+        className="bracket bracket-light flex h-9 items-center gap-2 border border-border bg-white/[0.03] px-2.5 text-[13px] text-foreground transition hover:bg-white/[0.06] sm:px-3 rounded-md"
       >
         <Settings2 className="h-4 w-4" />
         <span className="hidden sm:inline">Settings</span>
@@ -599,7 +595,7 @@ function SettingsMenu({ identity }: { identity: ShellIdentityLabels }) {
           id="pilot-settings"
           role="dialog"
           aria-label="Model and wallet settings"
-          className="absolute right-0 top-11 z-50 w-[min(21rem,calc(100vw-2rem))] border border-border-strong bg-popover shadow-xl shadow-black/[0.08]"
+          className="absolute right-0 top-11 z-50 w-[min(21rem,calc(100vw-2rem))] border border-border-strong bg-popover shadow-xl shadow-black/[0.08] rounded-xl"
         >
           <div className="border-b border-border px-4 py-3">
             <p className="text-sm font-medium">Pilot settings</p>
@@ -609,10 +605,10 @@ function SettingsMenu({ identity }: { identity: ShellIdentityLabels }) {
             <div className="border-b border-border p-4">
               <div className="flex items-center justify-between gap-3">
                 <span className="label-mono">AI access</span>
-                <span className="border border-primary/35 bg-primary/[0.07] px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wide text-[color-mix(in_srgb,var(--primary)_72%,var(--foreground))]">Demo</span>
+                <span className="border border-primary/35 bg-primary-soft px-1.5 py-0.5 text-xs font-medium text-[color-mix(in_srgb,var(--primary)_72%,var(--foreground))] rounded">Demo</span>
               </div>
               <p className="label-mono mt-4 flex items-center gap-2"><Bot className="h-3.5 w-3.5" aria-hidden="true" />Model</p>
-              <p className="mt-2 border border-border bg-background px-2.5 py-2 font-mono text-xs text-muted-foreground">Simulated responses · no model calls</p>
+              <p className="mt-2 border border-border bg-background px-2.5 py-2 font-mono text-xs text-muted-foreground rounded-xl">Simulated responses · no model calls</p>
               <p className="mt-2 text-[11px] leading-4 text-muted-foreground">Create an account to choose a model and bring your own OpenRouter key.</p>
             </div>
           ) : (
@@ -620,15 +616,15 @@ function SettingsMenu({ identity }: { identity: ShellIdentityLabels }) {
             <div className="border-b border-border p-4">
               <div className="flex items-center justify-between gap-3">
                 <span className="label-mono">AI access</span>
-                <span className={`border px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wide ${mode === "oauth" ? "border-executed/30 bg-executed/10 text-executed" : "border-border text-muted-foreground"}`}>{mode === "oauth" ? "OpenRouter" : "Demo"}</span>
+                <span className={`border px-1.5 py-0.5 text-xs font-medium rounded ${mode === "oauth" ? "border-executed/30 bg-executed/10 text-executed" : "border-border text-muted-foreground"}`}>{mode === "oauth" ? "OpenRouter" : "Demo"}</span>
               </div>
               <div className="mt-2 grid grid-cols-2 gap-2">
-                <a href="/api/auth/openrouter/start?returnTo=/chat" className="inline-flex items-center justify-center gap-1.5 bg-foreground px-2 py-2 font-mono text-[11px] font-medium uppercase tracking-wide text-background hover:bg-foreground/90">
+                <a href="/api/auth/openrouter/start?returnTo=/chat" className="inline-flex items-center justify-center gap-1.5 bg-primary px-2 py-2 text-[13px] font-medium text-primary-foreground hover:bg-primary/90">
                   Sign in <ExternalLink className="h-3 w-3" />
                 </a>
-                <button type="button" onClick={() => void switchToDemo()} className="border border-border-strong px-2 py-2 font-mono text-[11px] font-medium uppercase tracking-wide hover:bg-white/5">Try demo</button>
+                <button type="button" onClick={() => void switchToDemo()} className="border border-border-strong px-2 py-2 text-[13px] font-medium hover:bg-white/5 rounded-xl">Try demo</button>
               </div>
-              {mode === "oauth" ? <button type="button" onClick={() => void disconnectOpenRouter()} disabled={saving} className="mt-2 w-full border border-border px-2 py-2 font-mono text-[10px] font-medium uppercase tracking-wide text-muted-foreground hover:bg-white/5 disabled:opacity-50">Disconnect OpenRouter locally</button> : null}
+              {mode === "oauth" ? <button type="button" onClick={() => void disconnectOpenRouter()} disabled={saving} className="mt-2 w-full border border-border px-2 py-2 text-xs font-medium text-muted-foreground hover:bg-white/5 disabled:opacity-50 rounded-xl">Disconnect OpenRouter locally</button> : null}
             </div>
             <label className="block border-b border-border p-4">
               <span className="label-mono flex items-center gap-2"><Bot className="h-3.5 w-3.5" aria-hidden="true" />Model</span>
@@ -636,7 +632,7 @@ function SettingsMenu({ identity }: { identity: ShellIdentityLabels }) {
                 value={model}
                 onChange={(event) => void saveModel(event.target.value)}
                 disabled={loading || saving}
-                className="mt-2 w-full min-w-0 border border-input bg-background px-2.5 py-2 text-xs text-foreground pointer-coarse:text-base"
+                className="mt-2 w-full min-w-0 border border-input bg-background px-2.5 py-2 text-xs text-foreground pointer-coarse:text-base rounded-xl"
               >
                 {models.length === 0 ? <option value={model}>{model}</option> : null}
                 {models.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
@@ -647,8 +643,8 @@ function SettingsMenu({ identity }: { identity: ShellIdentityLabels }) {
             </label>
             </>
           )}
-          {error ? <p role="alert" className="mx-4 mt-3 border border-destructive/30 bg-destructive/10 px-3 py-2 text-[11px] leading-4 text-destructive">{error}</p> : null}
-          {notice && !demo ? <p role="status" className="mx-4 mt-3 border border-border bg-muted px-3 py-2 text-[11px] leading-4 text-muted-foreground">{notice}</p> : null}
+          {error ? <p role="alert" className="mx-4 mt-3 border border-destructive/30 bg-destructive/10 px-3 py-2 text-[11px] leading-4 text-destructive rounded-xl">{error}</p> : null}
+          {notice && !demo ? <p role="status" className="mx-4 mt-3 border border-border bg-muted px-3 py-2 text-[11px] leading-4 text-muted-foreground rounded-xl">{notice}</p> : null}
           <div className="p-4">
             <div className="flex items-center justify-between gap-3">
               <span className="label-mono flex items-center gap-2"><WalletCards className="h-3.5 w-3.5" aria-hidden="true" />Wallet</span>
@@ -666,14 +662,14 @@ function SettingsMenu({ identity }: { identity: ShellIdentityLabels }) {
             {walletAction.href ? (
               <Link
                 href={walletAction.href}
-                className="mt-3 block w-full border border-border-strong px-3 py-2 text-center font-mono text-[11px] font-medium uppercase tracking-wide hover:bg-white/5"
+                className="mt-3 block w-full border border-border-strong px-3 py-2 text-center text-[13px] font-medium hover:bg-white/5 rounded-xl"
               >
                 {walletAction.label}
               </Link>
             ) : (
               <span
                 aria-disabled="true"
-                className="mt-3 block w-full cursor-not-allowed border border-border px-3 py-2 text-center font-mono text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+                className="mt-3 block w-full cursor-not-allowed border border-border px-3 py-2 text-center text-[13px] font-medium text-muted-foreground rounded-xl"
               >
                 {walletAction.label}
               </span>
@@ -687,7 +683,7 @@ function SettingsMenu({ identity }: { identity: ShellIdentityLabels }) {
                   type="button"
                   onClick={() => void signOutWallet()}
                   disabled={signingOut}
-                  className="mt-3 w-full border border-border px-3 py-2 font-mono text-[10px] font-medium uppercase tracking-wide text-muted-foreground hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="mt-3 w-full border border-border px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 rounded-xl"
                 >
                   {signingOut ? "Signing out…" : "Sign out of Pilot"}
                 </button>

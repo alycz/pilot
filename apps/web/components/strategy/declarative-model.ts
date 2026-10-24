@@ -99,9 +99,9 @@ export function newDeclarativeRule(index: number): DeclarativeRuleDraft {
 }
 
 export function describeRule(rule: DeclarativeRuleDraft): string {
-  if (rule.kind === "scheduled_buy") return `Every evaluation, buy ${rule.fixedValue} test-RLUSD of XRP.`;
-  if (rule.kind === "price_buy") return `When executable ask is at or below ${rule.price} test-RLUSD/XRP, buy ${rule.fixedValue} test-RLUSD of XRP.`;
-  if (rule.kind === "price_sell") return `When executable bid is at or above ${rule.price} test-RLUSD/XRP, sell ${rule.fixedValue} test-RLUSD of XRP.`;
+  if (rule.kind === "scheduled_buy") return `Every evaluation, buy ${rule.fixedValue} RLUSD of XRP.`;
+  if (rule.kind === "price_buy") return `When executable ask is at or below ${rule.price} RLUSD/XRP, buy ${rule.fixedValue} RLUSD of XRP.`;
+  if (rule.kind === "price_sell") return `When executable bid is at or above ${rule.price} RLUSD/XRP, sell ${rule.fixedValue} RLUSD of XRP.`;
   return `When XRP allocation leaves ${Number(rule.lowerXrpBps) / 100}–${Number(rule.upperXrpBps) / 100}%, rebalance toward ${Number(rule.targetXrpBps) / 100}%.`;
 }
 

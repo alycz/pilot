@@ -155,7 +155,7 @@ export function PolicyEditor({
       setErrors({});
       setSaveState("saved");
       setPendingRefresh(undefined);
-      setStatusMessage("Saved in this demo session only — not sent to Harbor.");
+      setStatusMessage("Policy saved.");
     } catch (cause) {
       setSaveState("error");
       setStatusMessage(cause instanceof Error ? cause.message : "Policy could not be saved.");
@@ -180,7 +180,7 @@ export function PolicyEditor({
   };
 
   return (
-    <section className="min-w-0 overflow-hidden border border-border bg-card" aria-labelledby="policy-title">
+    <section className="min-w-0 overflow-hidden border border-border bg-card rounded-xl" aria-labelledby="policy-title">
       <header className="border-b border-border px-5 py-4">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -190,7 +190,7 @@ export function PolicyEditor({
             </div>
             <p className="mt-1.5 text-xs leading-5 text-muted-foreground">{readOnly ? "Live Harbor policy for the wallet-bound owner and network." : <>The limits Pilot checks before every action, stored as <span className="font-mono">Pilot/Policy.md</span>.</>}</p>
           </div>
-          {readOnly ? <span className={`shrink-0 border px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wide ${readOnly ? "border-executed/35 bg-executed/10 text-executed" : "border-primary/40 bg-primary/[0.06] text-[color-mix(in_srgb,var(--primary)_72%,var(--foreground))]"}`}>{readOnly ? "Live read" : "Demo"}</span> : null}
+          {readOnly ? <span className={`shrink-0 border px-1.5 py-0.5 text-xs font-medium rounded ${readOnly ? "border-executed/35 bg-executed/10 text-executed" : "border-primary-soft-border bg-primary-soft text-[color-mix(in_srgb,var(--primary)_72%,var(--foreground))]"}`}>{readOnly ? "Live read" : "Demo"}</span> : null}
         </div>
       </header>
 
@@ -231,7 +231,7 @@ export function PolicyEditor({
               onChange={(event) => setField("issuer_allowlist", event.target.value)}
               aria-invalid={Boolean(errors.issuer_allowlist)}
               disabled={readOnly}
-              className="mt-3 h-11 w-full min-w-0 border border-input bg-background/60 px-3 font-mono text-xs text-foreground focus-visible:border-primary/60 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-3 h-11 w-full min-w-0 border border-input bg-background/60 px-3 font-mono text-xs text-foreground focus-visible:border-primary/60 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60 rounded-md"
               placeholder="RLUSD, tUSD"
             />
             <span className="mt-1.5 block text-[11px] text-muted-foreground">Separate currency codes or issuer addresses with commas.</span>
@@ -240,7 +240,7 @@ export function PolicyEditor({
 
           <div className="min-w-0">
           <span className="label-mono block" aria-hidden="true">Issuer safety</span>
-          <label className="mt-3 flex h-11 cursor-pointer items-center gap-3 border border-border bg-background/40 px-3.5">
+          <label className="mt-3 flex h-11 cursor-pointer items-center gap-3 border border-border bg-background/40 px-3.5 rounded-md">
             <input
               type="checkbox"
               disabled={readOnly}
@@ -255,12 +255,12 @@ export function PolicyEditor({
           </div>
           </div>
 
-          <div className="overflow-hidden border border-border">
+          <div className="overflow-hidden border border-border rounded-xl">
             <button
               type="button"
               onClick={() => setAdvancedOpen((current) => !current)}
               aria-expanded={advancedOpen}
-              className="flex w-full items-center justify-between gap-3 bg-background/40 px-3.5 py-3 text-left font-mono text-[11px] font-medium uppercase tracking-[0.06em] transition hover:bg-white/[0.03] focus-visible:outline-offset-[-2px]"
+              className="flex w-full items-center justify-between gap-3 bg-background/40 px-3.5 py-3 text-left text-[13px] font-medium transition hover:bg-white/[0.03] focus-visible:outline-offset-[-2px]"
             >
               Permissions & x402 limits
               {advancedOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" aria-hidden="true" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
@@ -287,7 +287,7 @@ export function PolicyEditor({
 
         <footer className="border-t border-border bg-background/30 px-5 py-4">
           {pendingRefresh ? (
-            <div className="mb-4 border border-blocked/35 bg-blocked/[0.07] p-3 text-xs text-blocked" role="alert">
+            <div className="mb-4 border border-blocked/35 bg-blocked/[0.07] p-3 text-xs text-blocked rounded-xl" role="alert">
               <p className="font-medium">A refreshed policy also changed: {pendingRefresh.fields.join(", ")}.</p>
               <p className="mt-1 leading-5">Your edits are preserved for comparison. Saving is blocked until you load the refreshed policy.</p>
             </div>
@@ -306,14 +306,14 @@ export function PolicyEditor({
               type="button"
               onClick={cancel}
               disabled={readOnly || (!dirty && !pendingRefresh) || saveState === "saving"}
-              className="bracket bracket-light inline-flex h-10 items-center justify-center gap-2 border border-border bg-white/[0.03] px-4 font-mono text-[11px] font-medium uppercase tracking-wide text-foreground transition hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:text-muted-foreground disabled:opacity-50 disabled:hover:bg-white/[0.03]"
+              className="bracket bracket-light inline-flex h-10 items-center justify-center gap-2 border border-border bg-white/[0.03] px-4 text-[13px] font-medium text-foreground transition hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:text-muted-foreground disabled:opacity-50 disabled:hover:bg-white/[0.03] rounded-md"
             >
               <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />{pendingRefresh ? "Load refreshed policy" : "Cancel"}
             </button>
             <button
               type="submit"
               disabled={readOnly || !dirty || saveState === "saving" || Boolean(pendingRefresh)}
-              className="inline-flex h-10 items-center justify-center gap-2 bg-foreground px-4 font-mono text-[11px] font-medium uppercase tracking-wide text-background transition hover:bg-foreground/90 disabled:cursor-not-allowed disabled:bg-white/[0.08] disabled:text-muted-foreground"
+              className="inline-flex h-10 items-center justify-center gap-2 bg-primary px-4 text-[13px] font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-white/[0.08] disabled:text-muted-foreground rounded-md"
             >
               {saveState === "saving" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
               {saveState === "saving" ? "Saving" : readOnly ? "Save policy" : "Save"}
@@ -329,7 +329,7 @@ export function PolicyEditor({
 function NumberField({ disabled, label, prefix, suffix, value, error, onChange }: { disabled?: boolean; label: string; prefix?: string; suffix?: string; value: string; error?: string; onChange: (value: string) => void }) {
   return (
     <label className="block min-w-0">
-      <span className="font-mono text-[11px] uppercase tracking-[0.04em] text-muted-foreground">{label}</span>
+      <span className="text-[13px] text-muted-foreground">{label}</span>
       <span className="bracket bracket-hover bracket-focus relative mt-1.5 block">
         {prefix ? <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-xs text-muted-foreground">{prefix}</span> : null}
         <input
@@ -341,9 +341,9 @@ function NumberField({ disabled, label, prefix, suffix, value, error, onChange }
           onChange={(event) => onChange(event.target.value)}
           aria-invalid={Boolean(error)}
           disabled={disabled}
-          className={`h-10 w-full min-w-0 border bg-background/60 font-mono text-[13px] text-foreground focus-visible:border-primary/60 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60 ${prefix ? "pl-7" : "pl-3"} ${suffix ? "pr-14" : "pr-3"} ${error ? "border-blocked/70" : "border-input"}`}
+          className={`h-10 w-full min-w-0 border bg-background/60 font-mono text-[13px] text-foreground focus-visible:border-primary/60 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60 rounded-md ${prefix ? "pl-7" : "pl-3"} ${suffix ? "pr-14" : "pr-3"} ${error ? "border-blocked/70" : "border-input"}`}
         />
-        {suffix ? <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[11px] uppercase text-muted-foreground">{suffix}</span> : null}
+        {suffix ? <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-muted-foreground">{suffix}</span> : null}
       </span>
       <FieldError message={error} />
     </label>
@@ -352,7 +352,7 @@ function NumberField({ disabled, label, prefix, suffix, value, error, onChange }
 
 function ToggleChip({ disabled, label, checked, onChange }: { disabled?: boolean; label: string; checked: boolean; onChange: () => void }) {
   return (
-    <label className={`flex h-11 min-w-0 items-center gap-2 border px-2.5 font-mono text-[11px] uppercase tracking-[0.04em] transition ${checked ? "bracket bracket-accent border-border-strong bg-white/[0.06] text-foreground" : "border-border bg-background/40 text-muted-foreground hover:text-foreground"} ${disabled ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}>
+    <label className={`flex h-11 min-w-0 items-center gap-2 border px-2.5 text-[13px] transition rounded-md ${checked ? "bracket bracket-accent border-border-strong bg-white/[0.06] text-foreground" : "border-border bg-background/40 text-muted-foreground hover:text-foreground"} ${disabled ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}>
       <input type="checkbox" checked={checked} disabled={disabled} onChange={onChange} className="h-3.5 w-3.5 shrink-0 rounded-none accent-[var(--primary)]" />
       <span className="min-w-0 truncate leading-tight" title={label}>{label}</span>
     </label>

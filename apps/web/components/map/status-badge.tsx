@@ -17,8 +17,8 @@ const DOT_STYLES: Record<VenueAvailability, string> = {
   live: "bg-executed",
   voting: "bg-approval",
   "devnet-only": "bg-info",
-  unavailable: "border border-muted-foreground",
-  unlisted: "border border-muted-foreground",
+  unavailable: "border border-muted-foreground rounded-xl",
+  unlisted: "border border-muted-foreground rounded-xl",
 };
 
 type StatusBadgeProps = {
@@ -49,7 +49,7 @@ export function StatusBadge({ status, network, compact = false, discovery = fals
   const label = statusLabel(status, discovery);
   return (
     <span
-      className={`inline-flex min-w-0 items-center gap-1.5 border font-mono font-medium uppercase tracking-wide ${STATUS_STYLES[status]} ${compact ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-1 text-[11px]"}`}
+      className={`inline-flex min-w-0 items-center gap-1.5 border font-medium rounded-xl ${STATUS_STYLES[status]} ${compact ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-1 text-[11px]"}`}
       title={network ? `${labelToken(network)}: ${label}` : label}
     >
       <span aria-hidden="true" className={`size-1.5 shrink-0 ${DOT_STYLES[status]}`} />

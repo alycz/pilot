@@ -15,12 +15,12 @@ const artifact = {
     {
       op: "ledger.account.info",
       request: { account, network: "testnet", ledger_index: "validated" },
-      response: { ok: true, data: { account_data: { Account: account }, ledger_index: 1, validated: true } },
+      response: { ok: true, data: { account_data: { Account: account }, ledger_index: 1, validated: true }, asOf: "1970-01-01T00:00:00.000Z", asOfBasis: "deterministic synthetic fixture" },
     },
     {
       op: "ledger.account.lines",
       request: { account, network: "testnet", ledger_index: "validated", limit: 20 },
-      response: { ok: true, data: { account, ledger_index: 1, validated: true, lines: [] } },
+      response: { ok: true, data: { account, ledger_index: 1, validated: true, lines: [] }, asOf: "1970-01-01T00:00:00.000Z", asOfBasis: "deterministic synthetic fixture" },
     },
     {
       op: "dex.depth",
@@ -33,6 +33,8 @@ const artifact = {
       },
       response: {
         ok: true,
+        asOf: "1970-01-01T00:00:00.000Z",
+        asOfBasis: "deterministic synthetic fixture",
         data: {
           network: "testnet",
           taker_gets: { currency: "XRP" },
@@ -48,6 +50,8 @@ const artifact = {
       request: { network: "devnet", vault_id: hash },
       response: {
         ok: true,
+        asOf: "1970-01-01T00:00:00.000Z",
+        asOfBasis: "deterministic synthetic fixture",
         data: {
           network: "devnet",
           ledger_index: 1,

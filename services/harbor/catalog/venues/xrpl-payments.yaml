@@ -1,0 +1,24 @@
+id: xrpl-payments
+name: XRPL Payments
+kind: execution-primitive
+layer: xrpl-l1
+category:
+  - payments
+status:
+  mainnet: live
+execution:
+  transactions:
+    - Payment
+  builders:
+    - tx.payment
+reads:
+  - ripple_path_find
+risks:
+  - "Pathfinding results become stale and are not guaranteed to be optimal; compare trusted sources and enforce a maximum source amount or minimum quality."
+  - "A successful partial payment can deliver less than DeliverMax; integrations must use delivered_amount from validated transaction metadata."
+  - "Cross-currency delivery depends on path liquidity and can be affected by trust lines, issuer controls, and transfer fees."
+  - "Testnet and Devnet status is omitted because the cited XRPL pages do not publish a static per-network availability matrix."
+links:
+  site: https://xrpl.org/docs/concepts/payment-types/cross-currency-payments
+  docs: https://xrpl.org/docs/references/protocol/transactions/types/payment
+  api: https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/path-and-order-book-methods/ripple_path_find

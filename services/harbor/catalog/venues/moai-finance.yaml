@@ -1,0 +1,18 @@
+id: moai-finance
+name: Moai Finance
+kind: discovery-venue
+layer: xrpl-evm
+category:
+  - spot
+  - liquidity
+  - bridge
+status:
+  mainnet: live
+reads: []
+risks:
+  - The venue spans XRPL-related chains, so users must verify the selected network and bridge route before acting.
+  - The current product documentation was not publicly reachable during catalog verification; supported pools, contracts, fees, and machine-readable APIs are therefore omitted.
+  - Liquidity provision and cross-chain swaps can expose users to smart-contract, bridge, slippage, and impermanent-loss risk.
+links:
+  site: https://moai-finance.xyz/
+  docs: https://medium.com/@moai-finance/moai-finance-unleashing-the-untapped-potential-of-xrp-8b4938378c31

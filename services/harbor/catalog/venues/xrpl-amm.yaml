@@ -1,0 +1,30 @@
+id: xrpl-amm
+name: XRPL Automated Market Maker
+kind: execution-primitive
+layer: xrpl-l1
+category:
+  - spot
+  - liquidity
+  - yield
+status:
+  mainnet: live
+execution:
+  transactions:
+    - OfferCreate
+    - Payment
+    - AMMDeposit
+    - AMMWithdraw
+  builders:
+    - tx.swap
+    - tx.ammDeposit
+    - tx.ammWithdraw
+reads:
+  - amm_info
+risks:
+  - "Trade size shifts the pool exchange rate, and the AMM charges its configured trading fee; a state read is not a guaranteed execution price."
+  - "Liquidity providers bear currency risk when the relative price of the pooled assets changes, and frozen or unauthorized assets can restrict pool operations."
+  - "Testnet and Devnet status is omitted because the cited XRPL pages do not publish a static per-network availability matrix."
+links:
+  site: https://xrpl.org/docs/concepts/tokens/decentralized-exchange/automated-market-makers
+  docs: https://xrpl.org/docs/references/protocol/transactions/types/ammdeposit
+  api: https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/path-and-order-book-methods/amm_info

@@ -1,0 +1,20 @@
+id: xrpl-permissioned-dex
+name: XRPL Permissioned DEX
+kind: execution-primitive
+layer: xrpl-l1
+category:
+  - spot
+  - liquidity
+status:
+  mainnet: live
+reads:
+  - book_offers
+risks:
+  - "Access depends on valid credentials and a permissioned domain whose owner can change accepted credentials; expired, deleted, or newly excluded credentials can invalidate offers."
+  - "Permissioned liquidity cannot use AMMs or aggregate across multiple permissioned domains in one transaction."
+  - "Execution metadata is omitted because the fixed Harbor builder set has no permissioned-domain-aware OfferCreate or Payment builder."
+  - "Testnet and Devnet status is omitted because the cited XRPL pages do not publish a static per-network availability matrix."
+links:
+  site: https://xrpl.org/docs/concepts/tokens/decentralized-exchange/permissioned-dexes
+  docs: https://xrpl.org/docs/references/protocol/transactions/types/offercreate
+  api: https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/path-and-order-book-methods/book_offers

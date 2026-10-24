@@ -1,0 +1,19 @@
+id: tx-network-sologenic
+name: TX Network / Sologenic
+kind: discovery-venue
+layer: xrpl-l1
+category: [spot, liquidity, bridge]
+status:
+  mainnet: live
+reads:
+  - XRPL DEX order-book markets
+  - XRPL AMM pools and liquidity positions
+risks:
+  - Sologenic is an interface over the independently operated XRP Ledger DEX, so it is not a separate source of order-book or AMM liquidity
+  - The Sologenic ecosystem is transitioning into TX and its official site directs SOLO holders to an asset-upgrade bridge; product names, assets, and URLs may change
+  - The inter-chain bridge is a separate cross-chain surface and is not supported by Harbor transaction builders
+  - Official material does not document Testnet or Devnet availability, so those network statuses are omitted
+  - No current public trading API documentation was verified; reads describe the official user interface rather than a supported API
+links:
+  site: https://sologenic.org/
+  docs: https://sologenic.org/xls-30

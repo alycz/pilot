@@ -1,0 +1,19 @@
+id: hyperliquid-xrp-perps
+name: Hyperliquid XRP Perpetuals
+kind: discovery-venue
+layer: off-ledger
+category:
+  - perps
+status:
+  mainnet: live
+reads:
+  - XRP perpetual market metadata
+  - Mark price, oracle price, funding rate, open interest, and 24-hour notional volume from the public info API
+risks:
+  - Harbor exposes this venue as read-only market data and never places or manages perpetual positions.
+  - Hyperliquid is a separate network from the XRP Ledger; balances and positions are not XRPL assets or ledger objects.
+  - Leveraged perpetuals carry liquidation, funding-rate, oracle, liquidity, and total-loss risk.
+links:
+  site: https://hyperliquid.xyz/
+  docs: https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint/perpetuals
+  api: https://api.hyperliquid.xyz/info

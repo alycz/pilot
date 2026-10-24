@@ -1,0 +1,22 @@
+id: first-ledger
+name: First Ledger
+kind: discovery-venue
+layer: xrpl-l1
+category:
+  - spot
+  - liquidity
+  - analytics
+status:
+  mainnet: live
+reads:
+  - XRPL token rankings with market capitalization, 24-hour change, trading volume, and liquidity
+  - Public XRPL account holdings, LP positions, activity, balances, and realized and unrealized PnL
+risks:
+  - Trending-token rankings use a venue-defined score incorporating activity, momentum, verification, and holder data; they are not an authoritative ledger ranking or investment signal.
+  - Market and limit trades can incur venue fees in addition to XRPL network fees and remain exposed to price impact, slippage, partial fill, and non-fill risk.
+  - First Ledger's wallet documentation says self-custody keys are stored client-side in the browser or Telegram mini-app browser; Harbor does not accept or route owner seeds through this venue.
+  - No official public API contract was found, so reads describe the public user interface and execution support is omitted.
+  - Official material does not document Testnet or Devnet availability, so those network statuses are omitted.
+links:
+  site: https://firstledger.net/
+  docs: https://docs.firstledger.net/

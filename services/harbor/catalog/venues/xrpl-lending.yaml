@@ -1,0 +1,23 @@
+id: xrpl-lending
+name: XRPL Lending Protocol
+kind: execution-primitive
+layer: xrpl-l1
+category:
+  - lending
+  - yield
+status:
+  mainnet: voting
+  testnet: unavailable
+  lending-devnet: live
+reads:
+  - LoanBroker, Loan, and associated Vault ledger entries
+risks:
+  - "The protocol depends on the LendingProtocol and LendingProtocolV1_1 amendments; mainnet use must wait for the required amendments to be enabled."
+  - "Harbor's recorded standard-Devnet probe covered the base LendingProtocol feature but not LendingProtocolV1_1, so standard Devnet status is omitted pending a complete feature check."
+  - "Loans are fixed-term and uncollateralized: underwriting and credit-risk management occur off ledger, and first-loss capital can reduce but does not eliminate default losses."
+  - "The current protocol does not automate on-ledger collateral or liquidation management. Issuer freeze and clawback controls can also affect non-XRP vault assets."
+  - "Harbor exposes lending state as read-only; the fixed Harbor builder set does not include Loan or LoanBroker transaction builders, and Loan-family transactions require owner approval."
+links:
+  site: https://xrpl.org/docs/concepts/tokens/lending-protocol
+  docs: https://xrpl.org/docs/tutorials/defi/lending/use-the-lending-protocol/create-a-loan
+  api: https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/ledger-methods/ledger_entry

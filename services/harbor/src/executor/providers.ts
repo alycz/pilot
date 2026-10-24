@@ -1,5 +1,6 @@
 import type { Envelope } from "../contracts";
 import type { OpContext, OpRegistry } from "../catalog/registry";
+import { XrplRpcError } from "../adapters/xrpl-rpc";
 import { errorEnvelope, GuardError, invokeOp } from "../guard";
 
 export type ProviderCall = (
@@ -25,6 +26,46 @@ export type ProviderRegistry = Pick<OpRegistry, "get" | "list">;
 export type ProviderBudget = {
   consume(operationName: string): void;
 };
+
+const SAFE_XRPL_ERROR_CODES = new Set([
+  "MAINNET_EXECUTION_DISABLED",
+  "XRPL_ERROR",
+  "XRPL_INVALID_COMMAND",
+  "XRPL_INVALID_ENDPOINT",
+  "XRPL_MALFORMED_RESPONSE",
+  "XRPL_PROTOCOL_ERROR",
+  "XRPL_TIMEOUT",
+  "XRPL_TRANSPORT_ERROR",
+  "XRPL_UNSAFE_COMMAND",
+  "actNotFound",
+  "entryNotFound",
+  "noCurrent",
+  "noNetwork",
+  "objectNotFound",
+  "srcCurMalformed",
+  "tooBusy",
+  "txnNotFound",
+]);
+
+const SAFE_XRPL_SOFT_EMPTY_CODES = new Set([
+  "actNotFound",
+  "entryNotFound",
+  "objectNotFound",
+  "txnNotFound",
+]);
+
+function xrplErrorEnvelope(error: XrplRpcError): Envelope<never> {
+  const code = SAFE_XRPL_ERROR_CODES.has(error.code)
+    ? error.code
+    : "XRPL_ERROR";
+  return errorEnvelope("xrpl", new Error("XRPL request failed"), {
+    code,
+    kind:
+      error.kind === "soft-empty" && SAFE_XRPL_SOFT_EMPTY_CODES.has(code)
+        ? "soft-empty"
+        : "error",
+  });
+}
 
 export class ProviderCallLimitError extends Error {
   readonly code = "OP_CALL_LIMIT";
@@ -146,6 +187,9 @@ export function createHarborProvider(
     } catch (error) {
       if (error instanceof GuardError) {
         return errorEnvelope(op.name, error, { code: error.code });
+      }
+      if (error instanceof XrplRpcError) {
+        return xrplErrorEnvelope(error);
       }
       // Handler/library errors are not trusted for disclosure: signing and
       // decryption failures can contain credentials in their messages.

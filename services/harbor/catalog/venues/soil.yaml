@@ -1,0 +1,18 @@
+id: soil
+name: SOIL
+kind: discovery-venue
+layer: off-ledger
+category:
+  - yield
+  - lending
+status:
+  mainnet: live
+reads:
+  - Published XRPL vault assets, target rates, and withdrawal terms
+risks:
+  - Yield depends on treasury strategies and institutional lending or credit activity, including real-world activity outside the XRP Ledger.
+  - Product rates are targets shown by the venue and can change; they are not guaranteed ledger-native returns.
+  - Vault terms can include notice periods, cooldowns, credit, legal, counterparty, liquidity, and principal-loss risk.
+links:
+  site: https://soil.co/
+  docs: https://soil.co/#products

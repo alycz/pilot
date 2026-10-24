@@ -1,0 +1,21 @@
+id: xrpl-escrow
+name: XRPL Escrow
+kind: execution-primitive
+layer: xrpl-l1
+category:
+  - payments
+status:
+  mainnet: live
+reads:
+  - account_objects
+  - account_tx
+risks:
+  - Escrowed funds remain locked until the specified time or cryptographic condition is satisfied, or until an eligible expired escrow is canceled.
+  - EscrowCreate adds an owner-reserve obligation, and an EscrowFinish with a crypto-condition has a higher transaction cost.
+  - Fungible-token escrows depend on the TokenEscrow amendment and issuer permissions; authorization, freeze, lock, and transfer settings can prevent creation, finish, or cancellation.
+  - Execution metadata is omitted because the fixed Harbor builder set has no dedicated EscrowCreate, EscrowFinish, or EscrowCancel builder; EscrowCreate moves value to another account and is not delegated by Harbor policy.
+  - Testnet and Devnet status is omitted because the cited XRPL pages do not publish a static per-network availability matrix.
+links:
+  site: https://xrpl.org/
+  docs: https://xrpl.org/docs/concepts/payment-types/escrow
+  api: https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/account_objects

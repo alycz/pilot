@@ -1,0 +1,18 @@
+id: doppler-finance
+name: Doppler Finance
+kind: discovery-venue
+layer: off-ledger
+category:
+  - yield
+status:
+  mainnet: live
+reads:
+  - Published XRP and RLUSD vault terms and related XRPL custody addresses
+  - XRPL balances and activity for the custody addresses published by the venue
+risks:
+  - The venue states that its XRP and RLUSD vault yields currently use CeDeFi strategies rather than on-chain yield strategies.
+  - Depositors face custodial, counterparty, liquidity, cybersecurity, market, and possible principal-loss risk.
+  - Withdrawals use a notice and batch-processing flow; eligibility also depends on jurisdiction.
+links:
+  site: https://doppler.finance/
+  docs: https://docs.doppler.finance/product/doppler-vaults.md

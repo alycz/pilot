@@ -1,0 +1,25 @@
+id: magnetic-x
+name: Magnetic X
+kind: discovery-venue
+layer: xrpl-l1
+category:
+  - spot
+  - liquidity
+  - yield
+  - bridge
+  - analytics
+status:
+  mainnet: live
+reads:
+  - XRPL token prices, market capitalization, liquidity, volume, trader, and holder metrics
+  - Swap quote details including order-book and AMM contribution, slippage tolerance, price impact, minimum received, and AMM fee
+  - XRPL DEX charts and trading history plus AMM pool and farming statistics
+risks:
+  - Magnetic is a third-party interface to XRPL DEX and AMM liquidity, not a separate source of that on-ledger liquidity; quotes and analytics can become stale before settlement.
+  - Trades and liquidity positions remain exposed to slippage, price impact, partial fill, token volatility, issuer controls, and impermanent loss.
+  - Farming rewards are funded in advance to a Magnetic-controlled wallet and distributed by the venue, adding custody, availability, and reward-exhaustion risk beyond native AMM fees.
+  - The XRPL-XAHAU bridge crosses separate networks; Magnetic warns that exchange-rate changes or insufficient liquidity can reduce the received amount and that delayed transfers may require manual support.
+  - No official public API contract or Testnet and Devnet support was found, so reads describe the public user interface and execution support and those network statuses are omitted.
+links:
+  site: https://xmagnetic.org/
+  docs: https://xmagnetic.org/WhitePaper.pdf

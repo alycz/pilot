@@ -1,0 +1,383 @@
+{
+  "venues.list": {
+    "ok": true,
+    "data": [
+      {
+        "id": "xrpl-dex-clob",
+        "name": "XRPL DEX Order Book",
+        "kind": "execution-primitive",
+        "layer": "xrpl-l1",
+        "category": ["spot", "liquidity"],
+        "status": { "mainnet": "live", "testnet": "live", "devnet": "live" },
+        "execution": { "transactions": ["OfferCreate", "OfferCancel"], "builders": ["tx.swap", "tx.offer", "tx.offerCancel"] },
+        "reads": ["dex.book"],
+        "risks": ["Orders can fill partially or remain on the book."],
+        "links": { "docs": "https://xrpl.org/docs/concepts/tokens/decentralized-exchange" }
+      },
+      {
+        "id": "xrpl-amm",
+        "name": "XRPL Automated Market Maker",
+        "kind": "execution-primitive",
+        "layer": "xrpl-l1",
+        "category": ["spot", "liquidity", "yield"],
+        "status": { "mainnet": "live", "testnet": "live", "devnet": "live" },
+        "execution": { "transactions": ["AMMDeposit", "AMMWithdraw", "OfferCreate"], "builders": ["tx.swap", "tx.ammDeposit", "tx.ammWithdraw"] },
+        "reads": ["amm.info"],
+        "risks": ["Pool price and fee income vary with liquidity and flow."],
+        "links": { "docs": "https://xrpl.org/docs/concepts/tokens/decentralized-exchange/automated-market-makers" }
+      },
+      {
+        "id": "xrpl-permissioned-dex",
+        "name": "XRPL Permissioned DEX",
+        "kind": "execution-primitive",
+        "layer": "xrpl-l1",
+        "category": ["spot", "liquidity"],
+        "status": {},
+        "reads": ["dex.book"],
+        "risks": ["Permissioned domains can restrict eligible participants; mock availability is not asserted."],
+        "links": {}
+      },
+      {
+        "id": "xrpl-payments",
+        "name": "XRPL Payment Paths",
+        "kind": "execution-primitive",
+        "layer": "xrpl-l1",
+        "category": ["spot", "payments"],
+        "status": { "mainnet": "live", "testnet": "live", "devnet": "live" },
+        "execution": { "transactions": ["Payment"], "builders": ["tx.payment"] },
+        "reads": ["dex.book"],
+        "risks": ["Path liquidity can change before submission."],
+        "links": { "docs": "https://xrpl.org/docs/concepts/payment-types/cross-currency-payments" }
+      },
+      {
+        "id": "xrpl-escrow",
+        "name": "XRPL Escrow",
+        "kind": "execution-primitive",
+        "layer": "xrpl-l1",
+        "category": ["payments"],
+        "status": { "mainnet": "live", "testnet": "live", "devnet": "live" },
+        "reads": ["ledger.account.objects"],
+        "risks": ["Time and condition requirements must be satisfied before an escrow can finish."],
+        "links": {}
+      },
+      {
+        "id": "xrpl-checks",
+        "name": "XRPL Checks",
+        "kind": "execution-primitive",
+        "layer": "xrpl-l1",
+        "category": ["payments"],
+        "status": { "mainnet": "live", "testnet": "live", "devnet": "live" },
+        "reads": ["ledger.account.objects"],
+        "risks": ["Checks move value only when the recipient cashes them."],
+        "links": {}
+      },
+      {
+        "id": "xrpl-x402",
+        "name": "XRPL x402",
+        "kind": "execution-primitive",
+        "layer": "xrpl-l1",
+        "category": ["payments"],
+        "status": { "testnet": "live" },
+        "reads": [],
+        "risks": ["Mock coverage is limited to the configured testnet facilitator."],
+        "links": {}
+      },
+      {
+        "id": "xrpl-single-asset-vault",
+        "name": "XRPL Single Asset Vault",
+        "kind": "execution-primitive",
+        "layer": "xrpl-l1",
+        "category": ["yield"],
+        "status": { "mainnet": "unavailable", "testnet": "unavailable", "devnet": "devnet-only", "lending-devnet": "live" },
+        "reads": ["vault.info"],
+        "risks": ["Devnet-only feature in the mock; vault transactions require owner approval."],
+        "links": {}
+      },
+      {
+        "id": "xrpl-lending",
+        "name": "XRPL Lending",
+        "kind": "execution-primitive",
+        "layer": "xrpl-l1",
+        "category": ["lending", "yield"],
+        "status": { "mainnet": "unavailable", "testnet": "unavailable", "devnet": "devnet-only", "lending-devnet": "live" },
+        "reads": ["lending.brokers"],
+        "risks": ["Lending data is development-network-only in the mock."],
+        "links": {}
+      },
+      {
+        "id": "xrpl-evm",
+        "name": "XRPL EVM",
+        "kind": "discovery-venue",
+        "layer": "xrpl-evm",
+        "category": ["bridge"],
+        "status": {},
+        "reads": [],
+        "risks": ["Cross-chain activity introduces bridge and EVM execution risk; mock availability is not asserted."],
+        "links": {}
+      },
+      {
+        "id": "marsgate",
+        "name": "MarsGate",
+        "kind": "discovery-venue",
+        "layer": "xrpl-l1",
+        "category": ["spot", "liquidity"],
+        "status": {},
+        "reads": [],
+        "risks": ["Discovery-only mock card; verify network availability and venue data before use."],
+        "links": {}
+      },
+      {
+        "id": "strobe",
+        "name": "Strobe",
+        "kind": "discovery-venue",
+        "layer": "xrpl-l1",
+        "category": ["lending", "yield"],
+        "status": {},
+        "reads": [],
+        "risks": ["Discovery-only mock card; verify network availability and venue data before use."],
+        "links": {}
+      },
+      {
+        "id": "securd",
+        "name": "Securd",
+        "kind": "discovery-venue",
+        "layer": "xrpl-l1",
+        "category": ["lending", "yield"],
+        "status": {},
+        "reads": [],
+        "risks": ["Discovery-only mock card; verify network availability and venue data before use."],
+        "links": {}
+      },
+      {
+        "id": "first-ledger",
+        "name": "First Ledger",
+        "kind": "discovery-venue",
+        "layer": "xrpl-l1",
+        "category": ["spot"],
+        "status": {},
+        "reads": [],
+        "risks": ["Discovery-only mock card; verify network availability and venue data before use."],
+        "links": {}
+      },
+      {
+        "id": "xpmarket",
+        "name": "XPMarket",
+        "kind": "discovery-venue",
+        "layer": "xrpl-l1",
+        "category": ["spot", "analytics"],
+        "status": {},
+        "reads": [],
+        "risks": ["Discovery-only mock card; verify network availability and venue data before use."],
+        "links": {}
+      },
+      {
+        "id": "magnetic-x",
+        "name": "Magnetic X",
+        "kind": "discovery-venue",
+        "layer": "xrpl-l1",
+        "category": ["spot", "liquidity"],
+        "status": {},
+        "reads": [],
+        "risks": ["Discovery-only mock card; verify network availability and venue data before use."],
+        "links": {}
+      },
+      {
+        "id": "tx-network-sologenic",
+        "name": "Sologenic DEX",
+        "kind": "discovery-venue",
+        "layer": "xrpl-l1",
+        "category": ["spot", "liquidity"],
+        "status": {},
+        "reads": [],
+        "risks": ["Discovery-only mock card; verify network availability and venue data before use."],
+        "links": {}
+      },
+      {
+        "id": "horizon",
+        "name": "Horizon",
+        "kind": "discovery-venue",
+        "layer": "xrpl-l1",
+        "category": ["spot", "liquidity"],
+        "status": {},
+        "reads": [],
+        "risks": ["Discovery-only mock card; verify network availability and venue data before use."],
+        "links": {}
+      },
+      {
+        "id": "orchestra-finance",
+        "name": "Orchestra Finance",
+        "kind": "discovery-venue",
+        "layer": "xrpl-l1",
+        "category": ["spot", "liquidity"],
+        "status": {},
+        "reads": [],
+        "risks": ["Discovery-only mock card; verify network availability and venue data before use."],
+        "links": {}
+      },
+      {
+        "id": "moai-finance",
+        "name": "Moai Finance",
+        "kind": "discovery-venue",
+        "layer": "xrpl-l1",
+        "category": ["spot", "liquidity"],
+        "status": {},
+        "reads": [],
+        "risks": ["Discovery-only mock card; verify network availability and venue data before use."],
+        "links": {}
+      },
+      {
+        "id": "doppler-finance",
+        "name": "Doppler Finance",
+        "kind": "discovery-venue",
+        "layer": "off-ledger",
+        "category": ["yield"],
+        "status": {},
+        "reads": ["yield.options"],
+        "risks": ["Off-ledger discovery data; verify network availability and venue terms before use."],
+        "links": {}
+      },
+      {
+        "id": "soil",
+        "name": "Soil",
+        "kind": "discovery-venue",
+        "layer": "off-ledger",
+        "category": ["lending", "yield"],
+        "status": {},
+        "reads": ["yield.options"],
+        "risks": ["Off-ledger discovery data; verify network availability and venue terms before use."],
+        "links": {}
+      },
+      {
+        "id": "hyperliquid-xrp-perps",
+        "name": "Hyperliquid XRP Perpetuals",
+        "kind": "discovery-venue",
+        "layer": "off-ledger",
+        "category": ["perps"],
+        "status": {},
+        "reads": ["perps.markets"],
+        "risks": ["Off-ledger read-only data; Pilot never executes perpetuals."],
+        "links": {}
+      }
+    ],
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock venue registry"
+  },
+  "venues.get": {
+    "ok": true,
+    "data": {
+      "id": "xrpl-dex-clob",
+      "name": "XRPL DEX Order Book",
+      "kind": "execution-primitive",
+      "layer": "xrpl-l1",
+      "category": ["spot", "liquidity"],
+      "status": { "mainnet": "live", "testnet": "live", "devnet": "live" },
+      "execution": { "transactions": ["OfferCreate", "OfferCancel"], "builders": ["tx.swap", "tx.offer", "tx.offerCancel"] },
+      "reads": ["dex.book"],
+      "risks": ["Orders can fill partially or remain on the book."],
+      "links": { "docs": "https://xrpl.org/docs/concepts/tokens/decentralized-exchange" }
+    },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock venue registry"
+  },
+  "venues.compare": {
+    "ok": true,
+    "data": {
+      "network": "testnet",
+      "sell": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" },
+      "buy": { "currency": "XRP" },
+      "amount": "100",
+      "side": "sell",
+      "routes": [
+        { "venue_id": "xrpl-dex-clob", "route": "order-book", "input_amount": "100 RLUSD", "output_amount": "195.3125 XRP", "price": "0.5120", "price_impact_bps": 18, "fee": "0", "available": true },
+        { "venue_id": "xrpl-amm", "route": "amm", "input_amount": "100 RLUSD", "output_amount": "194.8938 XRP", "price": "0.5131", "price_impact_bps": 24, "fee": "0.3000 RLUSD", "available": true },
+        { "venue_id": "xrpl-payments", "route": "path", "input_amount": "100 RLUSD", "output_amount": "194.5525 XRP", "price": "0.5140", "price_impact_bps": 31, "fee": "0", "available": true }
+      ]
+    },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock testnet ledger 9345210"
+  },
+  "ledger.account.info": {
+    "ok": true,
+    "data": { "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "ledger_index": 9345210, "validated": true, "account_data": { "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "Balance": "250000000", "OwnerCount": 3, "Sequence": 42 } },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock testnet ledger 9345210"
+  },
+  "ledger.account.lines": {
+    "ok": true,
+    "data": { "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "lines": [{ "account": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV", "currency": "RLUSD", "balance": "1000", "limit": "10000", "limit_peer": "0", "authorized": true, "freeze": false }], "ledger_index": 9345210, "validated": true },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock testnet ledger 9345210"
+  },
+  "ledger.account.objects": {
+    "ok": true,
+    "data": { "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "account_objects": [{ "LedgerEntryType": "Offer", "index": "A100000000000000000000000000000000000000000000000000000000000001", "Sequence": 41, "TakerGets": "10000000", "TakerPays": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV", "value": "5.12" } }], "ledger_index": 9345210, "validated": true },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock testnet ledger 9345210"
+  },
+  "ledger.account.tx": {
+    "ok": true,
+    "data": { "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "transactions": [{ "hash": "A100000000000000000000000000000000000000000000000000000000000002", "ledger_index": 9345201, "validated": true, "tx": { "TransactionType": "OfferCreate", "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59" }, "meta": { "TransactionResult": "tesSUCCESS" } }], "ledger_index_min": 9345000, "ledger_index_max": 9345210 },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock testnet ledger range 9345000-9345210"
+  },
+  "dex.book": {
+    "ok": true,
+    "data": { "network": "testnet", "ledger_index": 9345210, "taker_gets": { "currency": "XRP" }, "taker_pays": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" }, "offers": [{ "taker_gets": "2500000000", "taker_pays": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV", "value": "1279.5" }, "quality": "0.5118" }, { "taker_gets": "2300000000", "taker_pays": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV", "value": "1178.06" }, "quality": "0.5122" }] },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock testnet book_offers at ledger 9345210"
+  },
+  "amm.info": {
+    "ok": true,
+    "data": { "network": "testnet", "ledger_index": 9345210, "amm": { "Account": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "Asset": { "currency": "XRP" }, "Asset2": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" }, "Amount": "50000000000", "Amount2": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV", "value": "25600" }, "TradingFee": 300, "LPToken": { "currency": "03ABCDEF0123456789ABCDEF0123456789ABCDEF", "issuer": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "value": "357770.8764" } } },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock testnet amm_info at ledger 9345210"
+  },
+  "tokens.lookup": {
+    "ok": true,
+    "data": { "network": "testnet", "asset": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" }, "name": "Ripple USD", "symbol": "RLUSD", "description": "Mock testnet stablecoin metadata.", "price_usd": "1.00", "volume_24h_usd": "8500000", "flags": { "require_auth": false, "global_freeze": false, "clawback": false, "blackholed": false }, "sources": ["mock-indexer", "mock-ledger"] },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock indexer metadata merged with testnet issuer flags"
+  },
+  "yield.options": {
+    "ok": true,
+    "data": { "network": "testnet", "asset": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" }, "amount": "500", "options": [
+      { "id": "xrpl-amm-xrp-rlusd", "name": "XRP/RLUSD AMM", "kind": "amm", "venue_id": "xrpl-amm", "network": "testnet", "asset": { "currency": "XRP" }, "asset2": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" }, "apr_percent": "6.84", "tvl_usd": "5120000", "risks": ["Impermanent loss", "Variable fee income"] },
+      { "id": "xrpl-vault-rlusd", "name": "RLUSD Single Asset Vault", "kind": "vault", "venue_id": "xrpl-single-asset-vault", "network": "devnet", "asset": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" }, "apr_percent": "4.20", "tvl_usd": "830000", "risks": ["Devnet-only feature"] },
+      { "id": "doppler-rlusd", "name": "Doppler RLUSD", "kind": "protocol", "venue_id": "doppler-finance", "network": "mainnet", "asset": { "currency": "RLUSD", "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De" }, "apy_percent": "8.10", "tvl_usd": "2400000", "risks": ["Off-ledger venue data"] },
+      { "id": "soil-rlusd", "name": "Soil RLUSD", "kind": "protocol", "venue_id": "soil", "network": "mainnet", "asset": { "currency": "RLUSD", "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De" }, "apy_percent": "7.35", "tvl_usd": "1900000", "risks": ["Off-ledger venue data"] }
+    ] },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock venue registry and 24-hour volume snapshot",
+    "caveat": ["devnet-only", "off-ledger"]
+  },
+  "account.link": {
+    "ok": true,
+    "data": { "owner": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "network": "testnet", "delegate": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "permissions": ["OfferCreate", "OfferCancel", "TrustSet", "AMMDeposit", "AMMWithdraw", "EscrowFinish", "CheckCash"], "status": "pending", "delegate_set_tx": { "TransactionType": "DelegateSet", "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "Authorize": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "Permissions": [{ "Permission": { "PermissionValue": "OfferCreate" } }, { "Permission": { "PermissionValue": "OfferCancel" } }, { "Permission": { "PermissionValue": "TrustSet" } }, { "Permission": { "PermissionValue": "AMMDeposit" } }, { "Permission": { "PermissionValue": "AMMWithdraw" } }, { "Permission": { "PermissionValue": "EscrowFinish" } }, { "Permission": { "PermissionValue": "CheckCash" } }], "Fee": "12", "Sequence": 42, "LastLedgerSequence": 9345230, "SourceTag": 20261017, "Memos": [{ "Memo": { "MemoType": "70696C6F742F696E74656E74", "MemoData": "6163636F756E742D6C696E6B2D303031" } }] } },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock principal-scoped link store"
+  },
+  "account.status": {
+    "ok": true,
+    "data": { "owner": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "network": "testnet", "delegate": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "permissions": ["OfferCreate", "OfferCancel", "TrustSet", "AMMDeposit", "AMMWithdraw", "EscrowFinish", "CheckCash"], "status": "active" },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock testnet Delegate ledger entry at 9345210"
+  },
+  "account.revoke": {
+    "ok": true,
+    "data": { "owner": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "network": "testnet", "delegate": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "permissions": [], "status": "revoked", "revoke_tx": { "TransactionType": "DelegateSet", "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "Authorize": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "Permissions": [], "Fee": "12", "Sequence": 43, "LastLedgerSequence": 9345230, "SourceTag": 20261017, "Memos": [{ "Memo": { "MemoType": "70696C6F742F696E74656E74", "MemoData": "6163636F756E742D7265766F6B652D303031" } }] } },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock principal-scoped link store"
+  },
+  "policy.get": {
+    "ok": true,
+    "data": { "max_per_tx_usd": 2000, "daily_cap_usd": 5000, "execute_under_usd": 250, "max_slippage_bps": 100, "allowed_tx_types": ["OfferCreate", "OfferCancel", "TrustSet", "AMMDeposit", "AMMWithdraw", "EscrowFinish", "CheckCash"], "issuer_allowlist": ["RLUSD"], "block_requireauth_issuers": true, "networks": ["testnet", "devnet"], "x402_max_per_call_drops": "10000", "x402_daily_cap_drops": "1000000" },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock principal-scoped policy store"
+  },
+  "policy.set": {
+    "ok": true,
+    "data": { "max_per_tx_usd": 2000, "daily_cap_usd": 5000, "execute_under_usd": 250, "max_slippage_bps": 100, "allowed_tx_types": ["OfferCreate", "OfferCancel", "TrustSet", "AMMDeposit", "AMMWithdraw", "EscrowFinish", "CheckCash"], "issuer_allowlist": ["RLUSD"], "block_requireauth_issuers": true, "networks": ["testnet", "devnet"], "x402_max_per_call_drops": "10000", "x402_daily_cap_drops": "1000000" },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock principal-scoped policy store"
+  }
+}

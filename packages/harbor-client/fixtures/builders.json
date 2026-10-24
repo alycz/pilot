@@ -1,0 +1,144 @@
+{
+  "tx.swap": {
+    "ok": true,
+    "data": {
+      "build_id": "build-swap-001",
+      "network": "testnet",
+      "tx_json": { "TransactionType": "OfferCreate", "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "TakerGets": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV", "value": "100" }, "TakerPays": "195312500", "Flags": 131072, "Fee": "12", "Sequence": 42, "LastLedgerSequence": 9345230, "SourceTag": 20261017, "Memos": [{ "Memo": { "MemoType": "70696C6F742F696E74656E74", "MemoData": "696E74656E742D737761702D303031" } }] },
+      "delegable": true,
+      "simulate": { "engine_result": "tesSUCCESS", "engine_result_message": "The transaction would succeed.", "applied": false },
+      "preflight": [{ "check": "reserve", "pass": true }, { "check": "trust_line", "pass": true }, { "check": "issuer_require_auth", "pass": true }, { "check": "slippage", "pass": true, "detail": "18 bps <= 100 bps" }],
+      "summary": { "action": "Swap 100 RLUSD for XRP", "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "amounts": ["100 RLUSD", "at least 195.3125 XRP"], "fee_drops": "12", "reserve_delta_drops": "0", "est_slippage_bps": 18, "usd_value": "100.00" }
+    },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock testnet autofill and simulate at ledger 9345210"
+  },
+  "tx.offer": {
+    "ok": true,
+    "data": {
+      "build_id": "build-offer-001",
+      "network": "testnet",
+      "tx_json": { "TransactionType": "OfferCreate", "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "TakerGets": "200000000", "TakerPays": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV", "value": "104" }, "Expiration": 845251200, "Fee": "12", "Sequence": 42, "LastLedgerSequence": 9345230, "SourceTag": 20261017, "Memos": [{ "Memo": { "MemoType": "70696C6F742F696E74656E74", "MemoData": "696E74656E742D6F666665722D303031" } }] },
+      "delegable": true,
+      "simulate": { "engine_result": "tesSUCCESS", "engine_result_message": "The transaction would succeed.", "applied": false },
+      "preflight": [{ "check": "reserve", "pass": true }, { "check": "trust_line", "pass": true }, { "check": "expiry", "pass": true }],
+      "summary": { "action": "Place XRP/RLUSD limit offer", "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "amounts": ["200 XRP", "104 RLUSD"], "fee_drops": "12", "reserve_delta_drops": "2000000", "usd_value": "104.00" }
+    },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock testnet autofill and simulate at ledger 9345210"
+  },
+  "tx.offerCancel": {
+    "ok": true,
+    "data": {
+      "build_id": "build-offer-cancel-001",
+      "network": "testnet",
+      "tx_json": { "TransactionType": "OfferCancel", "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "OfferSequence": 41, "Fee": "12", "Sequence": 42, "LastLedgerSequence": 9345230, "SourceTag": 20261017, "Memos": [{ "Memo": { "MemoType": "70696C6F742F696E74656E74", "MemoData": "696E74656E742D63616E63656C2D303031" } }] },
+      "delegable": true,
+      "simulate": { "engine_result": "tesSUCCESS", "engine_result_message": "The transaction would succeed.", "applied": false },
+      "preflight": [{ "check": "offer_exists", "pass": true, "detail": "Offer sequence 41 is active." }],
+      "summary": { "action": "Cancel offer 41", "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "amounts": [], "fee_drops": "12", "reserve_delta_drops": "-2000000" }
+    },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock testnet autofill and simulate at ledger 9345210"
+  },
+  "tx.payment": {
+    "ok": true,
+    "data": {
+      "build_id": "build-payment-001",
+      "network": "testnet",
+      "tx_json": { "TransactionType": "Payment", "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "Amount": "25000000", "Fee": "12", "Sequence": 42, "LastLedgerSequence": 9345230, "SourceTag": 20261017, "Memos": [{ "Memo": { "MemoType": "70696C6F742F696E74656E74", "MemoData": "696E74656E742D7061792D303031" } }] },
+      "delegable": false,
+      "simulate": { "engine_result": "tesSUCCESS", "engine_result_message": "The transaction would succeed.", "applied": false },
+      "preflight": [{ "check": "destination", "pass": true }, { "check": "reserve", "pass": true }],
+      "summary": { "action": "Pay 25 XRP", "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "amounts": ["25 XRP"], "fee_drops": "12", "reserve_delta_drops": "0", "usd_value": "12.80" }
+    },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock testnet autofill and simulate at ledger 9345210"
+  },
+  "tx.trustSet": {
+    "ok": true,
+    "data": {
+      "build_id": "build-trust-set-001",
+      "network": "testnet",
+      "tx_json": { "TransactionType": "TrustSet", "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "LimitAmount": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV", "value": "10000" }, "Fee": "12", "Sequence": 42, "LastLedgerSequence": 9345230, "SourceTag": 20261017, "Memos": [{ "Memo": { "MemoType": "70696C6F742F696E74656E74", "MemoData": "696E74656E742D74727573742D303031" } }] },
+      "delegable": true,
+      "simulate": { "engine_result": "tesSUCCESS", "engine_result_message": "The transaction would succeed.", "applied": false },
+      "preflight": [{ "check": "issuer_require_auth", "pass": true }, { "check": "reserve", "pass": true }],
+      "summary": { "action": "Set RLUSD trust line", "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "amounts": ["10000 RLUSD limit"], "fee_drops": "12", "reserve_delta_drops": "2000000" }
+    },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock testnet autofill and simulate at ledger 9345210"
+  },
+  "tx.ammDeposit": {
+    "ok": true,
+    "data": {
+      "build_id": "build-amm-deposit-001",
+      "network": "testnet",
+      "tx_json": { "TransactionType": "AMMDeposit", "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "Asset": { "currency": "XRP" }, "Asset2": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" }, "Amount": "390625000", "Amount2": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV", "value": "200" }, "Fee": "12", "Sequence": 42, "LastLedgerSequence": 9345230, "SourceTag": 20261017, "Memos": [{ "Memo": { "MemoType": "70696C6F742F696E74656E74", "MemoData": "696E74656E742D616D6D2D6465702D303031" } }] },
+      "delegable": true,
+      "simulate": { "engine_result": "tesSUCCESS", "engine_result_message": "The transaction would succeed.", "applied": false },
+      "preflight": [{ "check": "pool_exists", "pass": true }, { "check": "balances", "pass": true }, { "check": "trust_line", "pass": true }],
+      "summary": { "action": "Deposit XRP and RLUSD into AMM", "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "amounts": ["390.625 XRP", "200 RLUSD"], "fee_drops": "12", "reserve_delta_drops": "2000000", "est_slippage_bps": 12, "usd_value": "400.00" }
+    },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock testnet autofill and simulate at ledger 9345210"
+  },
+  "tx.ammWithdraw": {
+    "ok": true,
+    "data": {
+      "build_id": "build-amm-withdraw-001",
+      "network": "testnet",
+      "tx_json": { "TransactionType": "AMMWithdraw", "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "Asset": { "currency": "XRP" }, "Asset2": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" }, "LPTokenIn": { "currency": "03ABCDEF0123456789ABCDEF0123456789ABCDEF", "issuer": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "value": "100" }, "Fee": "12", "Sequence": 42, "LastLedgerSequence": 9345230, "SourceTag": 20261017, "Memos": [{ "Memo": { "MemoType": "70696C6F742F696E74656E74", "MemoData": "696E74656E742D616D6D2D776974682D303031" } }] },
+      "delegable": true,
+      "simulate": { "engine_result": "tesSUCCESS", "engine_result_message": "The transaction would succeed.", "applied": false },
+      "preflight": [{ "check": "pool_exists", "pass": true }, { "check": "lp_balance", "pass": true }],
+      "summary": { "action": "Withdraw XRP and RLUSD from AMM", "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "amounts": ["100 LP tokens"], "fee_drops": "12", "reserve_delta_drops": "0", "est_slippage_bps": 9, "usd_value": "250.00" }
+    },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock testnet autofill and simulate at ledger 9345210"
+  },
+  "tx.vaultDeposit": {
+    "ok": true,
+    "data": {
+      "build_id": "build-vault-deposit-001",
+      "network": "devnet",
+      "tx_json": { "TransactionType": "VaultDeposit", "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "VaultID": "B100000000000000000000000000000000000000000000000000000000000001", "Amount": "100000000", "Fee": "12", "Sequence": 42, "LastLedgerSequence": 7345230, "SourceTag": 20261017, "Memos": [{ "Memo": { "MemoType": "70696C6F742F696E74656E74", "MemoData": "696E74656E742D7661756C742D6465702D303031" } }] },
+      "delegable": false,
+      "simulate": { "engine_result": "tesSUCCESS", "engine_result_message": "The transaction would succeed.", "applied": false },
+      "preflight": [{ "check": "vault_exists", "pass": true }, { "check": "asset_matches", "pass": true }, { "check": "reserve", "pass": true }],
+      "summary": { "action": "Deposit 100 XRP into vault", "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "amounts": ["100 XRP"], "fee_drops": "12", "reserve_delta_drops": "0", "usd_value": "51.20" }
+    },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock devnet autofill and simulate at ledger 7345210",
+    "caveat": ["devnet-only"]
+  },
+  "tx.vaultWithdraw": {
+    "ok": true,
+    "data": {
+      "build_id": "build-vault-withdraw-001",
+      "network": "devnet",
+      "tx_json": { "TransactionType": "VaultWithdraw", "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "VaultID": "B100000000000000000000000000000000000000000000000000000000000001", "Amount": "50000000", "Fee": "12", "Sequence": 42, "LastLedgerSequence": 7345230, "SourceTag": 20261017, "Memos": [{ "Memo": { "MemoType": "70696C6F742F696E74656E74", "MemoData": "696E74656E742D7661756C742D776974682D303031" } }] },
+      "delegable": false,
+      "simulate": { "engine_result": "tesSUCCESS", "engine_result_message": "The transaction would succeed.", "applied": false },
+      "preflight": [{ "check": "vault_exists", "pass": true }, { "check": "shares", "pass": true }],
+      "summary": { "action": "Withdraw 50 XRP from vault", "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "amounts": ["50 XRP"], "fee_drops": "12", "reserve_delta_drops": "0", "usd_value": "25.60" }
+    },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock devnet autofill and simulate at ledger 7345210",
+    "caveat": ["devnet-only"]
+  },
+  "tx.simulate": {
+    "ok": true,
+    "data": {
+      "build_id": "build-simulate-001",
+      "network": "testnet",
+      "tx_json": { "TransactionType": "OfferCreate", "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "TakerGets": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV", "value": "50" }, "TakerPays": "97656250", "Flags": 131072, "Fee": "12", "Sequence": 42, "LastLedgerSequence": 9345230, "SourceTag": 20261017, "Memos": [{ "Memo": { "MemoType": "70696C6F742F696E74656E74", "MemoData": "6275696C642D73696D756C6174652D303031" } }] },
+      "delegable": true,
+      "simulate": { "engine_result": "tesSUCCESS", "engine_result_message": "The transaction would succeed.", "applied": false },
+      "preflight": [{ "check": "reserve", "pass": true }, { "check": "trust_line", "pass": true }],
+      "summary": { "action": "Simulate swap of 50 RLUSD for XRP", "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "amounts": ["50 RLUSD", "at least 97.65625 XRP"], "fee_drops": "12", "reserve_delta_drops": "0", "est_slippage_bps": 11, "usd_value": "50.00" }
+    },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock testnet simulate at ledger 9345210"
+  }
+}

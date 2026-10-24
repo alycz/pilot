@@ -1845,6 +1845,7 @@ export function createChatHandler(dependencies: ChatHandlerDependencies = {}) {
     const normalizedAccess = normalizeModelAccess(access);
     let requestAp4m: Omit<Ap4mToolContext, "emitEvidence"> | undefined;
     if (
+      !agentCoreRequested &&
       environment.HARBOR_MOCK === "0" &&
       context.network === "testnet" &&
       hasExactAp4mWalletBinding(normalizedAccess, context)
@@ -2091,10 +2092,12 @@ export function createChatHandler(dependencies: ChatHandlerDependencies = {}) {
         const personalizedSystem = preferenceTenant
           ? personalizedSystemPrompt(baseSystem, rememberedPreferences, rememberedLessons)
           : baseSystem;
-        const system = `${personalizedSystem}\n\n${chatRequestModePolicy(
-          requestMode,
-          latestUserEvidence(messages)?.text ?? "",
-        )}`;
+        const system = agentCoreRequested
+          ? personalizedSystem
+          : `${personalizedSystem}\n\n${chatRequestModePolicy(
+              requestMode,
+              latestUserEvidence(messages)?.text ?? "",
+            )}`;
         if (preferenceTenant) {
           const observedCandidate = await persistTradeObservationCandidate(
             context,
@@ -2217,7 +2220,7 @@ export function createChatHandler(dependencies: ChatHandlerDependencies = {}) {
           latestUserEvidence(messages)?.text ?? "",
         );
         const modelMessages = convertToModelMessages(messages);
-        if (pageContext) {
+        if (pageContext && !agentCoreRequested) {
           modelMessages.unshift({
             role: "user",
             content: [

@@ -12,6 +12,7 @@ const account = "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59";
 describe("chat AgentCore seam", () => {
   it("binds the optional provider to server scope and exposes only read research", async () => {
     const privateMarker = "PRIVATE_PERSONALIZATION_MUST_NOT_LEAVE_PILOT";
+    const privatePageMarker = "PRIVATE_PAGE_CONTEXT_MUST_NOT_LEAVE_PILOT";
     const propose = vi.fn(async () => ({
       kind: "read_only" as const,
       summary: "Scoped AgentCore research",
@@ -70,6 +71,16 @@ describe("chat AgentCore seam", () => {
       headers: { "content-type": "application/json", origin: "https://pilot.example" },
       body: JSON.stringify({
         operation: "agentcore_research",
+        request_mode: "autonomous",
+        page_context: {
+          kind: "pilot_page_context_v1",
+          trust: "untrusted_reference_data_only",
+          page: {
+            id: "portfolio",
+            title: "Portfolio",
+            summary: { coverage: privatePageMarker },
+          },
+        },
         messages: [
           {
             id: "assistant-private-history",
@@ -80,11 +91,13 @@ describe("chat AgentCore seam", () => {
         ],
       }),
     }));
-    expect(response.status).toBe(200);
-    expect(await response.text()).toContain("Research complete.");
+    const responseText = await response.text();
+    expect(response.status, responseText).toBe(200);
+    expect(responseText).toContain("Research complete.");
     expect(JSON.stringify(model.doStreamCalls[0]?.prompt)).not.toContain(privateMarker);
     expect(JSON.stringify(model.doStreamCalls[0]?.prompt)).not.toContain("private-tenant");
     expect(JSON.stringify(model.doStreamCalls[0]?.prompt)).not.toContain(account);
+    expect(JSON.stringify(model.doStreamCalls[0]?.prompt)).not.toContain(privatePageMarker);
     expect(JSON.stringify(model.doStreamCalls[0]?.prompt)).toContain("Research XRP.");
     expect(providerForRequest).toHaveBeenCalledWith({
       scope: expect.objectContaining({

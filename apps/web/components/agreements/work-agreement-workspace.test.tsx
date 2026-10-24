@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { WalletSessionStatus } from "../../lib/harbor-browser";
 import {
   WorkAgreementAttemptGate,
+  assertWorkAgreementOperationContext,
   bindWorkAgreementApproval,
   canRecoverWorkAgreement,
   workAgreementMatchesSession,
@@ -101,6 +102,8 @@ describe("durable work-agreement workspace", () => {
     expect(markup).toContain("Local mock settlement only");
     expect(markup).toContain("/agreements?demo=recorded");
     expect(markup).toContain("font-serif");
+    expect(markup).toContain("min-h-11");
+    expect(markup).toContain("focus-visible:ring-2");
     expect(markup).not.toContain("amber-");
     expect(markup).not.toContain("#");
   });
@@ -125,6 +128,25 @@ describe("durable work-agreement workspace", () => {
     release();
     await expect(first).resolves.toBe("complete");
     await expect(gate.run(async () => "next")).resolves.toBe("next");
+  });
+
+  it("rejects a delayed response after the wallet account generation changes", async () => {
+    let generation = 7;
+    let currentSession: WalletSessionStatus = SESSION;
+    const context = { generation, owner: OWNER } as const;
+    let release!: () => void;
+    const delayed = new Promise<void>((resolve) => { release = resolve; });
+    let mutated = false;
+    const operation = (async () => {
+      await delayed;
+      assertWorkAgreementOperationContext(context, generation, currentSession);
+      mutated = true;
+    })();
+    generation += 1;
+    currentSession = { authenticated: true, account: COUNTERPARTY, network: "testnet" };
+    release();
+    await expect(operation).rejects.toMatchObject({ name: "StaleWorkAgreementOperationError" });
+    expect(mutated).toBe(false);
   });
 
   it("validates the exact clear-sign escrow action before opening owner review", async () => {

@@ -57,6 +57,29 @@ type BoundAgreementApproval = Readonly<{
   runtime: LedgerRuntime;
 }>;
 
+export type WorkAgreementOperationContext = Readonly<{
+  generation: number;
+  owner: string;
+}>;
+
+export class StaleWorkAgreementOperationError extends Error {
+  constructor() {
+    super("The wallet session changed while the work-agreement operation was running.");
+    this.name = "StaleWorkAgreementOperationError";
+  }
+}
+
+export function assertWorkAgreementOperationContext(
+  context: WorkAgreementOperationContext,
+  currentGeneration: number,
+  currentSession: WalletSessionStatus | null | undefined,
+): void {
+  if (context.generation !== currentGeneration || !currentSession?.authenticated ||
+      currentSession.network !== "testnet" || currentSession.account !== context.owner) {
+    throw new StaleWorkAgreementOperationError();
+  }
+}
+
 export class WorkAgreementAttemptGate {
   private active = false;
 
@@ -302,27 +325,34 @@ export function WorkAgreementWorkspace() {
   const actionGateRef = useRef(new WorkAgreementAttemptGate());
   const submissionGateRef = useRef(new WorkAgreementAttemptGate());
   const disconnectRef = useRef<(() => void) | undefined>(undefined);
+  const sessionGenerationRef = useRef(0);
+  const sessionLoadRef = useRef(0);
 
   useEffect(() => {
     let active = true;
     const load = async () => {
-      const [nextConfig, nextSession] = await Promise.all([
-        loadPublicPilotConfig(),
-        loadWalletSessionStatus(),
-      ]);
-      if (!active) return;
-      setConfig(nextConfig);
-      setSession(nextSession);
+      const requestId = ++sessionLoadRef.current;
+      try {
+        const [nextConfig, nextSession] = await Promise.all([
+          loadPublicPilotConfig(),
+          loadWalletSessionStatus(),
+        ]);
+        if (!active || requestId !== sessionLoadRef.current) return;
+        setConfig(nextConfig);
+        setSession(nextSession);
+      } catch {
+        if (!active || requestId !== sessionLoadRef.current) return;
+        setConfig(null);
+        setSession(null);
+      }
     };
-    void load().catch(() => {
-      if (!active) return;
-      setConfig(null);
-      setSession(null);
-    });
+    void load();
     const onSessionChanged = () => {
+      sessionGenerationRef.current += 1;
+      const requestId = ++sessionLoadRef.current;
       void loadWalletSessionStatus()
-        .then((next) => { if (active) setSession(next); })
-        .catch(() => { if (active) setSession(null); });
+        .then((next) => { if (active && requestId === sessionLoadRef.current) setSession(next); })
+        .catch(() => { if (active && requestId === sessionLoadRef.current) setSession(null); });
     };
     globalThis.addEventListener?.(WALLET_SESSION_CHANGED_EVENT, onSessionChanged);
     return () => {
@@ -334,6 +364,7 @@ export function WorkAgreementWorkspace() {
 
   useEffect(() => {
     let active = true;
+    const generation = ++sessionGenerationRef.current;
     disconnectRef.current?.();
     disconnectRef.current = undefined;
     setWallet(undefined);
@@ -368,7 +399,8 @@ export function WorkAgreementWorkspace() {
         agreement_id: saved.agreement_id,
       },
     }).then((recovered) => {
-      if (!active || !workAgreementMatchesSession(recovered, session)) return;
+      if (!active || generation !== sessionGenerationRef.current ||
+          !workAgreementMatchesSession(recovered, session)) return;
       setRecord(recovered);
       if (TERMINAL.has(recovered.status)) {
         clearWorkAgreementRecovery(localStorage, session.account, "testnet");
@@ -402,7 +434,7 @@ export function WorkAgreementWorkspace() {
           : "Recovered the account-bound agreement from its durable reference.");
       }
     }).catch((cause) => {
-      if (!active) return;
+      if (!active || generation !== sessionGenerationRef.current) return;
       setError(cause instanceof Error
         ? cause.message
         : "Agreement recovery failed. Retry the stored reference before preparing a replacement.");
@@ -419,13 +451,23 @@ export function WorkAgreementWorkspace() {
     setRecovery(next);
   };
 
-  const requireCurrentSession = async (expectedOwner: string) => {
+  const operationContext = (expectedOwner: string): WorkAgreementOperationContext => ({
+    generation: sessionGenerationRef.current,
+    owner: expectedOwner,
+  });
+
+  const requireCurrentSession = async (context: WorkAgreementOperationContext) => {
+    assertWorkAgreementOperationContext(context, sessionGenerationRef.current, session);
     const current = await loadWalletSessionStatus();
-    if (!current.authenticated || current.network !== "testnet" || current.account !== expectedOwner) {
+    try {
+      assertWorkAgreementOperationContext(context, sessionGenerationRef.current, current);
+    } catch (cause) {
+      sessionGenerationRef.current += 1;
       setSession(current);
       setBound(undefined);
-      throw new Error("The wallet session account or network changed. Reconnect the reviewed Testnet account.");
+      throw cause;
     }
+    return current;
   };
 
   const connectLedger = async (): Promise<PilotWallet> => {
@@ -476,6 +518,7 @@ export function WorkAgreementWorkspace() {
       try {
         await operation();
       } catch (cause) {
+        if (cause instanceof StaleWorkAgreementOperationError) return;
         setError(cause instanceof Error ? cause.message : "The work-agreement operation failed.");
       } finally {
         setBusy(false);
@@ -483,7 +526,11 @@ export function WorkAgreementWorkspace() {
     });
   };
 
-  const applyResponse = (next: WorkAgreementPublicState) => {
+  const applyResponse = (
+    next: WorkAgreementPublicState,
+    context: WorkAgreementOperationContext,
+  ) => {
+    assertWorkAgreementOperationContext(context, sessionGenerationRef.current, session);
     if (!owner || next.owner !== owner || next.network !== "testnet") {
       throw new Error("The work-agreement response belongs to another account or network.");
     }
@@ -512,10 +559,12 @@ export function WorkAgreementWorkspace() {
     if (recoveryBlocked || recovery || record) {
       throw new Error("Resolve the saved agreement before preparing another one.");
     }
-    await requireCurrentSession(owner);
+    const context = operationContext(owner);
+    await requireCurrentSession(context);
     const terms = parseTerms(draft, owner);
     const agreementId = `agreement-${crypto.randomUUID()}`;
     const idempotencyKey = `agreement-idempotency-${crypto.randomUUID()}`;
+    assertWorkAgreementOperationContext(context, sessionGenerationRef.current, session);
     saveRecovery(trackingRecovery(owner, agreementId, idempotencyKey, "prepare_pending"));
     let prepared: WorkAgreementPublicState;
     try {
@@ -532,11 +581,13 @@ export function WorkAgreementWorkspace() {
         },
       });
     } catch (cause) {
+      await requireCurrentSession(context);
       saveRecovery(trackingRecovery(owner, agreementId, idempotencyKey, "prepare_unknown"));
       throw cause;
     }
+    await requireCurrentSession(context);
     saveRecovery(trackingRecovery(owner, agreementId, idempotencyKey, "tracking"));
-    applyResponse(prepared);
+    applyResponse(prepared, context);
     setNotice("Prepared one exact escrow transaction. Connect the saved Ledger account to review it.");
   });
 
@@ -547,8 +598,10 @@ export function WorkAgreementWorkspace() {
     if (recovery?.phase !== "tracking" || recovery.agreement_id !== record.agreement_id) {
       throw new Error("Resolve the saved preparation outcome before preparing another agreement action.");
     }
-    await requireCurrentSession(owner);
+    const context = operationContext(owner);
+    await requireCurrentSession(context);
     const idempotencyKey = `agreement-idempotency-${crypto.randomUUID()}`;
+    assertWorkAgreementOperationContext(context, sessionGenerationRef.current, session);
     saveRecovery(trackingRecovery(owner, record.agreement_id, idempotencyKey, "prepare_pending"));
     let prepared: WorkAgreementPublicState;
     try {
@@ -565,22 +618,27 @@ export function WorkAgreementWorkspace() {
         },
       });
     } catch (cause) {
+      await requireCurrentSession(context);
       saveRecovery(trackingRecovery(owner, record.agreement_id, idempotencyKey, "prepare_unknown"));
       throw cause;
     }
+    await requireCurrentSession(context);
     saveRecovery(trackingRecovery(owner, record.agreement_id, idempotencyKey, "tracking"));
-    applyResponse(prepared);
+    applyResponse(prepared, context);
     setNotice(`Prepared an exact owner-reviewed escrow ${action} transaction.`);
   });
 
   const refresh = () => run(async () => {
     const agreementId = record?.agreement_id ?? recovery?.agreement_id;
     if (!owner || !agreementId) throw new Error("No recoverable agreement reference is available.");
-    await requireCurrentSession(owner);
-    applyResponse(await requestWorkAgreement({
+    const context = operationContext(owner);
+    await requireCurrentSession(context);
+    const refreshed = await requestWorkAgreement({
       action: "status",
       args: { owner, network: "testnet", agreement_id: agreementId },
-    }));
+    });
+    await requireCurrentSession(context);
+    applyResponse(refreshed, context);
   });
 
   const recover = () => run(async () => {
@@ -588,7 +646,8 @@ export function WorkAgreementWorkspace() {
         !isWorkAgreementSubmissionRecovery(recovery)) {
       throw new Error("No exact account-bound submission tuple is available for recovery.");
     }
-    await requireCurrentSession(owner);
+    const context = operationContext(owner);
+    await requireCurrentSession(context);
     const latest = await requestWorkAgreement({
       action: "status",
       args: {
@@ -597,6 +656,7 @@ export function WorkAgreementWorkspace() {
         agreement_id: recovery.agreement_id,
       },
     });
+    await requireCurrentSession(context);
     if (latest.status === "awaiting_approval" && latest.approval?.approval_id === recovery.approval_id &&
         latest.approval.idempotency_key === recovery.idempotency_key && latest.action === recovery.action) {
       const tracked = trackingRecovery(owner, latest.agreement_id, recovery.idempotency_key, "tracking");
@@ -606,7 +666,7 @@ export function WorkAgreementWorkspace() {
       return;
     }
     if (latest.status === "active" || TERMINAL.has(latest.status)) {
-      applyResponse(latest);
+      applyResponse(latest, context);
       setNotice(`Harbor status resolved the saved submission as ${latest.status}; no new signature or submission was sent.`);
       return;
     }
@@ -614,7 +674,7 @@ export function WorkAgreementWorkspace() {
       throw new Error("The exact submission is no longer awaiting reconciliation.");
     }
     setRecord(latest);
-    applyResponse(await requestWorkAgreement({
+    const recovered = await requestWorkAgreement({
       action: "recover",
       args: {
         owner,
@@ -623,7 +683,9 @@ export function WorkAgreementWorkspace() {
         approval_id: recovery.approval_id,
         idempotency_key: recovery.idempotency_key,
       },
-    }));
+    });
+    await requireCurrentSession(context);
+    applyResponse(recovered, context);
     setNotice("Reconciled the exact submission tuple without signing or submitting again.");
   });
 
@@ -636,9 +698,10 @@ export function WorkAgreementWorkspace() {
     if (isWorkAgreementSubmissionRecovery(recovery)) {
       throw new Error("Recover the exact pending submission before rejecting this approval.");
     }
-    await requireCurrentSession(owner);
+    const context = operationContext(owner);
+    await requireCurrentSession(context);
     setBound(undefined);
-    applyResponse(await requestWorkAgreement({
+    const rejected = await requestWorkAgreement({
       action: "reject",
       args: {
         owner,
@@ -647,7 +710,9 @@ export function WorkAgreementWorkspace() {
         approval_id: approval.approval_id,
         idempotency_key: approval.idempotency_key,
       },
-    }));
+    });
+    await requireCurrentSession(context);
+    applyResponse(rejected, context);
   });
 
   const review = () => run(async () => {
@@ -657,13 +722,16 @@ export function WorkAgreementWorkspace() {
     if (isWorkAgreementSubmissionRecovery(recovery)) {
       throw new Error("Recover the exact pending submission before signing anything again.");
     }
-    await requireCurrentSession(owner);
+    const context = operationContext(owner);
+    await requireCurrentSession(context);
     const connectedWallet = await connectLedger();
-    await requireCurrentSession(owner);
+    await requireCurrentSession(context);
     const runtime: LedgerRuntime = connectedWallet.ledgerTransport === "virtual"
       ? "speculos"
       : "ledger-webhid";
-    setBound(await bindWorkAgreementApproval(record, runtime));
+    const preparedReview = await bindWorkAgreementApproval(record, runtime);
+    assertWorkAgreementOperationContext(context, sessionGenerationRef.current, session);
+    setBound(preparedReview);
   });
 
   const beforeSign = async () => {
@@ -672,7 +740,7 @@ export function WorkAgreementWorkspace() {
       setBound(undefined);
       throw new Error("The account, network, or reviewed agreement changed before signing.");
     }
-    await requireCurrentSession(owner);
+    await requireCurrentSession(operationContext(owner));
   };
 
   const submit = async (signedBlob: string, approvalId?: string): Promise<ApprovalSubmission> => {
@@ -682,7 +750,8 @@ export function WorkAgreementWorkspace() {
           !workAgreementMatchesSession(record, session)) {
         throw new Error("The exact reviewed approval is no longer current.");
       }
-      await requireCurrentSession(owner);
+      const context = operationContext(owner);
+      await requireCurrentSession(context);
       const verified = verifyExactLedgerSignedBlob({
         signedBlob,
         expectation: bound.expectation,
@@ -719,10 +788,12 @@ export function WorkAgreementWorkspace() {
           },
         });
       } catch (cause) {
+        await requireCurrentSession(context);
         saveRecovery({ ...submissionRecovery, phase: "submission_unknown" });
         setNotice("Submission outcome is unknown. Recover this exact attempt; do not sign or submit again.");
         throw cause;
       }
+      await requireCurrentSession(context);
       if (submitted.tx_hash && submitted.tx_hash !== verified.hash) {
         saveRecovery({ ...submissionRecovery, phase: "submission_unknown" });
         throw new Error("The returned transaction hash does not match the exact signed transaction. Recover this attempt.");
@@ -730,7 +801,7 @@ export function WorkAgreementWorkspace() {
       if (submitted.status === "submitting" || submitted.status === "unknown") {
         saveRecovery({ ...submissionRecovery, phase: "submission_unknown" });
       }
-      applyResponse(submitted);
+      applyResponse(submitted, context);
       return {
         hash: submitted.tx_hash,
         status: submitted.status === "active" || TERMINAL.has(submitted.status)

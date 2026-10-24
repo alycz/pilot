@@ -39,6 +39,17 @@ describe("AppShell navigation", () => {
     expect(markup.match(/>Research lab</g)).toHaveLength(2);
     expect(markup.match(/aria-current="page"/g)).toHaveLength(2);
   });
+
+  it("links to the durable work-agreement workspace from desktop and mobile navigation", () => {
+    const markup = renderToStaticMarkup(
+      <AppShell active="agreements" title="Ledger work agreements" ownHeading><div>Content</div></AppShell>,
+    );
+
+    expect(markup.match(/href="\/agreements"/g)).toHaveLength(2);
+    expect(markup.match(/>Agreements</g)).toHaveLength(2);
+    expect(markup.match(/aria-current="page"/g)).toHaveLength(2);
+    expect(markup).not.toContain("<h1");
+  });
 });
 
 describe("model settings persistence", () => {

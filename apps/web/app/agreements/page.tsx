@@ -3,6 +3,7 @@ import React from "react";
 
 import { WorkAgreementFixtureViewComponent } from "../../components/agreements/work-agreement-fixture-view";
 import { WorkAgreementWorkspace } from "../../components/agreements/work-agreement-workspace";
+import { AppShell } from "../../components/shell/app-shell";
 
 export const metadata: Metadata = {
   title: "Ledger work agreements",
@@ -17,7 +18,11 @@ export default async function WorkAgreementPage({ searchParams }: WorkAgreementP
   const params: Readonly<{ demo?: string }> = await (
     searchParams ?? Promise.resolve({} as Readonly<{ demo?: string }>)
   );
-  return params.demo === "recorded"
-    ? <WorkAgreementFixtureViewComponent />
-    : <WorkAgreementWorkspace />;
+  return (
+    <AppShell active="agreements" eyebrow="XRPL Testnet · owner reviewed" ownHeading title="Ledger work agreements">
+      {params.demo === "recorded"
+        ? <WorkAgreementFixtureViewComponent />
+        : <WorkAgreementWorkspace />}
+    </AppShell>
+  );
 }

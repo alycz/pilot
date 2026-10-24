@@ -9,6 +9,7 @@ import {
   ChevronDown,
   CircleDollarSign,
   ExternalLink,
+  Handshake,
   LoaderCircle,
   Map,
   Menu,
@@ -70,7 +71,7 @@ function isSignedOut(identity: ShellIdentityLabels): boolean {
   return identity.walletStatus === "disconnected" || identity.walletStatus === "unavailable";
 }
 
-type NavKey = "chat" | "markets" | "backtests" | "strategy-research" | "map" | "portfolio" | "strategy" | "memory" | "how-it-works";
+type NavKey = "chat" | "markets" | "backtests" | "strategy-research" | "map" | "portfolio" | "strategy" | "agreements" | "memory" | "how-it-works";
 
 const navigation = [
   { key: "chat", label: "Chat", href: "/chat", icon: MessageCircle },
@@ -80,6 +81,7 @@ const navigation = [
   { key: "map", label: "Map", href: "/map", icon: Map },
   { key: "portfolio", label: "Portfolio", href: "/portfolio", icon: CircleDollarSign },
   { key: "strategy", label: "Strategy", href: "/strategy", icon: Bot },
+  { key: "agreements", label: "Agreements", href: "/agreements", icon: Handshake },
   { key: "memory", label: "Memory", href: "/memory", icon: Sparkles },
   { key: "how-it-works", label: "How it works", href: "/how-it-works", icon: BookOpenText },
 ] as const;

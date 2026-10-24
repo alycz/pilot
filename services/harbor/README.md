@@ -656,6 +656,7 @@ Harbor is implemented from scratch and depends on:
 - [`aws4fetch`](https://github.com/mhart/aws4fetch) — narrow SigV4 signing for the AWS trust-layer clients
 - [`@noble/curves`](https://github.com/paulmillr/noble-curves) — Ed25519 implementation for the local KMS stand-in
 - [`ripple-keypairs`](https://github.com/XRPLF/xrpl.js/tree/main/packages/ripple-keypairs) — independent XRPL-compatible verification in stand-in tests
+- [`viem`](https://viem.sh/) — exact ABI, event-log, address, and EIP-712 validation for the isolated XRPL EVM Testnet AP4M event adapter
 - [`wrangler`](https://developers.cloudflare.com/workers/wrangler/) — Worker and D1 development/deployment
 - [`@cloudflare/vitest-plugin`](https://developers.cloudflare.com/workers/testing/vitest-integration/) — Cloudflare Worker test integration available for later live suites
 - [`vitest`](https://vitest.dev/) — offline unit tests

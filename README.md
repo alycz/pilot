@@ -443,6 +443,7 @@ Pilot preserves its product branding and required third-party notices.
 | [Vercel AI SDK](https://ai-sdk.dev/), [Amazon Bedrock Provider](https://ai-sdk.dev/providers/ai-sdk-providers/amazon-bedrock), and [OpenRouter AI SDK Provider](https://github.com/OpenRouterTeam/ai-sdk-provider) | Agent streaming, tool calls, and model access | Apache-2.0 / MIT; see projects |
 | [Zod](https://zod.dev/) | Runtime schemas and TypeScript validation | MIT |
 | [xrpl.js](https://js.xrpl.org/) | XRP Ledger JSON-RPC and WebSocket client | ISC |
+| [viem](https://viem.sh/) | Strict ABI, receipt-event, address, and EIP-712 validation for the default-off XRPL EVM Testnet AP4M event adapter | MIT |
 | [xrpl-connect](https://github.com/XRPL-Commons/xrpl-connect) | Owner-wallet connection and sign-only approvals | See project |
 | [Ledger Device Management Kit](https://github.com/LedgerHQ/device-sdk-ts), XRP signer kit, WebHID and Speculos transports | Sign-only hardware and virtual-device owner approvals | Apache-2.0 |
 | [RxJS](https://rxjs.dev/) | Ledger Device Management Kit observable transport | Apache-2.0 |

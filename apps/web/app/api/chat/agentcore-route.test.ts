@@ -61,8 +61,6 @@ describe("chat AgentCore seam", () => {
       model,
       systemPrompt: `Ordinary private prompt: ${privateMarker}`,
       getModelAccess: async () => ({ apiKey: "test-key", model: "mock/model", mode: "user" }),
-      harborRest: { op: vi.fn() },
-      harborMcp: { tools: {}, close: vi.fn() },
       context: { main_account: account, budget_account: account, network: "testnet" },
       agentCoreProviderForRequest: providerForRequest,
     });

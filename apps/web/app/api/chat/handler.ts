@@ -123,6 +123,15 @@ const AGENTCORE_PRIVATE_QUERY = [
   /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/i,
   /\b(?:api[_ -]?key|client[_ -]?secret|private[_ -]?key|recovery[_ -]?phrase|refresh[_ -]?token|secret|seed|session[_ -]?token)\b\s*[:=]/i,
 ];
+const AGENTCORE_NO_HARBOR_REST: AgentHarborRest = Object.freeze({
+  op: async () => {
+    throw new Error("Harbor operations are unavailable in dedicated AgentCore research mode");
+  },
+});
+const AGENTCORE_NO_HARBOR_MCP: AgentHarborMcp = Object.freeze({
+  tools: Object.freeze({}),
+  close: async () => undefined,
+});
 
 export type PilotUIMessage = UIMessage<
   unknown,
@@ -2010,18 +2019,17 @@ export function createChatHandler(dependencies: ChatHandlerDependencies = {}) {
       | Awaited<ReturnType<typeof createDefaultHarborClients>>
       | undefined;
     try {
-      defaults =
-        dependencies.harborRest && dependencies.harborMcp
-          ? undefined
-          : await createDefaultHarborClients(request, environment, undefined, x402Requested);
+      defaults = agentCoreRequested || (dependencies.harborRest && dependencies.harborMcp)
+        ? undefined
+        : await createDefaultHarborClients(request, environment, undefined, x402Requested);
     } catch {
       await settleDemo("uncertain");
       await closeDemoBudget();
       return errorResponse("Pilot's Harbor connection is not configured.", 503);
     }
-    const harborRest = dependencies.harborRest ?? defaults!.rest;
-    const harborMcp = dependencies.harborMcp ?? defaults!.mcp;
-    const ownsMcpClient = dependencies.harborMcp === undefined;
+    const harborRest = dependencies.harborRest ?? defaults?.rest ?? AGENTCORE_NO_HARBOR_REST;
+    const harborMcp = dependencies.harborMcp ?? defaults?.mcp ?? AGENTCORE_NO_HARBOR_MCP;
+    const ownsMcpClient = !agentCoreRequested && dependencies.harborMcp === undefined;
     const x402Mode = resolveX402Runtime(environment);
     if (x402Requested && !x402Mode) {
       if (ownsMcpClient) await harborMcp.close();

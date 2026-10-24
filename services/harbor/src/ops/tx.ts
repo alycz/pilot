@@ -3,33 +3,36 @@ import { z } from "zod";
 
 import { requestXrpl } from "../adapters/xrpl-rpc";
 import type { OpDef } from "../catalog/registry";
-import type { Network, TxBuild } from "../contracts";
+import { ExecutionContractSchema, type Network, type TxBuild } from "../contracts";
 import {
+  BuildValidationError,
+  RLUSD_HEX_CURRENCY,
+  TESTNET_RLUSD_ISSUER,
+  assertExecutionContractSupported,
   buildTransaction,
   checkRequireAuth,
   checkTrustLine,
   type BuildInput,
   type PreflightCheck,
 } from "../exec/build";
+import { assertLocalTradingTestnet } from "../local-trading";
+import { isHarborDelegableTransactionType } from "../exec/delegation";
 
 const STANDARD_CURRENCY_PATTERN = /^[A-Za-z0-9?!@#$%^&*<>(){}\[\]|]{3}$/;
 const HEX_CURRENCY_PATTERN = /^[A-Fa-f0-9]{40}$/;
 const XRP_DROPS_PATTERN = /^(?:0|[1-9][0-9]*)$/;
 const DECIMAL_PATTERN = /^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$/;
 const HASH_256_PATTERN = /^[A-Fa-f0-9]{64}$/;
+const NON_ZERO_HASH_256_PATTERN = /^(?!0{64}$)[A-Fa-f0-9]{64}$/;
+const HEX_BLOB_PATTERN = /^(?:[A-Fa-f0-9]{2})+$/;
 const UINT32_MAX = 0xffff_ffff;
 
 const OFFER_TF_PASSIVE = 0x0001_0000;
 const OFFER_TF_IMMEDIATE_OR_CANCEL = 0x0002_0000;
+const OFFER_TF_FILL_OR_KILL = 0x0004_0000;
 const OFFER_TF_SELL = 0x0008_0000;
-
-const DELEGABLE_TRANSACTION_TYPES = new Set([
-  "OfferCreate",
-  "OfferCancel",
-  "TrustSet",
-  "AMMDeposit",
-  "AMMWithdraw",
-]);
+const EXACT_OUTPUT_QUOTE_MAX_LEDGER_GAP = 1;
+const ISSUED_LIMIT_SIGNIFICANT_DIGITS = 15;
 
 const ExecutionNetworkSchema = z.enum([
   "testnet",
@@ -50,7 +53,10 @@ const IssuedCurrencySchema = z.string().refine(
 const IntentIdSchema = z.string().trim().min(1).max(128);
 const UInt32Schema = z.number().int().min(0).max(UINT32_MAX);
 const PositiveUInt32Schema = z.number().int().min(1).max(UINT32_MAX);
-
+const SwapExecutionModeSchema = z.enum([
+  "immediate_or_cancel",
+  "fill_or_kill",
+]);
 const XrpAssetSchema = z.object({ currency: z.literal("XRP") }).strict();
 const IssuedAssetSchema = z
   .object({
@@ -112,6 +118,15 @@ const IssuedLimitAmountSchema = z
   })
   .strict();
 const CurrencyAmountSchema = z.union([PositiveDropsSchema, IssuedAmountSchema]);
+const Hash256Schema = z.string().regex(HASH_256_PATTERN);
+const NonZeroHash256Schema = z.string().regex(
+  NON_ZERO_HASH_256_PATTERN,
+  "must be a non-zero 64-character hexadecimal hash",
+);
+const HexBlobSchema = z
+  .string()
+  .max(2048)
+  .regex(HEX_BLOB_PATTERN, "must be a non-empty, even-length hexadecimal blob");
 
 type Asset = z.infer<typeof AssetSchema>;
 type CurrencyAmount = z.infer<typeof CurrencyAmountSchema>;
@@ -163,6 +178,12 @@ function add(left: Rational, right: Rational): Rational {
   );
 }
 
+function compare(left: Rational, right: Rational): number {
+  const leftScaled = left.numerator * right.denominator;
+  const rightScaled = right.numerator * left.denominator;
+  return leftScaled < rightScaled ? -1 : leftScaled > rightScaled ? 1 : 0;
+}
+
 function floorLog10(value: Rational): number {
   let exponent =
     value.numerator.toString().length - value.denominator.toString().length;
@@ -188,7 +209,7 @@ function roundedInteger(
 function formatRational(
   value: Rational,
   rounding: "up" | "down",
-  significantDigits = 15,
+  significantDigits = ISSUED_LIMIT_SIGNIFICANT_DIGITS,
 ): string {
   const scale = significantDigits - 1 - floorLog10(value);
   const numerator =
@@ -225,6 +246,13 @@ function amountAsset(amount: CurrencyAmount): Asset {
 
 function amountMatchesAsset(amount: CurrencyAmount, asset: Asset): boolean {
   return sameAsset(amountAsset(amount), asset);
+}
+
+function equalAmounts(left: CurrencyAmount, right: CurrencyAmount): boolean {
+  return (
+    amountMatchesAsset(left, amountAsset(right)) &&
+    compare(amountUnits(left), amountUnits(right)) === 0
+  );
 }
 
 function distinctAssetPair(
@@ -300,7 +328,9 @@ const SwapArgsSchema = z
     amount: CurrencyAmountSchema,
     side: z.enum(["sell", "buy"]),
     max_slippage_bps: z.number().int().min(0).max(9_999),
+    execution_mode: SwapExecutionModeSchema.optional(),
     intent_id: IntentIdSchema.optional(),
+    execution_contract: ExecutionContractSchema.optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -366,6 +396,119 @@ const PaymentArgsSchema = z
   })
   .strict();
 
+const EscrowCreateArgsSchema = z
+  .object({
+    network: ExecutionNetworkSchema,
+    account: ClassicAddressSchema,
+    destination: ClassicAddressSchema,
+    amount: CurrencyAmountSchema,
+    cancel_after: UInt32Schema.optional(),
+    finish_after: UInt32Schema.optional(),
+    condition: HexBlobSchema.optional(),
+    destination_tag: UInt32Schema.optional(),
+    intent_id: IntentIdSchema.optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (
+      value.finish_after === undefined &&
+      (value.condition === undefined || value.cancel_after === undefined)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["finish_after"],
+        message:
+          "escrow requires finish_after, or condition together with cancel_after",
+      });
+    }
+    if (
+      value.finish_after !== undefined &&
+      value.cancel_after !== undefined &&
+      value.cancel_after <= value.finish_after
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["cancel_after"],
+        message: "cancel_after must be later than finish_after",
+      });
+    }
+  });
+
+const EscrowFinishArgsSchema = z
+  .object({
+    network: ExecutionNetworkSchema,
+    account: ClassicAddressSchema,
+    owner: ClassicAddressSchema,
+    offer_sequence: PositiveUInt32Schema,
+    condition: HexBlobSchema.optional(),
+    fulfillment: HexBlobSchema.optional(),
+    intent_id: IntentIdSchema.optional(),
+  })
+  .strict()
+  .refine(
+    ({ condition, fulfillment }) =>
+      (condition === undefined) === (fulfillment === undefined),
+    {
+      path: ["fulfillment"],
+      message: "condition and fulfillment must be provided together",
+    },
+  );
+
+const EscrowCancelArgsSchema = z
+  .object({
+    network: ExecutionNetworkSchema,
+    account: ClassicAddressSchema,
+    owner: ClassicAddressSchema,
+    offer_sequence: PositiveUInt32Schema,
+    intent_id: IntentIdSchema.optional(),
+  })
+  .strict();
+
+const CheckCreateArgsSchema = z
+  .object({
+    network: ExecutionNetworkSchema,
+    account: ClassicAddressSchema,
+    destination: ClassicAddressSchema,
+    send_max: CurrencyAmountSchema,
+    destination_tag: UInt32Schema.optional(),
+    expiration: UInt32Schema.optional(),
+    invoice_id: Hash256Schema.optional(),
+    intent_id: IntentIdSchema.optional(),
+  })
+  .strict()
+  .refine(({ account, destination }) => account !== destination, {
+    path: ["destination"],
+    message: "check destination must differ from account",
+  });
+
+const CheckCashArgsSchema = z
+  .object({
+    network: ExecutionNetworkSchema,
+    account: ClassicAddressSchema,
+    check_id: NonZeroHash256Schema,
+    amount: CurrencyAmountSchema.optional(),
+    deliver_min: CurrencyAmountSchema.optional(),
+    intent_id: IntentIdSchema.optional(),
+  })
+  .strict()
+  .refine(
+    ({ amount, deliver_min }) =>
+      (amount === undefined) !== (deliver_min === undefined),
+    {
+      path: ["amount"],
+      message: "exactly one of amount or deliver_min is required",
+    },
+  );
+
+const CheckCancelArgsSchema = z
+  .object({
+    network: ExecutionNetworkSchema,
+    account: ClassicAddressSchema,
+    check_id: NonZeroHash256Schema,
+    intent_id: IntentIdSchema.optional(),
+  })
+  .strict();
+
 const TRUST_FLAGS_MASK =
   0x0001_0000 |
   0x0002_0000 |
@@ -393,6 +536,7 @@ const TrustSetArgsSchema = z
     quality_in: UInt32Schema.optional(),
     quality_out: UInt32Schema.optional(),
     intent_id: IntentIdSchema.optional(),
+    execution_contract: ExecutionContractSchema.optional(),
   })
   .strict();
 
@@ -585,6 +729,8 @@ const SimulatedTxSchema = z.discriminatedUnion("TransactionType", [
           z.literal(OFFER_TF_PASSIVE | OFFER_TF_SELL),
           z.literal(OFFER_TF_IMMEDIATE_OR_CANCEL),
           z.literal(OFFER_TF_IMMEDIATE_OR_CANCEL | OFFER_TF_SELL),
+          z.literal(OFFER_TF_FILL_OR_KILL),
+          z.literal(OFFER_TF_FILL_OR_KILL | OFFER_TF_SELL),
         ])
         .optional(),
     })
@@ -603,6 +749,63 @@ const SimulatedTxSchema = z.discriminatedUnion("TransactionType", [
       Destination: ClassicAddressSchema,
       Amount: CurrencyAmountSchema,
       DestinationTag: UInt32Schema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      TransactionType: z.literal("EscrowCreate"),
+      Account: ClassicAddressSchema,
+      Destination: ClassicAddressSchema,
+      Amount: CurrencyAmountSchema,
+      CancelAfter: UInt32Schema.optional(),
+      FinishAfter: UInt32Schema.optional(),
+      Condition: HexBlobSchema.optional(),
+      DestinationTag: UInt32Schema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      TransactionType: z.literal("EscrowFinish"),
+      Account: ClassicAddressSchema,
+      Owner: ClassicAddressSchema,
+      OfferSequence: PositiveUInt32Schema,
+      Condition: HexBlobSchema.optional(),
+      Fulfillment: HexBlobSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      TransactionType: z.literal("EscrowCancel"),
+      Account: ClassicAddressSchema,
+      Owner: ClassicAddressSchema,
+      OfferSequence: PositiveUInt32Schema,
+    })
+    .strict(),
+  z
+    .object({
+      TransactionType: z.literal("CheckCreate"),
+      Account: ClassicAddressSchema,
+      Destination: ClassicAddressSchema,
+      SendMax: CurrencyAmountSchema,
+      DestinationTag: UInt32Schema.optional(),
+      Expiration: UInt32Schema.optional(),
+      InvoiceID: Hash256Schema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      TransactionType: z.literal("CheckCash"),
+      Account: ClassicAddressSchema,
+      CheckID: NonZeroHash256Schema,
+      Amount: CurrencyAmountSchema.optional(),
+      DeliverMin: CurrencyAmountSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      TransactionType: z.literal("CheckCancel"),
+      Account: ClassicAddressSchema,
+      CheckID: NonZeroHash256Schema,
     })
     .strict(),
   z
@@ -699,6 +902,76 @@ const SimulateArgsSchema = z
           code: "custom",
           path: ["tx_json", "TakerPays"],
           message: "offer assets must be different",
+        });
+      }
+    }
+    if (value.tx_json.TransactionType === "EscrowCreate") {
+      const parsed = EscrowCreateArgsSchema.safeParse({
+        network: value.network,
+        account: value.account,
+        destination: value.tx_json.Destination,
+        amount: value.tx_json.Amount,
+        cancel_after: value.tx_json.CancelAfter,
+        finish_after: value.tx_json.FinishAfter,
+        condition: value.tx_json.Condition,
+        destination_tag: value.tx_json.DestinationTag,
+      });
+      if (!parsed.success) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["tx_json"],
+          message: "EscrowCreate fields do not form a valid escrow mode",
+        });
+      }
+    }
+    if (value.tx_json.TransactionType === "EscrowFinish") {
+      const parsed = EscrowFinishArgsSchema.safeParse({
+        network: value.network,
+        account: value.account,
+        owner: value.tx_json.Owner,
+        offer_sequence: value.tx_json.OfferSequence,
+        condition: value.tx_json.Condition,
+        fulfillment: value.tx_json.Fulfillment,
+      });
+      if (!parsed.success) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["tx_json"],
+          message: "EscrowFinish condition and fulfillment must be paired",
+        });
+      }
+    }
+    if (value.tx_json.TransactionType === "CheckCreate") {
+      const parsed = CheckCreateArgsSchema.safeParse({
+        network: value.network,
+        account: value.account,
+        destination: value.tx_json.Destination,
+        send_max: value.tx_json.SendMax,
+        destination_tag: value.tx_json.DestinationTag,
+        expiration: value.tx_json.Expiration,
+        invoice_id: value.tx_json.InvoiceID,
+      });
+      if (!parsed.success) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["tx_json"],
+          message: "CheckCreate fields are invalid",
+        });
+      }
+    }
+    if (value.tx_json.TransactionType === "CheckCash") {
+      const parsed = CheckCashArgsSchema.safeParse({
+        network: value.network,
+        account: value.account,
+        check_id: value.tx_json.CheckID,
+        amount: value.tx_json.Amount,
+        deliver_min: value.tx_json.DeliverMin,
+      });
+      if (!parsed.success) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["tx_json"],
+          message: "CheckCash requires exactly one amount mode",
         });
       }
     }
@@ -863,9 +1136,33 @@ async function destinationChecks(
   ]);
 }
 
+async function escrowFinishFeeDrops(
+  ctx: Parameters<typeof buildTransaction>[0],
+  network: Network,
+  fulfillment: string | undefined,
+): Promise<string | undefined> {
+  if (fulfillment === undefined) return undefined;
+  const result = await requestXrpl(ctx, network, "fee");
+  const drops = asRecord(result.drops).open_ledger_fee;
+  if (typeof drops !== "string" || !XRP_DROPS_PATTERN.test(drops)) {
+    throw new Error("fee response has invalid drops.open_ledger_fee");
+  }
+  const fulfillmentBytes = BigInt(Math.ceil(fulfillment.length / 2));
+  // EscrowFinish with a fulfillment costs BaseFee ×
+  // (33 + Fulfillment bytes / 16), rounded up:
+  // https://xrpl.org/docs/references/protocol/transactions/types/escrowfinish#transaction-cost
+  const numerator = BigInt(drops) * (528n + fulfillmentBytes);
+  return ((numerator + 15n) / 16n).toString();
+}
+
 export class TxOperationError extends Error {
   constructor(
-    readonly code: "BOOK_EMPTY" | "BOOK_MALFORMED" | "INVALID_LIMIT",
+    readonly code:
+      | "BOOK_EMPTY"
+      | "BOOK_MALFORMED"
+      | "INVALID_LIMIT"
+      | "QUOTE_UNAVAILABLE"
+      | "QUOTE_STALE",
     message: string,
   ) {
     super(message);
@@ -873,10 +1170,228 @@ export class TxOperationError extends Error {
   }
 }
 
+function executableQuoteAmount(
+  value: unknown,
+  asset: Asset,
+  sourceAccount: string,
+): CurrencyAmount | undefined {
+  const parsed = CurrencyAmountSchema.safeParse(value);
+  if (!parsed.success) return undefined;
+  if (amountMatchesAsset(parsed.data, asset)) return parsed.data;
+  if (
+    "issuer" in asset &&
+    typeof parsed.data !== "string" &&
+    parsed.data.currency === asset.currency &&
+    parsed.data.issuer === sourceAccount
+  ) {
+    // rippled represents an issued source_amount with the source account as
+    // issuer. Only one exact source asset was requested, so restore that asset
+    // after validating both the returned currency and source-account marker.
+    // https://github.com/XRPLF/rippled/blob/release/3.4.x/src/xrpld/rpc/detail/PathRequest.cpp
+    return { ...asset, value: parsed.data.value };
+  }
+  return undefined;
+}
+
+type ExactOutputQuote = {
+  sourceAmount: CurrencyAmount;
+  ledgerIndex: number;
+};
+
+async function quoteExactOutputSource(
+  ctx: Parameters<typeof buildTransaction>[0],
+  args: z.infer<typeof SwapArgsSchema>,
+): Promise<ExactOutputQuote> {
+  // ripple_path_find is the one-shot, validated-ledger variant of XRPL path
+  // finding. Its source_amount is an account-specific exact-destination quote
+  // across available paths and includes transfer fees. It is only a candidate
+  // for OfferCreate: buildTransaction below still simulates the exact FOK offer
+  // so Payment-only paths or a stale quote fail closed before persistence.
+  // https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/path-and-order-book-methods/ripple_path_find
+  const result = await requestXrpl(ctx, args.network, "ripple_path_find", {
+    source_account: args.account,
+    destination_account: args.account,
+    destination_amount: args.amount,
+    source_currencies: [args.sell],
+    ledger_index: "validated",
+  });
+  if (
+    result.validated !== true ||
+    result.full_reply !== true ||
+    typeof result.ledger_index !== "number" ||
+    !Number.isSafeInteger(result.ledger_index) ||
+    result.ledger_index < 1 ||
+    typeof result.ledger_hash !== "string" ||
+    !HASH_256_PATTERN.test(result.ledger_hash) ||
+    result.source_account !== args.account ||
+    result.destination_account !== args.account
+  ) {
+    throw new TxOperationError(
+      "QUOTE_STALE",
+      "exact-output quote is not bound to the requested accounts and a fully validated ledger",
+    );
+  }
+  const echoedDestination = CurrencyAmountSchema.safeParse(
+    result.destination_amount,
+  );
+  if (
+    !echoedDestination.success ||
+    !equalAmounts(echoedDestination.data, args.amount)
+  ) {
+    throw new TxOperationError(
+      "QUOTE_STALE",
+      "exact-output quote does not echo the requested destination amount",
+    );
+  }
+  if (!Array.isArray(result.alternatives)) {
+    throw new TxOperationError(
+      "QUOTE_UNAVAILABLE",
+      "exact-output quote response is malformed",
+    );
+  }
+  const candidates = result.alternatives
+    .map((alternative) =>
+      alternative !== null &&
+      typeof alternative === "object" &&
+      !Array.isArray(alternative)
+        ? executableQuoteAmount(
+            (alternative as Record<string, unknown>).source_amount,
+            args.sell,
+            args.account,
+          )
+        : undefined,
+    )
+    .filter((amount): amount is CurrencyAmount => amount !== undefined);
+  if (candidates.length === 0) {
+    throw new TxOperationError(
+      "QUOTE_UNAVAILABLE",
+      "validated XRPL liquidity cannot deliver the exact output",
+    );
+  }
+  return {
+    sourceAmount: candidates.reduce((best, candidate) =>
+      compare(amountUnits(candidate), amountUnits(best)) < 0 ? candidate : best,
+    ),
+    ledgerIndex: result.ledger_index,
+  };
+}
+
+async function officialRlusdAcquisitionInvariant(
+  ctx: Parameters<typeof buildTransaction>[0],
+  args: z.infer<typeof SwapArgsSchema>,
+): Promise<BuildInput["acquisition_balance_invariant"]> {
+  if (
+    args.execution_contract !== "xrpl_execution_v2" ||
+    args.network !== "testnet" ||
+    args.buy.currency.toUpperCase() !== RLUSD_HEX_CURRENCY ||
+    !("issuer" in args.buy) ||
+    args.buy.issuer !== TESTNET_RLUSD_ISSUER
+  ) {
+    return undefined;
+  }
+  const result = await requestXrpl(ctx, args.network, "account_lines", {
+    account: args.account,
+    peer: TESTNET_RLUSD_ISSUER,
+    ledger_index: "validated",
+  });
+  if (
+    result.validated !== true ||
+    !Number.isSafeInteger(result.ledger_index) ||
+    (result.ledger_index as number) < 1 ||
+    !Array.isArray(result.lines)
+  ) {
+    throw new BuildValidationError(
+      "official testnet RLUSD balance must come from a validated account_lines read",
+      "INVALID_BUILD",
+    );
+  }
+  const line = result.lines.find(
+    (candidate) =>
+      candidate !== null &&
+      typeof candidate === "object" &&
+      !Array.isArray(candidate) &&
+      (candidate as Record<string, unknown>).account === TESTNET_RLUSD_ISSUER &&
+      String((candidate as Record<string, unknown>).currency).toUpperCase() ===
+        RLUSD_HEX_CURRENCY,
+  ) as Record<string, unknown> | undefined;
+  if (line === undefined || typeof line.balance !== "string") {
+    throw new BuildValidationError(
+      "official testnet RLUSD trust-line balance is missing",
+      "INVALID_BUILD",
+    );
+  }
+  return {
+    kind: "issued_balance_unchanged",
+    currency: RLUSD_HEX_CURRENCY,
+    issuer: TESTNET_RLUSD_ISSUER,
+    balance: line.balance,
+    ledger_index: result.ledger_index as number,
+  };
+}
+
 async function buildSwap(
   ctx: Parameters<typeof buildTransaction>[0],
   args: z.infer<typeof SwapArgsSchema>,
 ): Promise<TxBuild> {
+  assertLocalTradingTestnet(ctx, args.network);
+  assertExecutionContractSupported(ctx, args.execution_contract);
+  const acquisitionBalanceInvariant =
+    await officialRlusdAcquisitionInvariant(ctx, args);
+  if (
+    args.side === "buy" &&
+    args.execution_mode === "fill_or_kill"
+  ) {
+    const quote = await quoteExactOutputSource(ctx, args);
+    const slippageUp = rational(
+      BigInt(10_000 + args.max_slippage_bps),
+      10_000n,
+    );
+    const takerGets = amountFromUnits(
+      args.sell,
+      multiply(amountUnits(quote.sourceAmount), slippageUp),
+      "up",
+    );
+    const takerPays = args.amount;
+    // OfferCreate's TakerGets/TakerPays orientation and tfFillOrKill's exact
+    // TakerPays behavior are defined here. Omitting tfSell is intentional.
+    // https://xrpl.org/docs/references/protocol/transactions/types/offercreate
+    const txJson: Record<string, unknown> = {
+      TransactionType: "OfferCreate",
+      Account: args.account,
+      TakerGets: takerGets,
+      TakerPays: takerPays,
+      Flags: OFFER_TF_FILL_OR_KILL,
+    };
+    return buildTransaction(
+      ctx,
+      txInput(
+        args.network,
+        args.account,
+        txJson,
+        "swap",
+        [takerGets, takerPays],
+        args.intent_id,
+        {
+          permissions: ["OfferCreate"],
+          est_slippage_bps: args.max_slippage_bps,
+          valuation_amounts: [takerGets, takerPays],
+          validated_ledger_reference: {
+            ledger_index: quote.ledgerIndex,
+            max_ledger_gap: EXACT_OUTPUT_QUOTE_MAX_LEDGER_GAP,
+          },
+          require_simulation_success: true,
+          execution_contract: args.execution_contract,
+          acquisition_balance_invariant: acquisitionBalanceInvariant,
+          preflight: {
+            spendDrops: xrpSpendDrops(takerGets),
+            trustLines: issuedAssets(takerGets, takerPays),
+            requireAuthAssets: issuedAssets(takerGets, takerPays),
+            flagConflicts: [],
+          },
+        },
+      ),
+    );
+  }
   const [forwardBook, reverseBook] = await Promise.all([
     requestXrpl(ctx, args.network, "book_offers", {
       taker_gets: args.sell,
@@ -896,6 +1411,18 @@ async function buildSwap(
     rational(1n),
     bestBookPrice(reverseBook, args.buy, args.sell),
   );
+  const quoteLedgers = [forwardBook.ledger_index, reverseBook.ledger_index];
+  const quoteLedger = quoteLedgers.every(
+    (value) => Number.isSafeInteger(value) && (value as number) > 0,
+  ) && quoteLedgers[0] === quoteLedgers[1]
+    ? (quoteLedgers[0] as number)
+    : undefined;
+  if (args.execution_contract === "xrpl_execution_v2" && quoteLedger === undefined) {
+    throw new BuildValidationError(
+      "v2 market-derived quotes require one exact validated ledger",
+      "INVALID_BUILD",
+    );
+  }
   const mid = divide(add(sellToBuy, reverseSellToBuy), rational(2n));
   const slippageDown = rational(BigInt(10_000 - args.max_slippage_bps), 10_000n);
 
@@ -919,15 +1446,19 @@ async function buildSwap(
 
   // OfferCreate's Account, TakerGets, TakerPays, and Flags fields are defined
   // at https://xrpl.org/docs/references/protocol/transactions/types/offercreate
-  // (tfImmediateOrCancel and tfSell are documented in its flags table).
+  // (tfImmediateOrCancel, tfFillOrKill, and tfSell are documented in its
+  // flags table). Exactly one execution mode is selected; omitted mode keeps
+  // the existing IOC behavior.
+  const executionFlag =
+    args.execution_mode === "fill_or_kill"
+      ? OFFER_TF_FILL_OR_KILL
+      : OFFER_TF_IMMEDIATE_OR_CANCEL;
   const txJson: Record<string, unknown> = {
     TransactionType: "OfferCreate",
     Account: args.account,
     TakerGets: takerGets,
     TakerPays: takerPays,
-    Flags:
-      OFFER_TF_IMMEDIATE_OR_CANCEL |
-      (args.side === "sell" ? OFFER_TF_SELL : 0),
+    Flags: executionFlag | (args.side === "sell" ? OFFER_TF_SELL : 0),
   };
   return buildTransaction(
     ctx,
@@ -942,6 +1473,16 @@ async function buildSwap(
         permissions: ["OfferCreate"],
         est_slippage_bps: args.max_slippage_bps,
         valuation_amounts: [takerGets, takerPays],
+        execution_contract: args.execution_contract,
+        acquisition_balance_invariant: acquisitionBalanceInvariant,
+        ...(args.execution_contract === "xrpl_execution_v2" && quoteLedger !== undefined
+          ? {
+              validated_ledger_reference: {
+                ledger_index: quoteLedger,
+                max_ledger_gap: EXACT_OUTPUT_QUOTE_MAX_LEDGER_GAP,
+              },
+            }
+          : {}),
         preflight: {
           spendDrops: xrpSpendDrops(takerGets),
           trustLines: issuedAssets(takerGets, takerPays),
@@ -961,13 +1502,13 @@ export const ops: OpDef[] = [
   {
     name: "tx.swap",
     family: "tx",
-    summary: "Build and simulate an unsigned IOC DEX swap at a slippage-bounded book-mid limit.",
+    summary: "Build and simulate an unsigned IOC swap at a book-mid limit or an exact-output FOK swap from validated executable liquidity.",
     tags: ["transaction", "dex", "swap", "unsigned"],
     args: SwapArgsSchema,
     returns: "a stored, unsigned TxBuild",
     caveats: [],
     example:
-      'await harbor.tx.swap({ network: "testnet", account: "r...", sell: { currency: "XRP" }, buy: { currency: "USD", issuer: "r..." }, amount: "1000000", side: "sell", max_slippage_bps: 100 })',
+      'await harbor.tx.swap({ network: "testnet", account: "r...", sell: { currency: "XRP" }, buy: { currency: "USD", issuer: "r..." }, amount: "1000000", side: "sell", max_slippage_bps: 100, execution_mode: "fill_or_kill" })',
     handler: (ctx, rawArgs) =>
       buildSwap(ctx, rawArgs as z.infer<typeof SwapArgsSchema>),
   },
@@ -1091,6 +1632,284 @@ export const ops: OpDef[] = [
     },
   },
   {
+    name: "tx.escrowCreate",
+    family: "tx",
+    summary: "Build and simulate an unsigned, owner-signed XRPL escrow creation.",
+    tags: ["transaction", "escrow", "payment", "non-delegable", "unsigned"],
+    args: EscrowCreateArgsSchema,
+    returns: "a stored, unsigned non-delegable TxBuild",
+    caveats: [],
+    example:
+      'await harbor.tx.escrowCreate({ network: "testnet", account: "r...", destination: "r...", amount: "1000000", finish_after: 900000000 })',
+    handler: async (ctx, rawArgs) => {
+      const args = rawArgs as z.infer<typeof EscrowCreateArgsSchema>;
+      const [reserveDelta, additional] = await Promise.all([
+        reserveIncrementDrops(ctx, args.network),
+        destinationChecks(ctx, args.network, args.destination, args.amount),
+      ]);
+      // EscrowCreate Amount, Destination, CancelAfter, FinishAfter, Condition,
+      // and DestinationTag fields:
+      // https://xrpl.org/docs/references/protocol/transactions/types/escrowcreate
+      const txJson = {
+        TransactionType: "EscrowCreate",
+        Account: args.account,
+        Amount: args.amount,
+        Destination: args.destination,
+        ...(args.cancel_after === undefined
+          ? {}
+          : { CancelAfter: args.cancel_after }),
+        ...(args.finish_after === undefined
+          ? {}
+          : { FinishAfter: args.finish_after }),
+        ...(args.condition === undefined ? {} : { Condition: args.condition }),
+        ...(args.destination_tag === undefined
+          ? {}
+          : { DestinationTag: args.destination_tag }),
+      };
+      return buildTransaction(
+        ctx,
+        txInput(
+          args.network,
+          args.account,
+          txJson,
+          "escrow create",
+          [args.amount],
+          args.intent_id,
+          {
+            delegable: false,
+            permissions: [],
+            valuation_amounts: [args.amount],
+            reserve_delta_drops: reserveDelta,
+            preflight: {
+              reserveDeltaDrops: reserveDelta,
+              spendDrops: xrpSpendDrops(args.amount),
+              trustLines: issuedAssets(args.amount),
+              requireAuthAssets: issuedAssets(args.amount),
+              expiresAt: args.cancel_after,
+              additional,
+            },
+          },
+        ),
+      );
+    },
+  },
+  {
+    name: "tx.escrowFinish",
+    family: "tx",
+    summary: "Build and simulate an unsigned escrow finish.",
+    tags: ["transaction", "escrow", "settlement", "unsigned"],
+    args: EscrowFinishArgsSchema,
+    returns: "a stored, unsigned TxBuild",
+    caveats: [],
+    example:
+      'await harbor.tx.escrowFinish({ network: "testnet", account: "r...", owner: "r...", offer_sequence: 7 })',
+    handler: async (ctx, rawArgs) => {
+      const args = rawArgs as z.infer<typeof EscrowFinishArgsSchema>;
+      const fee = await escrowFinishFeeDrops(
+        ctx,
+        args.network,
+        args.fulfillment,
+      );
+      // EscrowFinish Owner, OfferSequence, Condition, and Fulfillment fields:
+      // https://xrpl.org/docs/references/protocol/transactions/types/escrowfinish
+      const txJson = {
+        TransactionType: "EscrowFinish",
+        Account: args.account,
+        Owner: args.owner,
+        OfferSequence: args.offer_sequence,
+        ...(args.condition === undefined ? {} : { Condition: args.condition }),
+        ...(args.fulfillment === undefined
+          ? {}
+          : { Fulfillment: args.fulfillment }),
+        ...(fee === undefined ? {} : { Fee: fee }),
+      };
+      return buildTransaction(
+        ctx,
+        txInput(
+          args.network,
+          args.account,
+          txJson,
+          "escrow finish",
+          [],
+          args.intent_id,
+          { permissions: ["EscrowFinish"] },
+        ),
+      );
+    },
+  },
+  {
+    name: "tx.escrowCancel",
+    family: "tx",
+    summary: "Build and simulate an unsigned escrow cancellation.",
+    tags: ["transaction", "escrow", "cancel", "unsigned"],
+    args: EscrowCancelArgsSchema,
+    returns: "a stored, unsigned TxBuild",
+    caveats: [],
+    example:
+      'await harbor.tx.escrowCancel({ network: "testnet", account: "r...", owner: "r...", offer_sequence: 7 })',
+    handler: (ctx, rawArgs) => {
+      const args = rawArgs as z.infer<typeof EscrowCancelArgsSchema>;
+      // EscrowCancel Owner and OfferSequence fields:
+      // https://xrpl.org/docs/references/protocol/transactions/types/escrowcancel
+      const txJson = {
+        TransactionType: "EscrowCancel",
+        Account: args.account,
+        Owner: args.owner,
+        OfferSequence: args.offer_sequence,
+      };
+      return buildTransaction(
+        ctx,
+        txInput(
+          args.network,
+          args.account,
+          txJson,
+          "escrow cancel",
+          [],
+          args.intent_id,
+          { permissions: ["EscrowCancel"] },
+        ),
+      );
+    },
+  },
+  {
+    name: "tx.checkCreate",
+    family: "tx",
+    summary: "Build and simulate an unsigned, owner-signed XRPL Check creation.",
+    tags: ["transaction", "check", "payment", "non-delegable", "unsigned"],
+    args: CheckCreateArgsSchema,
+    returns: "a stored, unsigned non-delegable TxBuild",
+    caveats: [],
+    example:
+      'await harbor.tx.checkCreate({ network: "testnet", account: "r...", destination: "r...", send_max: "1000000" })',
+    handler: async (ctx, rawArgs) => {
+      const args = rawArgs as z.infer<typeof CheckCreateArgsSchema>;
+      const [reserveDelta, additional] = await Promise.all([
+        reserveIncrementDrops(ctx, args.network),
+        destinationChecks(ctx, args.network, args.destination, args.send_max),
+      ]);
+      // CheckCreate Destination, SendMax, DestinationTag, Expiration, and
+      // InvoiceID fields:
+      // https://xrpl.org/docs/references/protocol/transactions/types/checkcreate
+      const txJson = {
+        TransactionType: "CheckCreate",
+        Account: args.account,
+        Destination: args.destination,
+        SendMax: args.send_max,
+        ...(args.destination_tag === undefined
+          ? {}
+          : { DestinationTag: args.destination_tag }),
+        ...(args.expiration === undefined
+          ? {}
+          : { Expiration: args.expiration }),
+        ...(args.invoice_id === undefined
+          ? {}
+          : { InvoiceID: args.invoice_id }),
+      };
+      return buildTransaction(
+        ctx,
+        txInput(
+          args.network,
+          args.account,
+          txJson,
+          "check create",
+          [args.send_max],
+          args.intent_id,
+          {
+            delegable: false,
+            permissions: [],
+            valuation_amounts: [args.send_max],
+            reserve_delta_drops: reserveDelta,
+            preflight: {
+              reserveDeltaDrops: reserveDelta,
+              trustLines: issuedAssets(args.send_max),
+              requireAuthAssets: issuedAssets(args.send_max),
+              expiresAt: args.expiration,
+              additional,
+            },
+          },
+        ),
+      );
+    },
+  },
+  {
+    name: "tx.checkCash",
+    family: "tx",
+    summary: "Build and simulate an unsigned XRPL Check redemption.",
+    tags: ["transaction", "check", "settlement", "unsigned"],
+    args: CheckCashArgsSchema,
+    returns: "a stored, unsigned TxBuild",
+    caveats: [],
+    example:
+      'await harbor.tx.checkCash({ network: "testnet", account: "r...", check_id: "64 hex characters", amount: "1000000" })',
+    handler: (ctx, rawArgs) => {
+      const args = rawArgs as z.infer<typeof CheckCashArgsSchema>;
+      const amount = args.amount ?? args.deliver_min!;
+      // CheckCash CheckID, Amount, and DeliverMin fields:
+      // https://xrpl.org/docs/references/protocol/transactions/types/checkcash
+      const txJson = {
+        TransactionType: "CheckCash",
+        Account: args.account,
+        CheckID: args.check_id,
+        ...(args.amount === undefined ? {} : { Amount: args.amount }),
+        ...(args.deliver_min === undefined
+          ? {}
+          : { DeliverMin: args.deliver_min }),
+      };
+      return buildTransaction(
+        ctx,
+        txInput(
+          args.network,
+          args.account,
+          txJson,
+          "check cash",
+          [amount],
+          args.intent_id,
+          {
+            permissions: ["CheckCash"],
+            valuation_amounts: [amount],
+            preflight: {
+              trustLines: issuedAssets(amount),
+              requireAuthAssets: issuedAssets(amount),
+            },
+          },
+        ),
+      );
+    },
+  },
+  {
+    name: "tx.checkCancel",
+    family: "tx",
+    summary: "Build and simulate an unsigned XRPL Check cancellation.",
+    tags: ["transaction", "check", "cancel", "unsigned"],
+    args: CheckCancelArgsSchema,
+    returns: "a stored, unsigned TxBuild",
+    caveats: [],
+    example:
+      'await harbor.tx.checkCancel({ network: "testnet", account: "r...", check_id: "64 hex characters" })',
+    handler: (ctx, rawArgs) => {
+      const args = rawArgs as z.infer<typeof CheckCancelArgsSchema>;
+      // CheckCancel CheckID field:
+      // https://xrpl.org/docs/references/protocol/transactions/types/checkcancel
+      const txJson = {
+        TransactionType: "CheckCancel",
+        Account: args.account,
+        CheckID: args.check_id,
+      };
+      return buildTransaction(
+        ctx,
+        txInput(
+          args.network,
+          args.account,
+          txJson,
+          "check cancel",
+          [],
+          args.intent_id,
+          { permissions: ["CheckCancel"] },
+        ),
+      );
+    },
+  },
+  {
     name: "tx.trustSet",
     family: "tx",
     summary: "Build and simulate an unsigned trust-line update.",
@@ -1102,6 +1921,7 @@ export const ops: OpDef[] = [
       'await harbor.tx.trustSet({ network: "testnet", account: "r...", limit_amount: { currency: "USD", issuer: "r...", value: "100" } })',
     handler: async (ctx, rawArgs) => {
       const args = rawArgs as z.infer<typeof TrustSetArgsSchema>;
+      assertExecutionContractSupported(ctx, args.execution_contract);
       const reserveDelta = await reserveIncrementDrops(ctx, args.network);
       // TrustSet fields: https://xrpl.org/docs/references/protocol/transactions/types/trustset
       const txJson = {
@@ -1118,6 +1938,7 @@ export const ops: OpDef[] = [
         ctx,
         txInput(args.network, args.account, txJson, "trust set", [args.limit_amount], args.intent_id, {
           permissions: ["TrustSet"],
+          execution_contract: args.execution_contract,
           reserve_delta_drops: reserveDelta,
           preflight: { reserveDeltaDrops: reserveDelta, flagConflicts: [] },
         }),
@@ -1335,9 +2156,15 @@ export const ops: OpDef[] = [
       const transactionType = args.tx_json.TransactionType;
       const amounts = Object.entries(args.tx_json)
         .filter(([key]) =>
-          ["Amount", "Amount2", "TakerGets", "TakerPays", "LimitAmount"].includes(
-            key,
-          ),
+          [
+            "Amount",
+            "Amount2",
+            "TakerGets",
+            "TakerPays",
+            "LimitAmount",
+            "SendMax",
+            "DeliverMin",
+          ].includes(key),
         )
         .map(([, amount]) => amount as CurrencyAmount);
       // A TrustSet LimitAmount is a credit ceiling, not value transferred.
@@ -1347,9 +2174,11 @@ export const ops: OpDef[] = [
       const createsOwnerObject =
         transactionType === "TrustSet" ||
         transactionType === "AMMDeposit" ||
+        transactionType === "EscrowCreate" ||
+        transactionType === "CheckCreate" ||
         (transactionType === "OfferCreate" &&
           (((args.tx_json.Flags as number | undefined) ?? 0) &
-            OFFER_TF_IMMEDIATE_OR_CANCEL) ===
+            (OFFER_TF_IMMEDIATE_OR_CANCEL | OFFER_TF_FILL_OR_KILL)) ===
             0);
       const reserveDelta = createsOwnerObject
         ? await reserveIncrementDrops(ctx, args.network)
@@ -1358,7 +2187,8 @@ export const ops: OpDef[] = [
         transactionType === "OfferCreate"
           ? xrpSpendDrops(args.tx_json.TakerGets)
           : transactionType === "Payment" ||
-              transactionType === "VaultDeposit"
+              transactionType === "VaultDeposit" ||
+              transactionType === "EscrowCreate"
             ? xrpSpendDrops(args.tx_json.Amount)
             : transactionType === "AMMDeposit"
               ? xrpSpendDrops(args.tx_json.Amount, args.tx_json.Amount2)
@@ -1394,6 +2224,20 @@ export const ops: OpDef[] = [
           args.tx_json.Destination,
           args.tx_json.Amount,
         );
+      } else if (transactionType === "EscrowCreate") {
+        additional = await destinationChecks(
+          ctx,
+          args.network,
+          args.tx_json.Destination,
+          args.tx_json.Amount,
+        );
+      } else if (transactionType === "CheckCreate") {
+        additional = await destinationChecks(
+          ctx,
+          args.network,
+          args.tx_json.Destination,
+          args.tx_json.SendMax,
+        );
       } else if (transactionType === "VaultWithdraw") {
         additional = await destinationChecks(
           ctx,
@@ -1402,20 +2246,32 @@ export const ops: OpDef[] = [
           args.tx_json.Amount,
         );
       }
+      const finishFee =
+        transactionType === "EscrowFinish"
+          ? await escrowFinishFeeDrops(
+              ctx,
+              args.network,
+              args.tx_json.Fulfillment,
+            )
+          : undefined;
+      const txJson =
+        finishFee === undefined
+          ? args.tx_json
+          : { ...args.tx_json, Fee: finishFee };
       return buildTransaction(
         ctx,
         txInput(
           args.network,
           args.account,
-          args.tx_json,
+          txJson,
           `simulate ${transactionType}`,
           amounts,
           args.intent_id,
           {
-            ...(DELEGABLE_TRANSACTION_TYPES.has(transactionType)
+            ...(isHarborDelegableTransactionType(transactionType)
               ? {}
               : { delegable: false }),
-            permissions: DELEGABLE_TRANSACTION_TYPES.has(transactionType)
+            permissions: isHarborDelegableTransactionType(transactionType)
               ? [transactionType]
               : [],
             valuation_amounts: valuationAmounts,
@@ -1425,6 +2281,10 @@ export const ops: OpDef[] = [
               spendDrops,
               trustLines: preflightAssets,
               requireAuthAssets: preflightAssets,
+              expiresAt:
+                transactionType === "EscrowCreate"
+                  ? args.tx_json.CancelAfter
+                  : undefined,
               additional,
             },
           },

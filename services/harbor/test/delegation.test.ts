@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { DelegateSet } from 'xrpl';
+import type { DelegateSet, Transaction } from 'xrpl';
 
 import {
 	DEFAULT_DELEGATED_PERMISSIONS,
@@ -16,6 +16,7 @@ import {
 	validatePermissions,
 	type DelegationLedgerAdapter,
 } from '../src/exec/delegation';
+import { signDelegatedTransaction } from '../src/exec/sign';
 
 const owner = 'rOwner';
 const delegate = 'rDelegate';
@@ -221,5 +222,136 @@ describe('Delegate ledger-entry normalization', () => {
 		expect(() => normalizeDelegatePermissions(ledgerEntry(), { owner, delegate: 'rSomeoneElse' })).toThrow(
 			/does not match/,
 		);
+	});
+});
+
+describe('exact v2 delegated signing', () => {
+	const prepared = {
+		TransactionType: 'OfferCancel',
+		Account: owner,
+		OfferSequence: 3,
+		Fee: '12',
+		Sequence: 7,
+		LastLedgerSequence: 99,
+	} as const;
+
+	function signingHarness(options: {
+		sequence?: number;
+		fee?: Record<string, unknown>;
+	} = {}) {
+		const sign = vi.fn((_transaction: Transaction) => ({
+			tx_blob: 'AB',
+			hash: 'B'.repeat(64),
+		}));
+		const link = {
+			id: 'link-v2',
+			owner,
+			network: 'testnet' as const,
+			delegate,
+			delegateSeedEnc: new Uint8Array([1]).buffer,
+			iv: new Uint8Array([2]).buffer,
+			permissions: ['OfferCancel'],
+			status: 'active' as const,
+		};
+		const fee = options.fee ?? {
+			drops: { open_ledger_fee: '12' },
+			current_queue_size: '0',
+			max_queue_size: '10',
+		};
+		const request = vi.fn(async (_network: string, command: string) =>
+			command === 'account_info'
+				? { account_data: { Account: owner, Sequence: options.sequence ?? 7 } }
+				: fee,
+		);
+		return {
+			ctx: {
+				principal: 'v2-signing-tests',
+				env: { HARBOR_KEK: 'test-only-kek' },
+				store: { getLink: async () => link },
+				xrplRpc: { request },
+				signingServices: {
+					withDelegateSigner: (async (_identity, _wrapped, _kek, run) =>
+						run({ address: delegate, publicKey: 'public', sign })) as never,
+				},
+			},
+			sign,
+			request,
+		};
+	}
+
+	it.each(['10', '12'])('accepts a canonical open-ledger fee of %s without replacing the immutable fee', async (openFee) => {
+		const harness = signingHarness({
+			fee: {
+				drops: { open_ledger_fee: openFee },
+				current_queue_size: '9',
+				max_queue_size: '10',
+			},
+		});
+		const callerTx = { ...prepared };
+
+		await expect(signDelegatedTransaction(harness.ctx, {
+			network: 'testnet',
+			owner,
+			txJson: callerTx,
+			executionContract: 'xrpl_execution_v2',
+		})).resolves.toEqual({ tx_blob: 'AB', hash: 'B'.repeat(64) });
+
+		expect(harness.sign).toHaveBeenCalledWith({ ...prepared, Delegate: delegate });
+		expect(callerTx).toEqual(prepared);
+	});
+
+	it('fails closed when the live open-ledger fee exceeds the immutable fee', async () => {
+		const harness = signingHarness({
+			fee: {
+				drops: { open_ledger_fee: '13' },
+				current_queue_size: '0',
+				max_queue_size: '10',
+			},
+		});
+
+		await expect(signDelegatedTransaction(harness.ctx, {
+			network: 'testnet', owner, txJson: prepared, executionContract: 'xrpl_execution_v2',
+		})).rejects.toMatchObject({ code: 'FEE_LOAD_UNSAFE' });
+		expect(harness.sign).not.toHaveBeenCalled();
+	});
+
+	it('rejects the full queue boundary', async () => {
+		const harness = signingHarness({
+			fee: {
+				drops: { open_ledger_fee: '12' },
+				current_queue_size: '10',
+				max_queue_size: '10',
+			},
+		});
+
+		await expect(signDelegatedTransaction(harness.ctx, {
+			network: 'testnet', owner, txJson: prepared, executionContract: 'xrpl_execution_v2',
+		})).rejects.toMatchObject({ code: 'FEE_LOAD_UNSAFE' });
+		expect(harness.sign).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		{},
+		{ drops: { open_ledger_fee: '12' }, max_queue_size: '10' },
+		{ drops: { open_ledger_fee: '12' }, current_queue_size: '0' },
+		{ drops: { open_ledger_fee: '012' }, current_queue_size: '0', max_queue_size: '10' },
+		{ drops: { open_ledger_fee: '12' }, current_queue_size: '-1', max_queue_size: '10' },
+		{ drops: { open_ledger_fee: '12' }, current_queue_size: '0', max_queue_size: '0' },
+	])('rejects malformed or missing fee/load evidence: %j', async (fee) => {
+		const harness = signingHarness({ fee });
+
+		await expect(signDelegatedTransaction(harness.ctx, {
+			network: 'testnet', owner, txJson: prepared, executionContract: 'xrpl_execution_v2',
+		})).rejects.toMatchObject({ code: 'XRPL_MALFORMED_RESPONSE' });
+		expect(harness.sign).not.toHaveBeenCalled();
+	});
+
+	it('rejects a live owner Sequence that differs from the immutable transaction', async () => {
+		const harness = signingHarness({ sequence: 8 });
+
+		await expect(signDelegatedTransaction(harness.ctx, {
+			network: 'testnet', owner, txJson: prepared, executionContract: 'xrpl_execution_v2',
+		})).rejects.toMatchObject({ code: 'ACCOUNT_SEQUENCE_CHANGED' });
+		expect(harness.sign).not.toHaveBeenCalled();
 	});
 });

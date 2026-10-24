@@ -1,7 +1,12 @@
 import MiniSearch from "minisearch";
 import { z } from "zod";
 
-import { CaveatSchema, type Caveat, type Venue } from "../contracts";
+import {
+  CaveatSchema,
+  type Caveat,
+  type Merchant,
+  type Venue,
+} from "../contracts";
 
 export type OpContext = {
   principal: string;
@@ -30,7 +35,7 @@ type AnyOpDef = OpDef<any, any>;
 
 export type CatalogDocument = {
   id: string;
-  kind: "venue" | "playbook";
+  kind: "venue" | "merchant" | "playbook";
   name: string;
   summary: string;
   family?: string;
@@ -42,6 +47,7 @@ export type CatalogDocument = {
 
 export type CatalogManifestInput = {
   venues?: readonly Venue[];
+  merchants?: readonly Merchant[];
   ecosystemSkills?: {
     playbooks?: readonly {
       id: string;
@@ -326,6 +332,37 @@ export function catalogDocumentsFromManifest(
     signature: `venues.get({ id: "${venue.id}" }) → venue details`,
     example: `await harbor.venues.get({ id: "${venue.id}" })`,
   }));
+  const merchants = (manifest.merchants ?? []).map(
+    (merchant): CatalogDocument => {
+      const products = merchant.products
+        .map((product) => {
+          const asset =
+            product.price.asset.kind === "xrp"
+              ? "XRP"
+              : `${product.price.asset.currency}:${product.price.asset.issuer}`;
+          return `${product.sku} ${product.name} ${product.description} price ${product.price.value} ${asset}`;
+        })
+        .join("; ");
+      const credential = `${merchant.required_credential.issuer}:${merchant.required_credential.credential_type_hex}`;
+      return {
+        id: merchant.id,
+        kind: "merchant",
+        name: merchant.name,
+        family: "merchants",
+        summary: `${merchant.id}: ${products}; schemes ${merchant.schemes.join(", ")}; requires credential ${credential}`,
+        tags: [
+          "ap4m",
+          "x402",
+          "requires-credential",
+          ...merchant.schemes,
+          ...merchant.products.flatMap((product) => [product.sku, product.name]),
+        ],
+        content: `${products}; settlement ${JSON.stringify(merchant.settle_asset)}; credential ${credential}`,
+        signature: `merchants.get({ id: "${merchant.id}" }) → merchant details`,
+        example: `await harbor.merchants.get({ id: "${merchant.id}" })`,
+      };
+    },
+  );
   const playbooks = (manifest.ecosystemSkills?.playbooks ?? []).map(
     (playbook): CatalogDocument => ({
       id: playbook.id,
@@ -339,7 +376,7 @@ export function catalogDocumentsFromManifest(
       example: `await harbor.skill.read({ id: "${playbook.id}" })`,
     }),
   );
-  return [...venues, ...playbooks];
+  return [...venues, ...merchants, ...playbooks];
 }
 
 export const registry = new OpRegistry();

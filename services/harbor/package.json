@@ -6,8 +6,20 @@
 		"node": ">=24"
 	},
 	"scripts": {
+		"aws-local": "node --experimental-transform-types tools/aws-local/src/index.ts",
+		"qn-local": "node --experimental-transform-types tools/qn-local/src/index.ts",
 		"predev": "node scripts/build-catalog.mjs",
 		"dev": "wrangler dev",
+		"dev:local": "node scripts/dev-local.mjs",
+		"dev:local:x402": "node scripts/dev-local-x402.mjs",
+		"dev:local:x402:isolated:v1": "node scripts/dev-local-x402-isolated-v1.mjs",
+		"dev:local:trading": "node scripts/dev-local-trading.mjs",
+		"dev:local:trading:isolated:v1": "node scripts/dev-local-trading-isolated-v1.mjs",
+		"dev:local:trading:isolated:v1:onboarding": "node scripts/dev-local-trading-isolated-v1-onboarding.mjs",
+		"dev:local:trading:onboarding": "node scripts/dev-local-trading-onboarding.mjs",
+		"provision:local:trading": "umask 077 && node --experimental-transform-types scripts/provision-local-trading.ts",
+		"provision:local:x402": "umask 077 && node --experimental-transform-types scripts/provision-local-x402.ts",
+		"provision:local:x402:isolated:v1": "umask 077 && node --experimental-transform-types scripts/provision-local-x402-isolated-v1.ts",
 		"pretypecheck": "node scripts/build-catalog.mjs",
 		"typecheck": "tsc --noEmit",
 		"pretest": "node scripts/build-catalog.mjs",
@@ -19,8 +31,11 @@
 	},
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.32.1",
+		"@noble/curves": "^2.4.0",
+		"aws4fetch": "^1.0.20",
 		"minisearch": "^7.2.0",
 		"quickjs-emscripten": "^0.32.0",
+		"ripple-keypairs": "^3.1.0",
 		"xrpl": "^5.3.0",
 		"yaml": "^2.9.1",
 		"zod": "^4.6.7"

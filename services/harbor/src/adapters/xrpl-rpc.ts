@@ -5,6 +5,9 @@ import type { Network } from "../contracts";
 
 export const XRPL_RPC_TIMEOUT_MS = 8_000;
 export const XRPL_RPC_RETRIES = 1;
+// Raw paginated ledger methods can be substantially larger than normalized
+// market reads, but the transport must never buffer an unbounded response.
+export const XRPL_RPC_MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 
 export type XrplTransportKind = "json-rpc" | "websocket";
 export type XrplRequestIntent = "read" | "execute";
@@ -92,6 +95,7 @@ export class XrplRpcError extends Error {
     readonly code: string,
     readonly kind: XrplRpcErrorKind = "error",
     readonly retryable = false,
+    readonly searchedAll?: boolean,
   ) {
     super(message);
     this.name = "XrplRpcError";
@@ -103,8 +107,84 @@ type FetchLike = (
   init?: RequestInit,
 ) => Promise<Response>;
 
+function malformedJsonResponse(): XrplRpcError {
+  return new XrplRpcError(
+    "XRPL endpoint returned malformed JSON",
+    "XRPL_MALFORMED_RESPONSE",
+  );
+}
+
+function oversizedJsonResponse(): XrplRpcError {
+  return new XrplRpcError(
+    "XRPL endpoint response exceeded the size limit",
+    "XRPL_RESPONSE_TOO_LARGE",
+  );
+}
+
+async function boundedResponseJson(response: Response): Promise<unknown> {
+  const declaredLength = response.headers.get("content-length");
+  if (declaredLength !== null) {
+    if (!/^[0-9]+$/.test(declaredLength)) {
+      await response.body?.cancel().catch(() => undefined);
+      throw malformedJsonResponse();
+    }
+    if (BigInt(declaredLength) > BigInt(XRPL_RPC_MAX_RESPONSE_BYTES)) {
+      await response.body?.cancel().catch(() => undefined);
+      throw oversizedJsonResponse();
+    }
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) throw malformedJsonResponse();
+
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      totalBytes += next.value.byteLength;
+      if (totalBytes > XRPL_RPC_MAX_RESPONSE_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        throw oversizedJsonResponse();
+      }
+      chunks.push(next.value);
+    }
+  } catch (error) {
+    if (error instanceof XrplRpcError) throw error;
+    await reader.cancel().catch(() => undefined);
+    throw malformedJsonResponse();
+  } finally {
+    reader.releaseLock();
+  }
+
+  const body = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  try {
+    const text = new TextDecoder("utf-8", {
+      fatal: true,
+      ignoreBOM: false,
+    }).decode(body);
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw malformedJsonResponse();
+  }
+}
+
 export class JsonRpcTransport implements XrplTransport {
-  constructor(private readonly fetcher: FetchLike = fetch) {}
+  constructor(
+    // workerd and browsers reject a native global fetch when it is stored on an
+    // unrelated object and later invoked as `this.fetcher(...)`. Keep the
+    // injectable boundary, but wrap the ambient function so its receiver stays
+    // the Worker global instead of this transport instance.
+    private readonly fetcher: FetchLike = (input, init) =>
+      globalThis.fetch(input, init),
+  ) {}
 
   async request(request: XrplTransportRequest): Promise<unknown> {
     let response: Response;
@@ -136,14 +216,7 @@ export class JsonRpcTransport implements XrplTransport {
       );
     }
 
-    try {
-      return await response.json();
-    } catch {
-      throw new XrplRpcError(
-        "XRPL endpoint returned malformed JSON",
-        "XRPL_MALFORMED_RESPONSE",
-      );
-    }
+    return boundedResponseJson(response);
   }
 }
 
@@ -221,6 +294,7 @@ const SOFT_EMPTY_CODES = new Set([
   "entryNotFound",
   "objectNotFound",
   "txnNotFound",
+  "transactionNotFound",
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -258,14 +332,28 @@ function protocolError(response: Record<string, unknown>): XrplRpcError | undefi
   if (!failed) return undefined;
 
   const code = codeValue || "XRPL_PROTOCOL_ERROR";
+  const transactionNotFound =
+    code === "txnNotFound" || code === "transactionNotFound";
+  const searchedAllValue = Object.prototype.hasOwnProperty.call(
+    nested,
+    "searched_all",
+  )
+    ? nested.searched_all
+    : response.searched_all;
+  const searchedAll =
+    transactionNotFound && typeof searchedAllValue === "boolean"
+      ? searchedAllValue
+      : undefined;
   // XRPL error responses echo the request, which may contain credentials.
-  // Only retain the documented code, never the response/request/message:
+  // Only retain the documented code and the bounded-search signal needed to
+  // prove transaction absence, never the response/request/message:
   // https://xrpl.org/docs/references/http-websocket-apis/api-conventions/error-formatting
   return new XrplRpcError(
     `XRPL request failed with ${code}`,
     code,
     SOFT_EMPTY_CODES.has(code) ? "soft-empty" : "error",
     code === "tooBusy" || code === "noCurrent" || code === "noNetwork",
+    searchedAll,
   );
 }
 

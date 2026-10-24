@@ -42,7 +42,7 @@ export interface SignedTransaction {
 export interface DelegateSigner {
 	readonly address: string;
 	readonly publicKey: string;
-	sign(transaction: Transaction, multisign?: boolean | string): SignedTransaction;
+	sign(transaction: Transaction, multisign?: boolean | string): Promise<SignedTransaction>;
 }
 
 export interface DelegateWallet {
@@ -153,6 +153,25 @@ async function importKek(cryptoImpl: Crypto, kekBase64: string, usages: Array<'e
 	}
 }
 
+type KekUsage = 'encrypt' | 'decrypt';
+type KekLoader = (deps: KeyDependencies) => CryptoKey | Promise<CryptoKey>;
+
+function validateKekCryptoKey(key: CryptoKey, requiredUsage: KekUsage): void {
+	const algorithm = key?.algorithm as { name?: unknown; length?: unknown } | undefined;
+	if (
+		key?.type !== 'secret' ||
+		algorithm?.name !== 'AES-GCM' ||
+		algorithm.length !== KEK_BYTES * 8 ||
+		key.extractable ||
+		!key.usages.includes(requiredUsage)
+	) {
+		throw new DelegateKeyError(
+			`KMS KEK must be a non-extractable 256-bit AES-GCM key with ${requiredUsage} usage`,
+			'INVALID_KEK',
+		);
+	}
+}
+
 function retireWallet(wallet: DelegateWallet): void {
 	// JavaScript strings cannot be reliably zeroized. Remove our references as
 	// soon as possible and wipe mutable test/provider implementations where the
@@ -174,9 +193,9 @@ function retireWallet(wallet: DelegateWallet): void {
  * AES-GCM: https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/encrypt#aes-gcm
  * XRPL Wallet: https://js.xrpl.org/classes/Wallet.html
  */
-export async function createWrappedDelegateKey(
+async function createWrappedDelegateKeyUsingKek(
 	identity: DelegateIdentity,
-	kekBase64: string,
+	loadKek: KekLoader,
 	overrides: Partial<KeyDependencies> = {},
 ): Promise<WrappedDelegateKey> {
 	const deps = dependencies(overrides);
@@ -194,7 +213,8 @@ export async function createWrappedDelegateKey(
 		}
 		const seedBytes = new TextEncoder().encode(wallet.seed);
 		try {
-			const key = await importKek(deps.crypto, kekBase64, ['encrypt']);
+			const key = await loadKek(deps);
+			validateKekCryptoKey(key, 'encrypt');
 			const iv = deps.crypto.getRandomValues(new Uint8Array(AES_GCM_IV_BYTES));
 			let ciphertext: ArrayBuffer;
 			try {
@@ -217,21 +237,46 @@ export async function createWrappedDelegateKey(
 	}
 }
 
+export async function createWrappedDelegateKey(
+	identity: DelegateIdentity,
+	kekBase64: string,
+	overrides: Partial<KeyDependencies> = {},
+): Promise<WrappedDelegateKey> {
+	return createWrappedDelegateKeyUsingKek(
+		identity,
+		(deps) => importKek(deps.crypto, kekBase64, ['encrypt']),
+		overrides,
+	);
+}
+
+/**
+ * Internal integration seam for a KEK imported from a KMS Decrypt result.
+ * The key must already be non-extractable; this module never exports it.
+ */
+export async function createWrappedDelegateKeyWithCryptoKey(
+	identity: DelegateIdentity,
+	kek: CryptoKey,
+	overrides: Partial<KeyDependencies> = {},
+): Promise<WrappedDelegateKey> {
+	return createWrappedDelegateKeyUsingKek(identity, () => kek, overrides);
+}
+
 /**
  * Decrypt a delegate only for the duration of a callback. The callback gets a
  * narrow signer facade, not an xrpl Wallet, so it cannot inspect or export the
  * delegate seed or private key.
  */
-export async function withDelegateSigner<T>(
+async function withDelegateSignerUsingKek<T>(
 	identity: DelegateIdentity,
 	wrapped: StoredDelegateKey,
-	kekBase64: string,
+	loadKek: KekLoader,
 	callback: (signer: DelegateSigner) => T | Promise<T>,
 	overrides: Partial<KeyDependencies> = {},
 ): Promise<T> {
 	const deps = dependencies(overrides);
 	const additionalData = identityAdditionalData(identity);
-	const key = await importKek(deps.crypto, kekBase64, ['decrypt']);
+	const key = await loadKek(deps);
+	validateKekCryptoKey(key, 'decrypt');
 	let plaintext: ArrayBuffer;
 	try {
 		// MDN: https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/decrypt
@@ -266,12 +311,43 @@ export async function withDelegateSigner<T>(
 		const signer: DelegateSigner = Object.freeze({
 			address: wallet.classicAddress,
 			publicKey: wallet.publicKey,
-			sign: (transaction: Transaction, multisign?: boolean | string) => wallet.sign(transaction, multisign),
+			sign: async (transaction: Transaction, multisign?: boolean | string) => wallet.sign(transaction, multisign),
 		});
 		return await callback(signer);
 	} finally {
 		retireWallet(wallet);
 	}
+}
+
+export async function withDelegateSigner<T>(
+	identity: DelegateIdentity,
+	wrapped: StoredDelegateKey,
+	kekBase64: string,
+	callback: (signer: DelegateSigner) => T | Promise<T>,
+	overrides: Partial<KeyDependencies> = {},
+): Promise<T> {
+	return withDelegateSignerUsingKek(
+		identity,
+		wrapped,
+		(deps) => importKek(deps.crypto, kekBase64, ['decrypt']),
+		callback,
+		overrides,
+	);
+}
+
+/**
+ * Internal integration seam for signing with a KEK imported from KMS. The
+ * plaintext seed exists only during the callback setup and is zeroed exactly
+ * as it is on the legacy HARBOR_KEK path.
+ */
+export async function withDelegateSignerWithCryptoKey<T>(
+	identity: DelegateIdentity,
+	wrapped: StoredDelegateKey,
+	kek: CryptoKey,
+	callback: (signer: DelegateSigner) => T | Promise<T>,
+	overrides: Partial<KeyDependencies> = {},
+): Promise<T> {
+	return withDelegateSignerUsingKek(identity, wrapped, () => kek, callback, overrides);
 }
 
 /**

@@ -1,0 +1,154 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "SignWithTaggedDelegateKeys",
+      "Effect": "Allow",
+      "Action": "kms:Sign",
+      "Resource": "arn:aws:kms:us-east-1:*:key/*",
+      "Condition": {
+        "StringLike": {
+          "aws:ResourceTag/harbor:principal": "?*"
+        },
+        "StringEquals": {
+          "kms:KeySpec": "ECC_NIST_EDWARDS25519",
+          "kms:KeyUsage": "SIGN_VERIFY",
+          "kms:SigningAlgorithm": "ED25519_SHA_512",
+          "kms:MessageType": "RAW"
+        }
+      }
+    },
+    {
+      "Sid": "ReadTaggedDelegatePublicKeys",
+      "Effect": "Allow",
+      "Action": "kms:GetPublicKey",
+      "Resource": "arn:aws:kms:us-east-1:*:key/*",
+      "Condition": {
+        "StringLike": {
+          "aws:ResourceTag/harbor:principal": "?*"
+        },
+        "StringEquals": {
+          "kms:KeySpec": "ECC_NIST_EDWARDS25519",
+          "kms:KeyUsage": "SIGN_VERIFY"
+        }
+      }
+    },
+    {
+      "Sid": "CreateTaggedDelegateKeys",
+      "Effect": "Allow",
+      "Action": "kms:CreateKey",
+      "Resource": "*",
+      "Condition": {
+        "StringLike": {
+          "aws:RequestTag/harbor:principal": "?*",
+          "aws:RequestTag/harbor:owner": "?*"
+        },
+        "StringEquals": {
+          "aws:RequestTag/harbor:network": [
+            "testnet",
+            "devnet"
+          ],
+          "kms:KeySpec": "ECC_NIST_EDWARDS25519",
+          "kms:KeyUsage": "SIGN_VERIFY",
+          "kms:KeyOrigin": "AWS_KMS"
+        },
+        "Bool": {
+          "kms:MultiRegion": "false"
+        },
+        "ForAllValues:StringEquals": {
+          "aws:TagKeys": [
+            "harbor:principal",
+            "harbor:owner",
+            "harbor:network"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "TagExistingDelegateKeys",
+      "Effect": "Allow",
+      "Action": "kms:TagResource",
+      "Resource": "arn:aws:kms:us-east-1:*:key/*",
+      "Condition": {
+        "StringLike": {
+          "aws:ResourceTag/harbor:principal": "?*",
+          "aws:RequestTag/harbor:principal": "?*",
+          "aws:RequestTag/harbor:owner": "?*"
+        },
+        "StringEquals": {
+          "aws:RequestTag/harbor:network": [
+            "testnet",
+            "devnet"
+          ]
+        },
+        "ForAllValues:StringEquals": {
+          "aws:TagKeys": [
+            "harbor:principal",
+            "harbor:owner",
+            "harbor:network"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "CreateHarborDelegateAliases",
+      "Effect": "Allow",
+      "Action": "kms:CreateAlias",
+      "Resource": "arn:aws:kms:us-east-1:*:alias/harbor/testnet/*"
+    },
+    {
+      "Sid": "CreateHarborDevnetDelegateAliases",
+      "Effect": "Allow",
+      "Action": "kms:CreateAlias",
+      "Resource": "arn:aws:kms:us-east-1:*:alias/harbor/devnet/*"
+    },
+    {
+      "Sid": "AttachAliasesOnlyToTaggedDelegateKeys",
+      "Effect": "Allow",
+      "Action": "kms:CreateAlias",
+      "Resource": "arn:aws:kms:us-east-1:*:key/*",
+      "Condition": {
+        "StringLike": {
+          "aws:ResourceTag/harbor:principal": "?*"
+        },
+        "StringEquals": {
+          "kms:KeySpec": "ECC_NIST_EDWARDS25519",
+          "kms:KeyUsage": "SIGN_VERIFY"
+        }
+      }
+    },
+    {
+      "Sid": "ScheduleTaggedDelegateKeyDeletion",
+      "Effect": "Allow",
+      "Action": "kms:ScheduleKeyDeletion",
+      "Resource": "arn:aws:kms:us-east-1:*:key/*",
+      "Condition": {
+        "StringLike": {
+          "aws:ResourceTag/harbor:principal": "?*"
+        },
+        "NumericEquals": {
+          "kms:ScheduleKeyDeletionPendingWindowInDays": 7
+        }
+      }
+    },
+    {
+      "Sid": "DecryptHarborKek",
+      "Effect": "Allow",
+      "Action": "kms:Decrypt",
+      "Resource": "arn:aws:kms:us-east-1:*:key/*",
+      "Condition": {
+        "ForAnyValue:StringEquals": {
+          "kms:ResourceAliases": [
+            "alias/harbor/kek"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "InvokeGuardrailChecks",
+      "Effect": "Allow",
+      "Action": "bedrock:InvokeGuardrailChecks",
+      "Resource": "*"
+    }
+  ]
+}

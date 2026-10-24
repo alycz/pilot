@@ -7,8 +7,14 @@ import {
   type Network,
 } from "../contracts";
 import { requestXrpl, XrplRpcError } from "../adapters/xrpl-rpc";
+import { loadKmsKek, readKmsMode, type KmsEnv } from "../aws/kms";
 import type { OpContext, OpDef } from "../catalog/registry";
+import { assertLocalTradingTestnet } from "../local-trading";
+import { localTradingIsolatedOnboardingV1MarkersPresent } from "../local-trading-isolated-onboarding-v1";
+import { localTradingOnboardingMarkersPresent } from "../local-trading-onboarding";
 import {
+  DEFAULT_DELEGATED_PERMISSIONS,
+  DelegationValidationError,
   normalizeDelegatePermissions,
   prepareDelegateRevoke,
   prepareDelegateSet,
@@ -17,14 +23,26 @@ import {
 } from "../exec/delegation";
 import {
   createWrappedDelegateKey,
+  createWrappedDelegateKeyWithCryptoKey,
   fundDelegateAccount,
 } from "../exec/keys";
+import {
+  createKmsDelegateClient,
+  createKmsDelegateKey,
+  scheduleKmsDelegateKeyDeletion,
+  type KmsKeyLifecycleClient,
+} from "../exec/kms-signer";
 import {
   Store,
   type LinkInsert,
   type LinkRow,
   type LinkUpdate,
 } from "../exec/store";
+import {
+  createQuickNodeKvRegistryForRequest,
+  type QuickNodeKvRegistry,
+  type QuickNodeRegistryEnv,
+} from "../quicknode/kv-registry";
 
 const ExecutionNetworkSchema = z.enum(["testnet", "devnet"]);
 const OwnerSchema = z
@@ -56,25 +74,32 @@ export type AccountStore = Pick<
 
 type CreateWrappedDelegateKey = typeof createWrappedDelegateKey;
 type FundDelegateAccount = typeof fundDelegateAccount;
+type CreateKmsDelegateKey = typeof createKmsDelegateKey;
+type ScheduleKmsDelegateKeyDeletion = typeof scheduleKmsDelegateKeyDeletion;
 
 export interface AccountServices {
   store?: AccountStore;
   ledger?: DelegationLedgerAdapter;
   createWrappedDelegateKey?: CreateWrappedDelegateKey;
+  createKmsDelegateKey?: CreateKmsDelegateKey;
+  scheduleKmsDelegateKeyDeletion?: ScheduleKmsDelegateKeyDeletion;
+  kmsClient?: KmsKeyLifecycleClient;
   fundDelegateAccount?: FundDelegateAccount;
-  /** Optional faucet transport override for deterministic tests. */
+  /** Optional faucet transport override; production uses the Worker fetch runtime. */
   faucetFetch?: typeof fetch;
   now?: () => Date;
   randomUUID?: () => string;
+  quickNodeRegistry?: Pick<QuickNodeKvRegistry, "link" | "revoke">;
 }
 
-type AccountEnvironment = {
+type AccountEnvironment = KmsEnv & QuickNodeRegistryEnv & {
   HARBOR_KEK?: string;
 };
 
 type AccountContext = OpContext & {
   db?: D1Database;
   env?: AccountEnvironment;
+  request?: Request;
   accountServices?: AccountServices;
 };
 
@@ -106,6 +131,31 @@ function executionNetwork(network: Network): asserts network is "testnet" | "dev
       "MAINNET_EXECUTION_DISABLED",
     );
   }
+}
+
+function assertExactOnboardingPermissions(
+  env: unknown,
+  permissions: readonly string[],
+): void {
+  if (
+    onboardingMarkersPresent(env) &&
+    (permissions.length !== DEFAULT_DELEGATED_PERMISSIONS.length ||
+      permissions.some(
+        (permission, index) =>
+          permission !== DEFAULT_DELEGATED_PERMISSIONS[index],
+      ))
+  ) {
+    throw new DelegationValidationError(
+      "Local trading onboarding requires the exact reviewed delegated permissions",
+    );
+  }
+}
+
+function onboardingMarkersPresent(env: unknown): boolean {
+  return (
+    localTradingOnboardingMarkersPresent(env) ||
+    localTradingIsolatedOnboardingV1MarkersPresent(env)
+  );
 }
 
 function accountSequence(
@@ -259,6 +309,49 @@ function kekFor(input: OpContext): string {
   return kek;
 }
 
+function kmsClientFor(
+  input: OpContext,
+  configured: AccountServices,
+): KmsKeyLifecycleClient {
+  return configured.kmsClient ?? createKmsDelegateClient(context(input).env ?? {});
+}
+
+function quickNodeRegistryFor(
+  input: OpContext,
+  configured: AccountServices,
+): Pick<QuickNodeKvRegistry, "link" | "revoke"> {
+  if (configured.quickNodeRegistry) return configured.quickNodeRegistry;
+  const ctx = context(input);
+  return createQuickNodeKvRegistryForRequest({
+    env: ctx.env,
+    request: ctx.request,
+  });
+}
+
+async function syncQuickNodeLinkBestEffort(
+  input: OpContext,
+  configured: AccountServices,
+  action: "link" | "revoke",
+  network: "testnet" | "devnet",
+  owner: string,
+  delegate: string,
+): Promise<void> {
+  try {
+    await quickNodeRegistryFor(input, configured)[action](
+      network,
+      owner,
+      delegate,
+    );
+  } catch {
+    console.warn("kv_sync_failed", {
+      evt: "kv_sync_failed",
+      action: "patch",
+      list: "accounts",
+      code: "QN_KV_SYNC_FAILED",
+    });
+  }
+}
+
 function publicLink(
   row: LinkRow,
   transaction?: Record<string, unknown>,
@@ -303,6 +396,9 @@ async function updateExistingLink(
   if (row.status === "suspended") {
     throw new Error("suspended account link must be revoked before relinking");
   }
+  if (row.status === "revoked" && row.keyBackend === "kms") {
+    throw new Error("revoked KMS account link cannot be relinked after key deletion");
+  }
   const changed =
     row.permissions.length !== permissions.length ||
     row.permissions.some((permission, index) => permission !== permissions[index]);
@@ -320,15 +416,20 @@ async function updateExistingLink(
 async function fundPendingDelegate(configured: ResolvedAccountServices, row: LinkRow): Promise<void> {
   if (row.status !== "pending") return;
   if (await configured.ledger.isAccountFunded(row.network, row.delegate)) return;
-  const fundAccount = configured.fundDelegateAccount ?? fundDelegateAccount;
   if (configured.fundDelegateAccount) {
-    await fundAccount(row.delegate, row.network);
+    await configured.fundDelegateAccount(row.delegate, row.network);
     return;
   }
-  await fundAccount(
+  // Workerd requires native fetch to retain the Worker-global receiver. Pass a
+  // wrapper rather than the ambient function so the key helper can invoke its
+  // injected transport without changing that receiver.
+  const faucetFetch = configured.faucetFetch ??
+    ((input: RequestInfo | URL, init?: RequestInit) =>
+      globalThis.fetch(input, init));
+  await fundDelegateAccount(
     row.delegate,
     row.network,
-    configured.faucetFetch ? { fetch: configured.faucetFetch } : {},
+    { fetch: faucetFetch },
   );
 }
 
@@ -337,9 +438,11 @@ export async function handleAccountLink(
   rawArgs: AccountLinkArgs,
 ): Promise<AccountLink> {
   const args = AccountLinkArgsSchema.parse(rawArgs);
+  assertLocalTradingTestnet(input, args.network);
   const configured = services(input);
   const accountStore = storeFor(input, configured);
   const permissions = validatePermissions(args.permissions);
+  assertExactOnboardingPermissions(input.env, permissions);
   const existing = await accountStore.getLink(args.owner, args.network);
 
   if (existing) {
@@ -351,39 +454,87 @@ export async function handleAccountLink(
       row.delegate,
       permissions,
     );
-    await fundPendingDelegate(configured, row);
+    if (!onboardingMarkersPresent(input.env)) {
+      await fundPendingDelegate(configured, row);
+    }
+    await syncQuickNodeLinkBestEffort(
+      input,
+      configured,
+      "link",
+      args.network,
+      row.owner,
+      row.delegate,
+    );
     return publicLink(row, asJsonObject(transaction));
   }
 
-  const createKey =
-    configured.createWrappedDelegateKey ?? createWrappedDelegateKey;
   const identity = {
     principal: input.principal,
     owner: args.owner,
     network: args.network as Network,
   };
-  const wrapped = await createKey(identity, kekFor(input));
+  const linkId = (configured.randomUUID ?? (() => crypto.randomUUID()))();
+  const kmsMode = readKmsMode(context(input).env ?? {});
+  const kmsClient = kmsMode === "sign" ? kmsClientFor(input, configured) : null;
+  const kmsKey = kmsMode === "sign"
+    ? await (configured.createKmsDelegateKey ?? createKmsDelegateKey)({
+        principal: input.principal,
+        owner: args.owner,
+        network: args.network,
+        linkId,
+        client: kmsClient!,
+      })
+    : null;
+  const wrapped = kmsMode === "sign"
+    ? null
+    : configured.createWrappedDelegateKey
+      ? await configured.createWrappedDelegateKey(identity, kekFor(input))
+      : kmsMode === "kek"
+        ? await createWrappedDelegateKeyWithCryptoKey(
+            identity,
+            await loadKmsKek(context(input).env ?? {}),
+          )
+        : await createWrappedDelegateKey(identity, kekFor(input));
 
   // Persist the wrapped key before any external call. If another request wins
   // the unique (principal, owner, network) race, reuse its durable delegate and
   // never fund this request's discarded key.
   let row: LinkRow;
   try {
-    row = await accountStore.insertLink({
-      id: (configured.randomUUID ?? (() => crypto.randomUUID()))(),
+    const common = {
+      id: linkId,
       owner: args.owner,
       network: args.network,
-      delegate: wrapped.address,
-      delegateSeedEnc: wrapped.ciphertext,
-      iv: wrapped.iv,
       permissions,
-      status: "pending",
+      status: "pending" as const,
       lastLedger: null,
       revokeTx: null,
       createdAt: (configured.now ?? (() => new Date()))().toISOString(),
-    } satisfies LinkInsert);
+    };
+    row = await accountStore.insertLink(kmsKey
+      ? {
+          ...common,
+          delegate: kmsKey.address,
+          keyBackend: "kms",
+          delegateSeedEnc: null,
+          iv: null,
+          kmsKeyId: kmsKey.keyId,
+          kmsAlias: kmsKey.keyAlias,
+        }
+      : {
+          ...common,
+          delegate: wrapped!.address,
+          delegateSeedEnc: wrapped!.ciphertext,
+          iv: wrapped!.iv,
+        } satisfies LinkInsert);
   } catch (error) {
     const raced = await accountStore.getLink(args.owner, args.network);
+    if (kmsKey && kmsClient) {
+      await (configured.scheduleKmsDelegateKeyDeletion ?? scheduleKmsDelegateKeyDeletion)(
+        kmsClient,
+        kmsKey.keyId,
+      );
+    }
     if (!raced) throw error;
     row = await updateExistingLink(accountStore, raced, permissions);
   }
@@ -397,7 +548,17 @@ export async function handleAccountLink(
     row.delegate,
     permissions,
   );
-  await fundPendingDelegate(configured, row);
+  if (!onboardingMarkersPresent(input.env)) {
+    await fundPendingDelegate(configured, row);
+  }
+  await syncQuickNodeLinkBestEffort(
+    input,
+    configured,
+    "link",
+    args.network,
+    row.owner,
+    row.delegate,
+  );
 
   return publicLink(row, asJsonObject(transaction));
 }
@@ -407,9 +568,11 @@ export async function handleAccountStatus(
   rawArgs: AccountLookupArgs,
 ): Promise<AccountLink> {
   const args = AccountLookupArgsSchema.parse(rawArgs);
+  assertLocalTradingTestnet(input, args.network);
   const configured = services(input);
   const accountStore = storeFor(input, configured);
   const row = requireLink(await accountStore.getLink(args.owner, args.network));
+  if (row.status === "revoked") return publicLink(row);
   const entry = await configured.ledger.readDelegate(
     args.network,
     args.owner,
@@ -421,6 +584,7 @@ export async function handleAccountStatus(
       owner: args.owner,
       delegate: row.delegate,
     });
+    assertExactOnboardingPermissions(input.env, permissions);
     const updated = requireLink(
       await accountStore.updateLink(row.id, {
         permissions,
@@ -432,6 +596,26 @@ export async function handleAccountStatus(
   }
 
   if (row.status === "pending") return publicLink(row);
+  // A validated missing Delegate makes every non-pending KMS link terminal,
+  // including links revoked outside this process. Retire the exact stored key
+  // before marking the row revoked so a failed deletion remains retryable.
+  if (row.keyBackend === "kms") {
+    await (configured.scheduleKmsDelegateKeyDeletion ?? scheduleKmsDelegateKeyDeletion)(
+      kmsClientFor(input, configured),
+      row.kmsKeyId,
+    );
+  }
+  // Keep both watcher paths enrolled while the locally suspended link may
+  // still exist on-ledger. Registry removal is safe only after this validated
+  // missing-entry proof; Harbor execution remains blocked throughout.
+  await syncQuickNodeLinkBestEffort(
+    input,
+    configured,
+    "revoke",
+    args.network,
+    row.owner,
+    row.delegate,
+  );
   const status: LinkRow["status"] = "revoked";
   return publicLink(
     requireLink(await accountStore.updateLink(row.id, { status, permissions: [], revokeTx: null })),
@@ -443,6 +627,7 @@ export async function handleAccountRevoke(
   rawArgs: AccountLookupArgs,
 ): Promise<AccountLink> {
   const args = AccountLookupArgsSchema.parse(rawArgs);
+  assertLocalTradingTestnet(input, args.network);
   const configured = services(input);
   const accountStore = storeFor(input, configured);
   const row = requireLink(await accountStore.getLink(args.owner, args.network));

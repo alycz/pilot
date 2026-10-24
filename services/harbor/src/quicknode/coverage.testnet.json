@@ -1,0 +1,28 @@
+{
+  "network": "testnet",
+  "source": "documented-baseline-pending-endpoint-probe",
+  "generated_at": "2026-10-21T00:00:00.000Z",
+  "methods": {
+    "account_info": "supported",
+    "account_lines": "supported",
+    "account_objects": "supported",
+    "account_tx": "supported",
+    "amm_info": "unsupported",
+    "book_changes": "unsupported",
+    "book_offers": "supported",
+    "feature": "unsupported",
+    "fee": "supported",
+    "get_aggregate_price": "unsupported",
+    "ledger": "supported",
+    "ledger_current": "unsupported",
+    "ledger_data": "unsupported",
+    "ledger_entry": "supported",
+    "path_find": "unsupported",
+    "ripple_path_find": "supported",
+    "server_info": "unsupported",
+    "simulate": "unsupported",
+    "submit": "supported",
+    "tx": "supported",
+    "vault_info": "unsupported"
+  }
+}

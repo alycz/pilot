@@ -1,0 +1,16 @@
+{
+  "data": [
+    {
+      "hash": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+      "TransactionType": "Payment",
+      "ledger_index": 123,
+      "metaData": {
+        "TransactionResult": "tesSUCCESS"
+      }
+    }
+  ],
+  "metadata": {
+    "network": "xrp-testnet"
+  }
+}

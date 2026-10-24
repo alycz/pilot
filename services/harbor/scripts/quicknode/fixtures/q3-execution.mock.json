@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "data": {
+    "status": "executed",
+    "hash": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "confirmation": {
+      "provider": "quicknode-mock",
+      "at": "2026-10-21T20:00:01.000Z",
+      "latency_ms": 1000
+    }
+  }
+}

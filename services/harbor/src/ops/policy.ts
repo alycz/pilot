@@ -1,6 +1,8 @@
 import { isValidClassicAddress } from "xrpl";
 import { z } from "zod";
 
+import catalogManifest from "../../catalog/manifest.json";
+
 import {
   DEFAULT_POLICY,
   NetworkSchema,
@@ -14,6 +16,15 @@ import {
   type PolicyRow,
   type PolicyUpdate,
 } from "../exec/store";
+import {
+  buildQuickNodeRegistrySnapshot,
+  createQuickNodeKvRegistryForRequest,
+  D1QuickNodeRegistrySource,
+  type QuickNodeKvRegistry,
+  type QuickNodeRegistryEnv,
+  type QuickNodeRegistrySource,
+  type RegistryNetwork,
+} from "../quicknode/kv-registry";
 
 const OwnerSchema = z
   .string()
@@ -21,6 +32,7 @@ const OwnerSchema = z
 const NonnegativeFiniteNumberSchema = z.number().finite().nonnegative();
 const DropsSchema = z
   .string()
+  .max(16)
   .regex(/^(0|[1-9]\d*)$/, "drops must be a nonnegative integer string");
 
 function addUniqueIssue(
@@ -123,10 +135,14 @@ export type PolicyStore = Pick<
 export interface PolicyServices {
   store?: PolicyStore;
   now?: () => Date;
+  quickNodeRegistry?: Pick<QuickNodeKvRegistry, "refreshPolicyCatalog">;
+  quickNodeSource?: QuickNodeRegistrySource;
 }
 
 type PolicyContext = OpContext & {
   db?: D1Database;
+  env?: QuickNodeRegistryEnv;
+  request?: Request;
   policyServices?: PolicyServices;
 };
 
@@ -156,6 +172,37 @@ function immutablePolicy(value: Policy): Policy {
 function requirePolicy(row: PolicyRow | null): PolicyRow {
   if (!row) throw new Error("policy upsert failed");
   return row;
+}
+
+async function refreshQuickNodePolicyBestEffort(
+  input: OpContext,
+  configured: PolicyServices,
+  network: RegistryNetwork,
+): Promise<void> {
+  const ctx = context(input);
+  const source =
+    configured.quickNodeSource ??
+    (ctx.db
+      ? new D1QuickNodeRegistrySource(ctx.db, catalogManifest)
+      : undefined);
+  if (!source) return;
+  try {
+    const registry =
+      configured.quickNodeRegistry ??
+      createQuickNodeKvRegistryForRequest({
+        env: ctx.env,
+        request: ctx.request,
+      });
+    const snapshot = await buildQuickNodeRegistrySnapshot(source, network);
+    await registry.refreshPolicyCatalog(network, snapshot);
+  } catch {
+    console.warn("kv_sync_failed", {
+      evt: "kv_sync_failed",
+      action: "replace",
+      list: "tx_types",
+      code: "QN_KV_SYNC_FAILED",
+    });
+  }
 }
 
 export async function handlePolicyGet(
@@ -210,6 +257,13 @@ export async function handlePolicySet(
     }
   }
 
+  if (args.network === "testnet" || args.network === "devnet") {
+    await refreshQuickNodePolicyBestEffort(
+      input,
+      configured,
+      args.network,
+    );
+  }
   return immutablePolicy(row.json);
 }
 
@@ -247,7 +301,7 @@ export const ops: OpDef[] = [
     returns: "Policy",
     caveats: [],
     example:
-      'await harbor.policy.set({ owner: "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", network: "testnet", policy: { max_per_tx_usd: 2000, daily_cap_usd: 5000, execute_under_usd: 250, max_slippage_bps: 100, allowed_tx_types: ["OfferCreate"], issuer_allowlist: ["RLUSD"], block_requireauth_issuers: true, networks: ["testnet", "devnet"], x402_max_per_call_drops: "10000", x402_daily_cap_drops: "1000000" } })',
+      'await harbor.policy.set({ owner: "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", network: "testnet", policy: { max_per_tx_usd: 2000, daily_cap_usd: 5000, execute_under_usd: 250, max_slippage_bps: 100, allowed_tx_types: ["OfferCreate"], issuer_allowlist: ["RLUSD"], block_requireauth_issuers: true, networks: ["testnet", "devnet"], x402_max_per_call_drops: "100000", x402_daily_cap_drops: "1000000" } })',
     handler: (ctx, args) =>
       handlePolicySet(ctx, PolicySetArgsSchema.parse(args)),
   },

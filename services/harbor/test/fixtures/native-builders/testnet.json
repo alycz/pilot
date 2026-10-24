@@ -1,0 +1,42 @@
+{
+  "network": "testnet",
+  "account": "rJVUeRqDFNs2xqA7ncVE6ZoAhPUoaJJSQm",
+  "destination": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+  "owner": "rP9jPyP5kyvFRb6ZiRghAGw5u8SGAmU4bd",
+  "ledger_index": 90000000,
+  "account_info": {
+    "account_data": {
+      "Account": "rJVUeRqDFNs2xqA7ncVE6ZoAhPUoaJJSQm",
+      "Balance": "100000000",
+      "OwnerCount": 1,
+      "Sequence": 22,
+      "Flags": 0
+    },
+    "ledger_index": 90000000,
+    "validated": true
+  },
+  "server_info": {
+    "info": {
+      "validated_ledger": {
+        "reserve_base_xrp": 10,
+        "reserve_inc_xrp": 2
+      }
+    }
+  },
+  "fee": {
+    "drops": {
+      "open_ledger_fee": "12"
+    },
+    "ledger_current_index": 90000001
+  },
+  "simulate": {
+    "engine_result": "tesSUCCESS",
+    "engine_result_message": "The simulated transaction would succeed.",
+    "applied": false
+  },
+  "escrow_id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "check_id": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+  "invoice_id": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+  "condition": "A0258020E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855810100",
+  "fulfillment": "A0028000"
+}

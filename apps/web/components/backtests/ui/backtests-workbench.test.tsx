@@ -25,7 +25,7 @@ describe("backtests workbench", () => {
     expect(markup).toContain("Actual coverage");
     expect(markup).toContain("Not yet verified");
     expect(markup).toContain("rounded-xl");
-    expect(markup).not.toContain("font-display");
+    expect(markup).toContain("font-display");
     expect(markup).not.toContain("+4.20%");
   });
 

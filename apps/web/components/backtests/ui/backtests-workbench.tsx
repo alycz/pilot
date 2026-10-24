@@ -15,7 +15,7 @@ export function BacktestsWorkbench({ model }: { model: BacktestsViewModel }) {
       <section aria-labelledby="backtests-title" className="relative overflow-hidden border-b border-border bg-surface/50">
         <div className="relative px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
           <p className="label-mono flex items-center gap-2 text-primary"><FlaskConical className="size-3.5" aria-hidden="true" />Research · deterministic simulation</p>
-          <h1 id="backtests-title" className="mt-3 max-w-4xl text-2xl font-medium tracking-tight sm:text-3xl">Backtest an investing rule before acting</h1>
+          <h1 id="backtests-title" className="mt-3 max-w-4xl text-2xl font-medium tracking-tight sm:text-3xl font-display">Backtest an investing rule before acting</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
             Review source coverage, freeze a bounded strategy and its costs, then compare post-cost equity with a hold benchmark. The calculation engine owns results; AI may explain a completed run but cannot change its numbers or grant execution authority.
           </p>

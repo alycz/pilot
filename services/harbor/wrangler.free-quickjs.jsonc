@@ -1,0 +1,44 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "replace-with-approved-worker-name",
+  "main": "src/server.ts",
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "replace.invalid",
+      "custom_domain": true
+    }
+  ],
+  "compatibility_date": "2026-10-06",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "replace-with-approved-d1-name",
+      "database_id": "00000000-0000-0000-0000-000000000000"
+    }
+  ],
+  "triggers": {
+    "crons": []
+  },
+  "observability": {
+    "enabled": false
+  },
+  "upload_source_maps": false,
+  "vars": {
+    "HARBOR_SOURCE_TAG": "2610240",
+    "HARBOR_PUBLIC_URL": "https://replace.invalid",
+    "EXEC_NETWORK": "testnet",
+    "MAINNET_EXECUTION": "false",
+    "EXECUTOR": "quickjs",
+    "HARBOR_MCP_EXECUTION_ENABLED": "false",
+    "AUTONOMOUS_STRATEGY_RUNNER": "false",
+    "QN_MODE": "off",
+    "MASTERCARD_MCP_ENABLED": "false",
+    "KMS_MODE": "off",
+    "AP4M_DEMO_ENABLED": "false",
+    "HARBOR_DEMO_QUOTA_ENABLED": "0"
+  }
+}

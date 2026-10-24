@@ -22,7 +22,7 @@ describe("strategy research workbench", () => {
       "Validated historical coverage is not supplied",
     ]) expect(markup).toContain(text);
     expect(markup).toContain("rounded-xl");
-    expect(markup).not.toContain("font-display");
+    expect(markup).toContain("font-display");
   });
 
   it("is keyboard-readable, responsive, reduced-motion safe, and has no execution affordance", () => {

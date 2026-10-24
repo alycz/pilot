@@ -9,6 +9,7 @@ export type {
   Ap4mEvidenceArtifact,
   Ap4mReceiptCardProps,
 } from "./ap4m-receipt-card";
+export { ActionPreparationCard, actionPreparationDetails } from "./action-preparation-card";
 export { IntentCard } from "./intent-card";
 export type { IntentCardProps } from "./intent-card";
 export { OwnerSignerChip } from "./owner-signer-chip";

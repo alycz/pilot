@@ -27,6 +27,18 @@ describe("AppShell navigation", () => {
     expect(markup.match(/>Strategy</g)).toHaveLength(2);
     expect(markup.match(/aria-current="page"/g)).toHaveLength(2);
   });
+
+  it("links to bounded research surfaces without changing the existing shell", () => {
+    const markup = renderToStaticMarkup(
+      <AppShell active="backtests" title="Backtests"><div>Content</div></AppShell>,
+    );
+
+    expect(markup.match(/href="\/research\/backtests"/g)).toHaveLength(2);
+    expect(markup.match(/>Backtests</g)).toHaveLength(3);
+    expect(markup.match(/href="\/strategy-research"/g)).toHaveLength(2);
+    expect(markup.match(/>Research lab</g)).toHaveLength(2);
+    expect(markup.match(/aria-current="page"/g)).toHaveLength(2);
+  });
 });
 
 describe("model settings persistence", () => {

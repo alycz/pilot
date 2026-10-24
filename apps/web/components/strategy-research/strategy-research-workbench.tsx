@@ -40,7 +40,7 @@ export function StrategyResearchWorkbench() {
               <FlaskConical className="size-3.5" aria-hidden="true" />
               Strategy research · simulation only
             </p>
-            <h1 id="research-title" className="mt-3 text-2xl font-medium tracking-tight sm:text-3xl">
+            <h1 id="research-title" className="mt-3 text-2xl font-medium tracking-tight sm:text-3xl font-display">
               Test assumptions before preparing an action
             </h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">

@@ -5,7 +5,7 @@ import { readPilotAwsConfig } from "./config";
 describe("readPilotAwsConfig", () => {
   it("uses safe mock defaults without credentials", () => {
     expect(readPilotAwsConfig({})).toEqual({
-      region: "us-east-1",
+      region: "us-east-2",
       bedrockMode: "mock",
       bedrockModels: [],
       bedrockDailyTurnCap: 50,
@@ -15,17 +15,21 @@ describe("readPilotAwsConfig", () => {
   it("parses explicit service modes, models, threshold and cap", () => {
     expect(
       readPilotAwsConfig({
-        AWS_REGION: "us-east-1",
+        AWS_REGION: "us-east-2",
         BEDROCK_MODE: "aws",
         BEDROCK_MODELS: "provider/model-a, provider/model-b,provider/model-a",
         BEDROCK_DAILY_TURN_CAP: "25",
       }),
     ).toMatchObject({
-      region: "us-east-1",
+      region: "us-east-2",
       bedrockMode: "aws",
       bedrockModels: ["provider/model-a", "provider/model-b"],
       bedrockDailyTurnCap: 25,
     });
+  });
+
+  it("retains the legacy us-east-1 Pilot region without widening the allowlist", () => {
+    expect(readPilotAwsConfig({ AWS_REGION: "us-east-1" }).region).toBe("us-east-1");
   });
 
   it.each([

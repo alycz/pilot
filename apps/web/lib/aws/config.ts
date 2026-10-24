@@ -1,4 +1,7 @@
-const AWS_REGION = "us-east-1" as const;
+export const PILOT_AWS_REGIONS = ["us-east-1", "us-east-2"] as const;
+export type PilotAwsRegion = (typeof PILOT_AWS_REGIONS)[number];
+
+const DEFAULT_AWS_REGION: PilotAwsRegion = "us-east-2";
 const MODEL_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/;
 
 const BEDROCK_MODES = ["off", "mock", "aws"] as const;
@@ -8,7 +11,7 @@ type Env = Readonly<Record<string, string | undefined>>;
 export type BedrockMode = (typeof BEDROCK_MODES)[number];
 
 export type PilotAwsConfig = {
-  region: typeof AWS_REGION;
+  region: PilotAwsRegion;
   bedrockMode: BedrockMode;
   bedrockModels: string[];
   bedrockDailyTurnCap: number;
@@ -54,10 +57,12 @@ function parseModelIds(value: string | undefined): string[] {
 export function readPilotAwsConfig(
   env: Env = process.env,
 ): PilotAwsConfig {
-  const region = env.AWS_REGION?.trim() || AWS_REGION;
-  if (region !== AWS_REGION) {
-    throw new Error(`AWS_REGION must be ${AWS_REGION}`);
-  }
+  const region = parseEnum(
+    "AWS_REGION",
+    env.AWS_REGION,
+    PILOT_AWS_REGIONS,
+    DEFAULT_AWS_REGION,
+  );
 
   return {
     region,

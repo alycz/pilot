@@ -8,9 +8,10 @@ const fakeModel = { specificationVersion: "v2" } as unknown as LanguageModel;
 
 function config(
   bedrockMode: PilotAwsConfig["bedrockMode"],
+  region: PilotAwsConfig["region"] = "us-east-2",
 ): PilotAwsConfig {
   return {
-    region: "us-east-1",
+    region,
     bedrockMode,
     bedrockModels: ["amazon.nova-lite-v1:0"],
     bedrockDailyTurnCap: 50,
@@ -112,7 +113,7 @@ describe("resolveChatModel", () => {
 
     expect(createAmazonBedrock).toHaveBeenCalledWith({
       apiKey: "bedrock-test-secret",
-      region: "us-east-1",
+      region: "us-east-2",
     });
     expect(modelProvider).toHaveBeenCalledWith("amazon.nova-lite-v1:0");
     expect(resolved.trust).toEqual({
@@ -120,6 +121,25 @@ describe("resolveChatModel", () => {
       id: "amazon.nova-lite-v1:0",
     });
     expect(JSON.stringify(resolved.trust)).not.toContain("secret");
+  });
+
+  it("passes an explicitly selected legacy region to the live provider unchanged", async () => {
+    const modelProvider = vi.fn(() => fakeModel);
+    const createAmazonBedrock = vi.fn(() => modelProvider);
+
+    await resolveChatModel(
+      { provider: "bedrock", model: "amazon.nova-lite-v1:0" },
+      {
+        config: config("aws", "us-east-1"),
+        env: { AWS_BEARER_TOKEN_BEDROCK: "bedrock-test-secret" },
+        createAmazonBedrock,
+      },
+    );
+
+    expect(createAmazonBedrock).toHaveBeenCalledWith({
+      apiKey: "bedrock-test-secret",
+      region: "us-east-1",
+    });
   });
 
   it("fails closed when Bedrock is off or its server token is absent", async () => {

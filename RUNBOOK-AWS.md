@@ -46,12 +46,15 @@ Austin completes these steps in the AWS UI:
 2. Enable the exact Haiku 5.5 and Sonnet 5.5 model IDs.
 3. Create the short-lived `pilot-bedrock` Bedrock API key.
 4. Place the key only in the approved external Pilot environment and Vercel server environment as `AWS_BEARER_TOKEN_BEDROCK`.
-5. Place the exact comma-separated model IDs in `BEDROCK_MODELS` and retain `AWS_REGION=us-east-1`.
+5. Place the exact comma-separated model IDs in `BEDROCK_MODELS` and set
+   `AWS_REGION=us-east-2` for the approved account. Pilot also retains explicit
+   legacy `us-east-1` support, but never accepts another Region or falls back
+   across Regions.
 
 The operator may confirm presence without printing values:
 
 ```bash
-test "${AWS_REGION:-}" = us-east-1
+case "${AWS_REGION:-}" in us-east-1|us-east-2) ;; *) exit 1 ;; esac
 test -n "${AWS_BEARER_TOKEN_BEDROCK:-}"
 test -n "${BEDROCK_MODELS:-}"
 ```
@@ -87,12 +90,15 @@ Harbor's `RUNBOOK-AWS.md` owns KEK creation, K1/K2/G1, the injection seed plan, 
 
 ```text
 BEDROCK_MODE=aws
-AWS_REGION=us-east-1
+AWS_REGION=us-east-2
 BEDROCK_MODELS=<exact event model IDs>
 BEDROCK_DAILY_TURN_CAP=50
 ```
 
-The Bedrock bearer token remains server-only. Logged-out and demo visitors remain on the configured free OpenRouter behavior; only eligible signed-in sessions may use Bedrock.
+The selected Region must contain every explicitly allowlisted Bedrock model;
+Pilot never retries in the other Region. The Bedrock bearer token remains
+server-only. Logged-out and demo visitors remain on the configured free
+OpenRouter behavior; only eligible signed-in sessions may use Bedrock.
 
 Rehearse:
 

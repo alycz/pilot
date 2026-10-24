@@ -206,8 +206,10 @@ AgentCore is independent from Pilot's Bedrock model provider and Harbor's
 Guardrails/KMS paths. Enabling one does not enable the others.
 
 - Pilot's `BEDROCK_MODE=aws` path requires an approved exact model allowlist,
-  positive daily turn cap, `us-east-1`, and a short-lived server-side
-  `AWS_BEARER_TOKEN_BEDROCK`. The current model adapter does not use the
+  positive daily turn cap, an explicitly allowlisted `us-east-1` or
+  `us-east-2` Region, and a short-lived server-side
+  `AWS_BEARER_TOKEN_BEDROCK`. The approved account uses `us-east-2`; Pilot does
+  not retry across Regions. The current model adapter does not use the
   AgentCore caller role or normal SDK credential chain. Its current default is
   the explicitly labelled `mock` mode, not live AWS.
 - Harbor's `GUARDRAILS_MODE=aws` path calls `bedrock:InvokeGuardrailChecks`.

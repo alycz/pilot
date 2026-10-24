@@ -435,9 +435,11 @@ export function createAp4mRuntimeFactory(
 }
 
 export function restOperationsEnabledForDeployment(
-	env: Readonly<{ HARBOR_DEPLOYMENT_PROFILE?: string }>,
+	env: object,
 ): boolean {
-	const profile = env.HARBOR_DEPLOYMENT_PROFILE;
+	const profile = "HARBOR_DEPLOYMENT_PROFILE" in env
+		? (env as Readonly<{ HARBOR_DEPLOYMENT_PROFILE?: unknown }>).HARBOR_DEPLOYMENT_PROFILE
+		: undefined;
 	if (profile === undefined) return true;
 	return profile === "paid-dynamic";
 }

@@ -251,7 +251,7 @@ export async function createKek(
   const fetch = options.fetch ?? defaultKmsFetch;
   const requestEnv = kmsRequestEnv(options.env);
   const envPath = resolve(
-    options.envPath ?? (process.env.HARBOR_PRIVATE_SECRETS_ROOT ? resolve(process.env.HARBOR_PRIVATE_SECRETS_ROOT, "harbor.dev.vars") : "/dev/null/pilot-disabled/harbor.dev.vars"),
+    options.envPath ?? resolve("/absolute/private/pilot/harbor-secrets/harbor.dev.vars"),
   );
   const random = options.randomBytes ?? ((size) => nodeRandomBytes(size));
 

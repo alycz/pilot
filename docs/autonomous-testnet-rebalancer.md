@@ -74,6 +74,12 @@ No chat model, model preference, memory, browser polling loop, or historical
 transaction approval can expand a mandate. A normal `needs_approval` result is
 shown as a hold and is not silently owner-signed.
 
+## Verification evidence
+
+The authoritative hosted evidence is the exact draft pull request head and its
 ## Verification requirements
 
-Run the focused strategy, contract, client, proof, recovery, UI, shell, typecheck, and fixture suites locally. These checks remain offline evidence only and do not prove wallet signing, Testnet submission, provider calls, funding, deployment, or scheduler setup.
+Run the focused strategy, contract, client, proof, recovery, UI, and shell
+suites from the destination. Then run its complete typecheck and fixture CI.
+Those checks remain offline evidence only and do not prove wallet signing,
+Testnet submission, provider calls, funding, deployment, or scheduler setup.

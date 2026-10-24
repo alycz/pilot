@@ -4,9 +4,11 @@ import { chromium } from "@playwright/test";
 
 const baseUrl = process.env.PILOT_URL ?? "http://127.0.0.1:3003";
 const owner = process.env.P_LIVE_OWNER_ADDRESS;
-const executablePath = process.env.CHROME_PATH;
+const executablePath =
+  process.env.CHROME_PATH ??
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
-const browser = await chromium.launch({ ...(executablePath ? { executablePath } : {}), headless: true });
+const browser = await chromium.launch({ executablePath, headless: true });
 try {
   const results = [];
   for (const width of [375, 1440]) {

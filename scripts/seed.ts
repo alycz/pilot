@@ -204,11 +204,11 @@ async function loadEnvFile(path: string): Promise<void> {
 }
 
 function pilotEnvPath(): string {
-  return process.env.PILOT_ENV_PATH ?? (process.env.PILOT_PRIVATE_SECRETS_ROOT ? resolve(process.env.PILOT_PRIVATE_SECRETS_ROOT, "pilot.env.local") : "");
+  return process.env.PILOT_ENV_PATH ?? resolve("/absolute/private/pilot/pilot-secrets/pilot.env.local");
 }
 
 function harborEnvPath(): string {
-  return process.env.HARBOR_ENV_PATH ?? (process.env.HARBOR_PRIVATE_SECRETS_ROOT ? resolve(process.env.HARBOR_PRIVATE_SECRETS_ROOT, "harbor.dev.vars") : "");
+  return process.env.HARBOR_ENV_PATH ?? resolve("/absolute/private/pilot/harbor-secrets/harbor.dev.vars");
 }
 
 async function atomicWrite(path: string, contents: string, mode: number): Promise<void> {

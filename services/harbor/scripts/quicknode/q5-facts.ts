@@ -73,14 +73,12 @@ async function record(
 }
 
 export async function runQ5Facts(args = process.argv.slice(2), io: FactsIo = {}): Promise<void> {
-	const statusInput = arg(args, '--status') ?? (process.env.HARBOR_PRIVATE_EVIDENCE_ROOT ? resolve(process.env.HARBOR_PRIVATE_EVIDENCE_ROOT, "quicknode.md") : undefined);
-	const statusPath = statusInput ? resolve(statusInput) : undefined;
+	const statusPath = resolve(arg(args, '--status') ?? 'status/H-qn.md');
 	try {
 		await writeQuickNodeFacts(args, io.writeFile ?? writeFile);
-		if (!statusPath) throw new Error('--status or HARBOR_PRIVATE_EVIDENCE_ROOT is required');
 		await record(true, args, statusPath, io);
 	} catch (error) {
-		if (statusPath) await record(false, args, statusPath, io);
+		await record(false, args, statusPath, io);
 		throw error;
 	}
 }

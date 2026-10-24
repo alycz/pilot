@@ -56,7 +56,7 @@ export class MemoryKeyStore implements LocalKmsStore {
 }
 
 export function defaultKeyStorePath(): string {
-	return (process.env.HARBOR_PRIVATE_STATE_ROOT ? join(process.env.HARBOR_PRIVATE_STATE_ROOT, 'aws-local', 'keys.json') : '/dev/null/pilot-disabled/aws-local-keys.json');
+	return join('/absolute/private/pilot/harbor-state', 'aws-local', 'keys.json');
 }
 
 export class JsonKeyStore implements LocalKmsStore {

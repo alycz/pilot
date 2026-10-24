@@ -307,6 +307,119 @@ describe("autonomous strategy runner restart and safety boundaries", () => {
     } finally { database.close(); }
   });
 
+	it("advances a terminal trigger after a crash between decision persistence and schedule advancement", async () => {
+		const database = new Database();
+		try {
+			const strategy = await activeStrategy(database);
+			const scheduler = new StrategySchedulerStore(d1(database));
+			const due = (await scheduler.listDue(dueAt))[0];
+			const crashed = await scheduler.claim(due, "crashed:terminal", dueAt, 1_000);
+			expect(crashed).not.toBeNull();
+			const triggerId = await stableStrategyId(
+				"trigger",
+				due.strategyId,
+				String(due.scheduleGeneration),
+				due.scheduledFor,
+			);
+			const decisionId = await stableStrategyId("decision", triggerId, strategy.mandate.digest);
+			expect(await scheduler.createTrigger(due, crashed!, triggerId, dueAt)).toBe("created");
+			const decision: StrategyDecision = {
+				decision_id: decisionId,
+				trigger_id: triggerId,
+				strategy_id: strategy.strategy_id,
+				mandate_digest: strategy.mandate.digest,
+				mandate_version: strategy.mandate.version,
+				action: "hold",
+				hold_codes: ["inside_band"],
+				explanation: "already completed hold",
+				created_at: dueAt.toISOString(),
+			};
+			expect(await scheduler.persistDecision(
+				principal,
+				crashed!,
+				strategy.mandate,
+				decision,
+				dueAt,
+			)).toBe(true);
+
+			const calls = { observe: 0, build: 0, execute: 0, reconcile: 0 };
+			const restartedAt = new Date(dueAt.getTime() + 2_000);
+			await run(
+				database,
+				adapter({ observation: observation(restartedAt, "50000000", "50"), calls }),
+				restartedAt,
+				"runner:terminal-recovery",
+			);
+
+			expect(calls).toMatchObject({ observe: 0, build: 0, execute: 0 });
+			expect(database.sqlite.prepare(
+				"SELECT generation FROM strategy_schedules WHERE strategy_id = ?",
+			).get(strategy.strategy_id)).toEqual({ generation: due.scheduleGeneration + 1 });
+		} finally { database.close(); }
+	});
+
+	it("does not enter submitting when the matching budget reservation is no longer reserved", async () => {
+		const database = new Database();
+		try {
+			const strategy = await activeStrategy(database);
+			const scheduler = new StrategySchedulerStore(d1(database));
+			const store = new StrategyStore(d1(database), principal);
+			const due = (await scheduler.listDue(dueAt))[0];
+			const lease = await scheduler.claim(due, "runner:reservation-fence", dueAt, 60_000);
+			expect(lease).not.toBeNull();
+			const decision: StrategyDecision = {
+				decision_id: "decision:reservation-fence",
+				trigger_id: "trigger:reservation-fence",
+				strategy_id: strategy.strategy_id,
+				mandate_digest: strategy.mandate.digest,
+				mandate_version: strategy.mandate.version,
+				action: "buy_xrp",
+				hold_codes: [],
+				proposed_value: "10",
+				explanation: "bounded buy",
+				created_at: dueAt.toISOString(),
+			};
+			expect(await scheduler.createTrigger(
+				due,
+				lease!,
+				decision.trigger_id,
+				dueAt,
+			)).toBe("created");
+			expect(await scheduler.persistDecision(
+				principal,
+				lease!,
+				strategy.mandate,
+				decision,
+				dueAt,
+			)).toBe(true);
+			await store.beginExecution(
+				decision,
+				"execution:reservation-fence",
+				"strategy:reservation-fence",
+				dueAt,
+			);
+			expect(await store.reserveDecision(
+				strategy,
+				decision,
+				"execution:reservation-fence",
+				dueAt,
+			)).toBe(true);
+			database.sqlite.prepare(`UPDATE strategy_budget_reservations
+				SET state = 'released' WHERE execution_id = ?`)
+				.run("execution:reservation-fence");
+
+			await expect(store.markSubmittingFenced(
+				"execution:reservation-fence",
+				strategy,
+				lease!,
+				dueAt,
+			)).resolves.toBe(false);
+			expect(database.sqlite.prepare(`SELECT submission_state, unresolved
+				FROM strategy_executions WHERE id = ?`).get("execution:reservation-fence"))
+				.toEqual({ submission_state: "prepared", unresolved: 1 });
+		} finally { database.close(); }
+	});
+
   it("reconciles unresolved work while paused without building or submitting new work", async () => {
     const database = new Database();
     try {

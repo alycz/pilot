@@ -22,7 +22,7 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const LOCAL_TRADING_CONFIG = "wrangler.local-trading.jsonc";
 export const LOCAL_TRADING_STATE_DIRECTORY = ".wrangler/harbor-local-trading";
 export const LOCAL_TRADING_SECRET_FILE =
-	(process.env.HARBOR_PRIVATE_SECRETS_ROOT ? resolve(process.env.HARBOR_PRIVATE_SECRETS_ROOT, "harbor-local-trading.env.local") : "/dev/null/pilot-disabled/harbor-local-trading.env.local");
+	"/absolute/private/pilot/harbor-secrets/harbor-local-trading.env.local";
 export const LOCAL_TRADING_SIGNING_PROFILE =
 	"reviewed-testnet-local-trading-v1";
 

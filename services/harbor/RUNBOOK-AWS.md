@@ -4,7 +4,7 @@ This runbook is an operator checklist. It does not authorize Codex to create AWS
 
 ## Evidence lanes
 
-Keep these labels exact in `${HARBOR_PRIVATE_EVIDENCE_ROOT:?set HARBOR_PRIVATE_EVIDENCE_ROOT}/aws.md`:
+Keep these labels exact in `status/H-aws.md`:
 
 - **STAND-IN** — loopback `tools/aws-local`, deterministic fixtures, synthetic ledger adapters. This is not AWS or Testnet acceptance.
 - **AWS LIVE** — a real AWS request made only after Austin supplies the event environment and explicitly opens the live lane.
@@ -43,9 +43,9 @@ export KMS_MODE=sign
 Run every Harbor probe against the stand-in and append only its fixed aggregate evidence:
 
 ```bash
-node --experimental-transform-types scripts/aws/k1-kms-sign.ts --mode standin --store-file /tmp/harbor-aws6-kms.json --status-file ${HARBOR_PRIVATE_EVIDENCE_ROOT:?set HARBOR_PRIVATE_EVIDENCE_ROOT}/aws.md
-node --experimental-transform-types scripts/aws/k2-latency.ts --mode standin --status-file ${HARBOR_PRIVATE_EVIDENCE_ROOT:?set HARBOR_PRIVATE_EVIDENCE_ROOT}/aws.md
-node --experimental-transform-types scripts/aws/g1-guardrails.ts --status ${HARBOR_PRIVATE_EVIDENCE_ROOT:?set HARBOR_PRIVATE_EVIDENCE_ROOT}/aws.md
+node --experimental-transform-types scripts/aws/k1-kms-sign.ts --mode standin --store-file /tmp/harbor-aws6-kms.json --status-file status/H-aws.md
+node --experimental-transform-types scripts/aws/k2-latency.ts --mode standin --status-file status/H-aws.md
+node --experimental-transform-types scripts/aws/g1-guardrails.ts --status status/H-aws.md
 ```
 
 Expected evidence:
@@ -88,7 +88,7 @@ This is an **AWS LIVE** write and runs only after Austin opens that lane. The sc
 export EXEC_NETWORK=testnet
 export AWS_REGION=us-east-1
 unset AWS_ENDPOINT_OVERRIDE
-node --experimental-transform-types scripts/aws/create-kek.ts --env-file ${HARBOR_PRIVATE_SECRETS_ROOT:?set HARBOR_PRIVATE_SECRETS_ROOT}/harbor.dev.vars
+node --experimental-transform-types scripts/aws/create-kek.ts --env-file /absolute/private/pilot/harbor-secrets/harbor.dev.vars
 ```
 
 Verify only that the external secret-management step succeeded; never display the file or ciphertext. Existing rows wrapped under another KEK must be relinked through an approved migration plan. Do not assume a new KEK can decrypt them.
@@ -156,7 +156,7 @@ Run the 60-second rehearsal and preserve the evidence boundary:
 Test cleanup against an explicit stand-in state file first:
 
 ```bash
-node --experimental-transform-types scripts/aws/cleanup.ts --mode standin --store-file /tmp/harbor-aws6-kms.json --bedrock-key-name pilot-bedrock --status-file ${HARBOR_PRIVATE_EVIDENCE_ROOT:?set HARBOR_PRIVATE_EVIDENCE_ROOT}/aws.md
+node --experimental-transform-types scripts/aws/cleanup.ts --mode standin --store-file /tmp/harbor-aws6-kms.json --bedrock-key-name pilot-bedrock --status-file status/H-aws.md
 ```
 
 Live cleanup is an **AWS LIVE** write. It requires Austin's explicit alias/key manifest and approval. The guarded entry point is:

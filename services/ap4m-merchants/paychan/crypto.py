@@ -120,3 +120,4 @@ def verify_claim_signature(proof: ClaimProof) -> bool:
     except (ValueError, TypeError, RuntimeError) as exc:
         raise LocalVerifierUnavailable("local secp256k1 verifier unavailable") from exc
     return True
+

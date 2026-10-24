@@ -2715,7 +2715,7 @@ describe("tx execution reservation regressions", () => {
         principal: PRINCIPAL,
         localDevRequest: true,
         db: asD1(db),
-        xrplRpc: xrplRpc(),
+        xrplRpc: xrplRpc({ accountOwner: fixture.owner }),
         env: REVIEWED_ONBOARDING_ENV,
         executionServices: { submitSigned, status: onboardingStatus },
       };

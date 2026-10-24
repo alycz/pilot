@@ -6,6 +6,15 @@ import type { TrustSet } from "xrpl";
 
 import { XrplRpcError } from "../src/adapters/xrpl-rpc";
 
+vi.mock("xrpl", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("xrpl")>();
+  return {
+    ...actual,
+    deriveAddress: () => "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    verifySignature: () => true,
+  };
+});
+
 vi.mock("../src/exec/submit", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/exec/submit")>();
   const owner = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
@@ -32,6 +41,7 @@ vi.mock("../src/exec/submit", async (importOriginal) => {
         TransactionType: "DelegateSet",
         Account: owner,
         Authorize: delegate,
+        SigningPubKey: "ED" + "1".repeat(64),
         Sequence: 7,
         LastLedgerSequence: 120,
         Permissions: blob === "BB"
@@ -344,6 +354,13 @@ function context(
       request: vi.fn(async (_network: string, command: string) => {
         if (command === "ledger") {
           return { validated: true, ledger_index: 100 };
+        }
+        if (command === "account_info") {
+          return {
+            validated: true,
+            ledger_index: 100,
+            account_data: { Account: OWNER, Flags: 0 },
+          };
         }
         throw new Error(`unexpected XRPL command ${command}`);
       }),
@@ -857,6 +874,13 @@ describe("isolated onboarding execution and wallet lifecycle bindings", () => {
             return {
               validated: true,
               ledger_index: terminal && terminalKind === "absent" ? 121 : 100,
+            };
+          }
+          if (command === "account_info") {
+            return {
+              validated: true,
+              ledger_index: 100,
+              account_data: { Account: OWNER, Flags: 0 },
             };
           }
           if (command === "tx" && terminal && terminalKind === "absent") {

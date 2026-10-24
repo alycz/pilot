@@ -114,8 +114,7 @@ export async function runQ2Submit(
 ): Promise<void> {
   const args = parseProbeArgs(argv);
   const mode = probeMode(args.get("--mode") ?? process.env.QN_MODE);
-  const statusInput = args.get("--status") ?? (process.env.HARBOR_PRIVATE_EVIDENCE_ROOT ? resolve(process.env.HARBOR_PRIVATE_EVIDENCE_ROOT, "quicknode.md") : undefined);
-  const status = statusInput ? resolve(statusInput) : undefined;
+  const status = resolve(args.get("--status") ?? "status/H-qn.md");
   const read = dependencies.readFile ?? readFile;
 
   try {
@@ -156,7 +155,6 @@ export async function runQ2Submit(
     if (mode === "live" && proof.response.trust.rpc.methods_quicknode < 1) {
       throw new Error("Live q2 proof did not record a QuickNode RPC call");
     }
-    if (!status) throw new Error("--status or HARBOR_PRIVATE_EVIDENCE_ROOT is required");
     await recordProbeResult(
       "q2-submit",
       mode,
@@ -168,7 +166,7 @@ export async function runQ2Submit(
       dependencies,
     );
   } catch (error) {
-    if (status) await recordProbeResult(
+    await recordProbeResult(
       "q2-submit",
       mode,
       false,

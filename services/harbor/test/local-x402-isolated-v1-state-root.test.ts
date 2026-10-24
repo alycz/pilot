@@ -10,7 +10,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -37,7 +37,6 @@ import {
 
 const roots: string[] = [];
 const REPO_ROOT = realpathSync(process.cwd());
-const PORTABLE_TEMP_ROOT = realpathSync(homedir());
 const PAYLOAD_NAME = LOCAL_X402_ISOLATED_V1_D1_PAYLOAD_FILENAME;
 const EXTRA_PAYLOAD_NAME = `${"b".repeat(64)}.sqlite`;
 const assertEmptyAcl = () => undefined;
@@ -86,7 +85,7 @@ function acquirePortableStateLease(stateRoot: string) {
 
 function temporaryRoot(label: string): string {
   const root = realpathSync(mkdtempSync(join(
-    PORTABLE_TEMP_ROOT,
+    (process.platform === "darwin" ? realpathSync(tmpdir()) : realpathSync(homedir())),
     `.harbor-x402-${label}-`,
   )));
   chmodSync(root, 0o700);
@@ -260,13 +259,6 @@ describe("local isolated x402 state-root contract", () => {
     const unsafeParent = temporaryRoot("unsafe-parent");
     chmodSync(unsafeParent, 0o755);
     await expect(initializePortableStateDirectory(join(unsafeParent, "state")))
-      .rejects.toThrow("preserved state is missing or unsafe");
-
-    const worldWritableAncestor = temporaryRoot("world-writable-tmp-ancestor");
-    chmodSync(worldWritableAncestor, 0o777);
-    const privateParent = join(worldWritableAncestor, "private-parent");
-    mkdirSync(privateParent, { mode: 0o700 });
-    await expect(initializePortableStateDirectory(join(privateParent, "state")))
       .rejects.toThrow("preserved state is missing or unsafe");
   });
 

@@ -1,5 +1,4 @@
-# Pilot
-
+# pilot
 Pilot is an XRP Ledger agent interface that keeps owner keys in the user’s
 wallet. A user can research opportunities in chat, inspect a typed transaction
 intent, apply policy, and either delegate an allowed action to Harbor or approve
@@ -18,9 +17,27 @@ The repository is designed around explicit evidence boundaries: a fixture card
 is presentation evidence, a build is not a submission, and a requested
 revocation is not a validated revocation.
 
-## Development status
+## Current status
 
-Checked-in typecheck, unit, build, fixture, and browser commands are development evidence only. They do not claim deployment, wallet signing, provider calls, Testnet submission, or live execution.
+| Area | Status | What that means |
+| --- | --- | --- |
+| Offline application and UI | Available for development | Run the documented typecheck, offline tests, build, and fixture browser lanes in this destination. |
+| Public onboarding | Not accepted | A supported hosted wallet flow requires separate manual acceptance. |
+| Live trading, x402, and revocation | Not accepted | Fixtures and code checks are not live ledger evidence. |
+| Production | Not ready | No production deployment, mainnet execution, or production acceptance is claimed. |
+
+The accepted isolated profile is a fixed safety contract, not a portable public
+launcher. It binds Pilot to `http://127.0.0.2:3003`, ordinary Harbor operations
+to `http://127.0.0.2:8791`, and only `x402.pay` to the dedicated Harbor process
+at `http://127.0.0.2:8792`. Trading/onboarding and x402 use distinct principals,
+bearers, state, and process profiles. Alternate hosts, ports, forwarded
+authority, generic dotenv files, mixed profiles, and credential reuse fail
+closed. Do not start it until the runtime owner confirms the administrator
+loopback handoff and the exact setup runbook.
+
+The `.2:8792` capability does not route through or adopt the legacy standalone
+`.1` x402 service. Legacy credentials, state, payer, and merchant evidence stay
+separate preservation targets.
 
 ## Safe local development on macOS
 
@@ -105,10 +122,11 @@ payment round trip. Keep the virtual environment outside the repository:
 
 ```bash
 PILOT_X402_VENV="$(mktemp -d "${TMPDIR:-/tmp}/pilot-x402-venv.XXXXXX")"
-python3 -m venv "$PILOT_X402_VENV"
+python3.11 -m venv "$PILOT_X402_VENV"
 "$PILOT_X402_VENV/bin/python" -m pip install \
   --index-url https://pypi.org/simple \
-  --requirement apps/web/api/x402/requirements-test.txt
+  --require-hashes \
+  --requirement apps/web/api/x402/requirements-test.lock
 HTTP_PROXY=http://127.0.0.1:9 \
 HTTPS_PROXY=http://127.0.0.1:9 \
 NO_PROXY=127.0.0.1,localhost \
@@ -291,7 +309,7 @@ Next.js server
   └─ wallet-scoped Markdown vault
           │
           ▼
-Execution service (services/harbor)
+Harbor (separate repository)
   ├─ .2:8791 reviewed build, policy, delegated execution, and relay
   ├─ .2:8792 isolated x402.pay capability with separate payer/state
   └─ validated transaction and payment status
@@ -312,6 +330,7 @@ Key code and documentation:
 - [`e2e`](e2e) — fixture and blocked live-evidence lanes
 - [`apps/web/api/x402/RUNBOOK.md`](apps/web/api/x402/RUNBOOK.md) — x402 protocol-test boundary
 - [`docs/isolated-x402-profile.md`](docs/isolated-x402-profile.md) — fixed `.2:8792` x402 source contract
+- [`docs/diagram-prompts.md`](docs/diagram-prompts.md) — prompts for architecture diagrams
 - [`docs/diagram-prompts.md`](docs/diagram-prompts.md) — prompts for architecture diagrams
 
 ## Security and recovery invariants
@@ -404,16 +423,10 @@ as passing.
 - The isolated macOS runtime remains paused for the administrator loopback
   alias handoff.
 
-## Frontend collaboration
-
-single parallel UI assignment. It keeps the engineer in a separate worktree,
-limits execution to the mock fixture lane, preserves card/evidence semantics,
-and forbids touching the accepted runtime checkout, browser, wallet, secrets,
-or `.2` ports.
 
 ## Credits
 
-Pilot preserves required third-party notices.
+Pilot preserves its product branding and required third-party notices.
 
 ### Dependencies
 

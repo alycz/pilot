@@ -3,6 +3,8 @@ import { AwsClient } from "aws4fetch";
 import type { Network } from "../contracts";
 
 export const AWS_DEFAULT_REGION = "us-east-1";
+const AWS_TIMEOUT_MS = 10_000;
+const AWS_MAX_RESPONSE_BYTES = 1_048_576;
 
 export type AwsFetchEnv = {
   AWS_REGION?: string;
@@ -36,6 +38,8 @@ export type AwsFetchOptions = {
   /** Worker bindings are passed explicitly; this module never discovers credentials. */
   env: AwsFetchEnv;
   clientFactory?: AwsSigningClientFactory;
+  timeoutMs?: number;
+  maxResponseBytes?: number;
 };
 
 export type AwsErrorCode =
@@ -193,11 +197,58 @@ function requestFor(
   };
 }
 
-async function parseJson(response: Response): Promise<unknown> {
-  try {
-    return await response.json();
-  } catch {
+async function parseJson(
+  response: Response,
+  maxResponseBytes: number,
+  timeout: Promise<never>,
+  readerRef: { current?: ReadableStreamDefaultReader<Uint8Array>; timedOut: boolean },
+): Promise<unknown> {
+  const declaredLength = response.headers.get("content-length");
+  if (
+    declaredLength !== null &&
+    (!/^\d+$/.test(declaredLength) || Number(declaredLength) > maxResponseBytes)
+  ) {
+    void response.body?.cancel().catch(() => undefined);
     throw new AwsError("AWS_MALFORMED_RESPONSE");
+  }
+  if (!response.body) throw new AwsError("AWS_MALFORMED_RESPONSE");
+  const reader = response.body.getReader();
+  readerRef.current = reader;
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await Promise.race([reader.read(), timeout]);
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxResponseBytes) {
+        void reader.cancel().catch(() => undefined);
+        throw new AwsError("AWS_MALFORMED_RESPONSE");
+      }
+      chunks.push(value);
+    }
+    if (readerRef.timedOut) throw new AwsError("AWS_TRANSPORT_ERROR", true);
+    const body = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      body.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return JSON.parse(
+      new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(body),
+    ) as unknown;
+  } catch (error) {
+    if (error instanceof AwsError) throw error;
+    if (readerRef.timedOut) throw new AwsError("AWS_TRANSPORT_ERROR", true);
+    throw new AwsError("AWS_MALFORMED_RESPONSE");
+  } finally {
+    readerRef.current = undefined;
+    try {
+      reader.releaseLock();
+    } catch {
+      // An abort may still be settling a pending read. Cancellation owns the
+      // remaining cleanup and must not replace the normalized timeout error.
+    }
   }
 }
 
@@ -216,39 +267,72 @@ export async function awsFetch(
 ): Promise<unknown> {
   if (!isSafeToken(target)) throw new AwsError("AWS_INVALID_REQUEST");
 
+  const timeoutMs = options.timeoutMs ?? AWS_TIMEOUT_MS;
+  const maxResponseBytes = options.maxResponseBytes ?? AWS_MAX_RESPONSE_BYTES;
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new AwsError("AWS_INVALID_REQUEST");
+  }
+  if (!Number.isSafeInteger(maxResponseBytes) || maxResponseBytes <= 0) {
+    throw new AwsError("AWS_INVALID_REQUEST");
+  }
+
   const endpoint = endpointFor(service, options.env);
   const request = requestFor(service, target, endpoint);
   const client = (options.clientFactory ?? defaultClientFactory)(
     clientOptions(service, options.env),
   );
 
+  const controller = new AbortController();
+  const readerRef: {
+    current?: ReadableStreamDefaultReader<Uint8Array>;
+    timedOut: boolean;
+  } = { timedOut: false };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      readerRef.timedOut = true;
+      controller.abort();
+      void readerRef.current?.cancel().catch(() => undefined);
+      reject(new AwsError("AWS_TRANSPORT_ERROR", true));
+    }, timeoutMs);
+  });
   let response: Response;
   try {
-    response = await client.fetch(request.url, {
-      method: "POST",
-      headers: request.headers,
-      body: JSON.stringify(body),
-    });
-  } catch {
+    response = await Promise.race([
+      client.fetch(request.url, {
+        method: "POST",
+        headers: request.headers,
+        body: JSON.stringify(body),
+        redirect: "error",
+        signal: controller.signal,
+      }).catch(() => {
+        throw new AwsError("AWS_TRANSPORT_ERROR", true);
+      }),
+      timeout,
+    ]);
+
+    const payload = await parseJson(response, maxResponseBytes, timeout, readerRef);
+    if (!response.ok) {
+      const record =
+        typeof payload === "object" && payload !== null
+          ? (payload as Record<string, unknown>)
+          : undefined;
+      const code =
+        serviceErrorCode(record?.__type) ??
+        serviceErrorCode(record?.code) ??
+        serviceErrorCode(record?.Code) ??
+        (`AWS_HTTP_${response.status}` as const);
+      throw new AwsError(
+        code,
+        response.status === 408 || response.status === 429 || response.status >= 500,
+      );
+    }
+
+    return payload;
+  } catch (error) {
+    if (error instanceof AwsError) throw error;
     throw new AwsError("AWS_TRANSPORT_ERROR", true);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
   }
-
-  const payload = await parseJson(response);
-  if (!response.ok) {
-    const record =
-      typeof payload === "object" && payload !== null
-        ? (payload as Record<string, unknown>)
-        : undefined;
-    const code =
-      serviceErrorCode(record?.__type) ??
-      serviceErrorCode(record?.code) ??
-      serviceErrorCode(record?.Code) ??
-      (`AWS_HTTP_${response.status}` as const);
-    throw new AwsError(
-      code,
-      response.status === 408 || response.status === 429 || response.status >= 500,
-    );
-  }
-
-  return payload;
 }

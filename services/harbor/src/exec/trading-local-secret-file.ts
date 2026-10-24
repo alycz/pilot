@@ -20,7 +20,7 @@ import {
 } from '../../scripts/macos-acl.mjs';
 
 export const LOCAL_TRADING_SECRET_FILE =
-	(process.env.HARBOR_PRIVATE_SECRETS_ROOT ? `${process.env.HARBOR_PRIVATE_SECRETS_ROOT}/harbor-local-trading.env.local` : "/dev/null/pilot-disabled/harbor-local-trading.env.local");
+	'/absolute/private/pilot/harbor-secrets/harbor-local-trading.env.local';
 
 const PRINCIPAL = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 

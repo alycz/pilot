@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Start a virtual Ledger Nano X with the XRP app. Test networks only.
-#   ELF=path/to/app.elf LEDGER_SIM_SEED_FILE="${LEDGER_SIM_SEED_FILE:?set LEDGER_SIM_SEED_FILE}" ./run-speculos.sh
-# An explicit owner-controlled seed file is required; no implicit shared seed is used.
+#   ELF=path/to/app.elf SEED_FILE=/absolute/private/path/ledger-sim.seed ./run-speculos.sh
+# Without SEED_FILE, Speculos uses its public default seed (fine for CI, not for a shared demo).
 set -euo pipefail
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 ELF="${ELF:-$SCRIPT_DIR/fixtures/xrp-2.8.2-nanox-api27.elf}"
 PORT="${PORT:-5000}"
 APDU_PORT="${APDU_PORT:-9999}"
-: "${LEDGER_SIM_SEED_FILE:?set LEDGER_SIM_SEED_FILE}"
-ARGS=(--model nanox --display headless --api-port "$PORT" --apdu-port "$APDU_PORT" --seed "$(cat "$LEDGER_SIM_SEED_FILE")")
+ARGS=(--model nanox --display headless --api-port "$PORT" --apdu-port "$APDU_PORT")
+if [[ -n "${SEED_FILE:-}" ]]; then ARGS+=(--seed "$(cat "$SEED_FILE")"); fi
 if command -v speculos >/dev/null 2>&1; then
   exec speculos "${ARGS[@]}" "$ELF"
 else

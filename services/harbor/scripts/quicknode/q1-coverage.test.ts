@@ -46,7 +46,7 @@ describe("q1 coverage probe", () => {
     });
     const lines: string[] = [];
     await runQ1Coverage(
-      ["--mode", "mock", "--fixture", "/tmp/coverage.mock.json", "--status", "/tmp/status.md"],
+      ["--mode", "mock", "--fixture", "/tmp/coverage.mock.json"],
       {
         coverageRunner: async () => { throw new Error("must not run"); },
         readFile: (async () => output) as never,

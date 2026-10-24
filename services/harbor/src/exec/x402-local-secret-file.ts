@@ -18,7 +18,7 @@ import { randomBytes } from 'node:crypto';
 import { isValidClassicAddress } from 'xrpl';
 
 export const LOCAL_X402_SECRET_FILE =
-	(process.env.HARBOR_PRIVATE_SECRETS_ROOT ? `${process.env.HARBOR_PRIVATE_SECRETS_ROOT}/harbor-local-x402.env.local` : "/dev/null/pilot-disabled/harbor-local-x402.env.local");
+	'/absolute/private/pilot/harbor-secrets/harbor-local-x402.env.local';
 export const LOCAL_X402_SECRET_MAX_BYTES = 16_384;
 
 const PRINCIPAL = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;

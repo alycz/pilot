@@ -7,20 +7,18 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
-  PILOT_PRIVATE_SECRETS_ROOT_ENV,
-  PILOT_PRIVATE_STATE_ROOT_ENV,
+  ISOLATED_PILOT_CREDENTIAL_FILE,
   parseIsolatedCredentialFile,
-  requirePrivateRoot,
 } from "./dev-pilot-isolated-v1.mjs";
 
 export const ISOLATED_X402_PILOT_PROFILE = "local-wallet-isolated-v1";
 export const ISOLATED_X402_PILOT_BUILD_MARKER = "pilot-local-wallet-isolated-v1";
-export const ISOLATED_X402_PILOT_CREDENTIAL_FILE_NAME =
-  "pilot-isolated-v1.env.local";
-export const ISOLATED_X402_PILOT_CAPABILITY_FILE_NAME =
-  "pilot-isolated-x402-capability-v1.env.local";
-export const ISOLATED_X402_PILOT_STATE_DIRECTORY_NAME =
-  "p-live-isolated-v1";
+export const ISOLATED_X402_PILOT_CREDENTIAL_FILE =
+  ISOLATED_PILOT_CREDENTIAL_FILE;
+export const ISOLATED_X402_PILOT_CAPABILITY_FILE =
+  "/absolute/private/pilot/pilot-secrets/pilot-isolated-x402-capability-v1.env.local";
+export const ISOLATED_X402_PILOT_STATE_DIRECTORY =
+  "/absolute/private/pilot/pilot-state/p-live-isolated-v1";
 export const ISOLATED_X402_TRADING_HARBOR_ORIGIN = "http://127.0.0.2:8791";
 export const ISOLATED_X402_HARBOR_ORIGIN = "http://127.0.0.2:8792";
 
@@ -86,7 +84,7 @@ export function combineIsolatedX402Credentials(baseSource, capabilitySource) {
   return { ...base, ...capability };
 }
 
-export function createIsolatedX402ChildEnvironment(environment, credentials, stateDirectory) {
+export function createIsolatedX402ChildEnvironment(environment, credentials) {
   const child = {};
   for (const name of PASSTHROUGH_ENVIRONMENT) {
     if (environment[name] !== undefined) child[name] = environment[name];
@@ -104,7 +102,7 @@ export function createIsolatedX402ChildEnvironment(environment, credentials, sta
     P_LIVE_HARBOR_FOK_DEPLOYED: "1",
     P_LIVE_HARBOR_OWNER_APPROVAL_DEPLOYED: "1",
     P_LIVE_HARBOR_EXECUTION_V2: "1",
-    P_LIVE_RLUSD_ACQUISITION_STATE_DIR: stateDirectory,
+    P_LIVE_RLUSD_ACQUISITION_STATE_DIR: ISOLATED_X402_PILOT_STATE_DIRECTORY,
     HARBOR_API_KEY: credentials.HARBOR_API_KEY,
     HARBOR_X402_API_KEY: credentials.HARBOR_X402_API_KEY,
     SESSION_SECRET: credentials.SESSION_SECRET,
@@ -140,16 +138,11 @@ export async function buildIsolatedX402LaunchPlan({
 } = {}) {
   if (argv.length !== 0) throw new Error("The isolated x402 Pilot launcher accepts no arguments");
   for (const path of GENERIC_DOTENV_PATHS) await assertMissing(path);
-  const secretsRoot = requirePrivateRoot(environment, PILOT_PRIVATE_SECRETS_ROOT_ENV);
-  const stateRoot = requirePrivateRoot(environment, PILOT_PRIVATE_STATE_ROOT_ENV);
-  const credentialFile = resolve(secretsRoot, ISOLATED_X402_PILOT_CREDENTIAL_FILE_NAME);
-  const capabilityFile = resolve(secretsRoot, ISOLATED_X402_PILOT_CAPABILITY_FILE_NAME);
-  const stateDirectory = resolve(stateRoot, ISOLATED_X402_PILOT_STATE_DIRECTORY_NAME);
   const credentials = combineIsolatedX402Credentials(
-    await readCredentialFile(credentialFile),
-    await readCredentialFile(capabilityFile),
+    await readCredentialFile(ISOLATED_X402_PILOT_CREDENTIAL_FILE),
+    await readCredentialFile(ISOLATED_X402_PILOT_CAPABILITY_FILE),
   );
-  const stateInfo = await lstatFile(stateDirectory);
+  const stateInfo = await lstatFile(ISOLATED_X402_PILOT_STATE_DIRECTORY);
   assertPrivateOwned(stateInfo, "The isolated Pilot state directory", "isDirectory");
   return {
     command: "pnpm",
@@ -158,7 +151,7 @@ export async function buildIsolatedX402LaunchPlan({
       "--hostname", "127.0.0.2", "--port", "3003",
     ],
     cwd: REPOSITORY_ROOT,
-    env: createIsolatedX402ChildEnvironment(environment, credentials, stateDirectory),
+    env: createIsolatedX402ChildEnvironment(environment, credentials),
   };
 }
 

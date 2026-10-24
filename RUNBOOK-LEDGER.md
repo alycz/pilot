@@ -222,7 +222,7 @@ node scripts/ledger/preflight.mjs \
   --account-index 0 \
   --address REPLACE_WITH_PUBLIC_ADDRESS \
   --delegate REPLACE_WITH_EXACT_EVENT_BUILD_PUBLIC_DELEGATE \
-  --evidence ${LEDGER_PUBLIC_EVIDENCE_PATH:?set LEDGER_PUBLIC_EVIDENCE_PATH}
+  --evidence /absolute/path/to/ledger-preflight-public.json
 ```
 
 Green is exactly five `PASS` lines and `5/5 preflight checks passed`. A failure is a stop: correct the named

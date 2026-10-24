@@ -742,6 +742,16 @@ function prepareTransaction(
       "The transaction account does not match the connected wallet.",
     );
   }
+  if (
+    txJson.TxnSignature !== undefined ||
+    txJson.Signers !== undefined ||
+    (txJson.SigningPubKey !== undefined && txJson.SigningPubKey !== "")
+  ) {
+    throw new PilotWalletError(
+      "INVALID_TRANSACTION",
+      "Pilot signs only unsigned single-sign transactions.",
+    );
+  }
 
   return { ...txJson } as SubmittableTransaction;
 }

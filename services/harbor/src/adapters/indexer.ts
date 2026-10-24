@@ -611,6 +611,7 @@ export function createIndexer(options: CreateIndexerOptions = {}): Indexer {
         fetcher(url, {
           method: "GET",
           headers,
+          redirect: "error",
           signal: controller.signal,
         }).catch(() => {
           throw new ProviderError("TRANSPORT_ERROR");

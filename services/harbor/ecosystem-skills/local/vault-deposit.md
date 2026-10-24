@@ -59,3 +59,4 @@ Vault shares are a claim on vault assets, not a fixed-interest promise. The unde
 Do not treat signing or submission as success. Query `tx.status` by hash until final. Require `validated: true` (or Harbor's equivalent final validated state) and metadata `TransactionResult: "tesSUCCESS"`; otherwise report the actual failure. The official [`tx` method](https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/transaction-methods/tx) notes that unvalidated data is not final.
 
 After validation, re-read `vault.info` and the depositor's balances or objects. Confirm the validated ledger index, underlying amount actually taken, shares actually issued, updated vault totals and cap headroom, fee charged, transaction hash, and devnet explorer link. If the transaction expires without validation or the ledger changes do not match the reviewed simulation, report the discrepancy and do not claim the deposit succeeded.
+

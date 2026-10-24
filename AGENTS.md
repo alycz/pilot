@@ -30,3 +30,4 @@ the root and nested typechecks, offline unit suites, production build, browser
 fixtures, generated-file checks, contract byte/hash parity, and migration
 inventory checks. Live wallets, provider calls, Testnet transactions, remote
 migrations, and deployment are separate explicitly authorized acceptance lanes.
+

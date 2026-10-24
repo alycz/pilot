@@ -8,6 +8,7 @@ import {
   sealOpenFinanceSession,
 } from "../../../../../lib/mastercard/open-finance";
 import { resolvePilotRequestAuthority } from "../../../../../lib/runtime-profile";
+import { readWalletSession } from "../../../../../lib/wallet-session";
 
 function noStore(response: NextResponse): NextResponse {
   response.headers.set("Cache-Control", "no-store");
@@ -36,12 +37,38 @@ function rejectCrossOrigin(request: Request): NextResponse | undefined {
   ));
 }
 
+function rejectExplicitCrossOriginRead(request: Request): NextResponse | undefined {
+  // Same-origin GET requests do not consistently carry Origin. When a browser
+  // does send it (notably for a cross-origin fetch), it must still match the
+  // configured public authority. The encrypted, SameSite session cookies and
+  // the browser's same-origin response policy remain the read boundary when
+  // Origin is absent.
+  return request.headers.get("origin") === null
+    ? undefined
+    : rejectCrossOrigin(request);
+}
+
+function walletBoundOpenFinanceSession(request: Request) {
+  const wallet = readWalletSession(request);
+  const session = readOpenFinanceSession(request);
+  if (
+    !wallet || !session ||
+    session.wallet_account !== wallet.account ||
+    session.wallet_network !== wallet.network
+  ) return null;
+  return { wallet, session };
+}
+
 export async function startOpenFinance(
   request: NextRequest,
   service: OpenFinanceService,
 ): Promise<NextResponse> {
   const rejected = rejectCrossOrigin(request);
   if (rejected) return rejected;
+  const wallet = readWalletSession(request);
+  if (!wallet) {
+    return noStore(NextResponse.json({ error: "An authenticated wallet session is required" }, { status: 401 }));
+  }
   try {
     const started = await service.start();
     const response = NextResponse.json({
@@ -54,7 +81,12 @@ export async function startOpenFinance(
     });
     response.cookies.set(
       OPEN_FINANCE_SESSION_COOKIE,
-      sealOpenFinanceSession({ version: 1, customer_id: started.customer_id }),
+      sealOpenFinanceSession({
+        version: 1,
+        customer_id: started.customer_id,
+        wallet_account: wallet.account,
+        wallet_network: wallet.network,
+      }),
       OPEN_FINANCE_COOKIE_OPTIONS,
     );
     return noStore(response);
@@ -69,10 +101,11 @@ export async function refreshOpenFinance(
 ): Promise<NextResponse> {
   const rejected = rejectCrossOrigin(request);
   if (rejected) return rejected;
-  const session = readOpenFinanceSession(request);
-  if (!session) {
+  const bound = walletBoundOpenFinanceSession(request);
+  if (!bound) {
     return noStore(NextResponse.json({ error: "Open Finance session is unavailable" }, { status: 401 }));
   }
+  const { session } = bound;
   try {
     const refreshed = await service.refresh(session.customer_id);
     const response = NextResponse.json({
@@ -105,7 +138,9 @@ export async function summarizeOpenFinance(
   request: NextRequest,
   service: OpenFinanceService,
 ): Promise<NextResponse> {
-  const session = readOpenFinanceSession(request);
+  const rejected = rejectExplicitCrossOriginRead(request);
+  if (rejected) return rejected;
+  const session = walletBoundOpenFinanceSession(request)?.session;
   if (!session?.account_id) {
     return noStore(NextResponse.json({ error: "Refresh accounts before requesting a summary" }, { status: 401 }));
   }

@@ -1,4 +1,4 @@
-import { isValidClassicAddress } from "xrpl";
+import { deriveAddress, isValidClassicAddress, verifySignature } from "xrpl";
 import { z } from "zod";
 
 import { requestXrpl, XrplRpcError } from "../adapters/xrpl-rpc";
@@ -32,6 +32,10 @@ import {
   gatherPolicyContext,
   type PolicyFactsAdapter,
 } from "../exec/policy";
+import {
+  collectIssuedPolicyAssets,
+  configuredStablePolicyAsset,
+} from "../exec/transaction/facts";
 import {
   Store,
   type AcquisitionBalanceInvariant,
@@ -124,6 +128,7 @@ const OFFER_TF_SELL = 0x0008_0000;
 // following ledger (LastLedgerSequence - 3).
 const RELIABLE_SUBMISSION_LEDGER_WINDOW = 4;
 const DIRECT_OWNER_MAX_LEDGER_WINDOW = 50;
+const LSF_DISABLE_MASTER = 0x0010_0000;
 const ExecutionClaimModeSchema = z.enum([
   "policy",
   "require_owner_approval",
@@ -1818,52 +1823,10 @@ async function reserveClaimedDailyBudgetAtomic(
   return inFlight ? "busy" : "over-cap";
 }
 
-function collectIssuedAssets(
-  value: unknown,
-): Array<{ currency: string; issuer: string }> {
-  const found = new Map<string, { currency: string; issuer: string }>();
-  const visit = (candidate: unknown): void => {
-    if (Array.isArray(candidate)) {
-      for (const item of candidate) visit(item);
-      return;
-    }
-    if (!isRecord(candidate)) return;
-    if (
-      typeof candidate.currency === "string" &&
-      typeof candidate.issuer === "string"
-    ) {
-      const asset = {
-        currency: candidate.currency,
-        issuer: candidate.issuer,
-      };
-      found.set(`${asset.currency}\u0000${asset.issuer}`, asset);
-    }
-    for (const child of Object.values(candidate)) visit(child);
-  };
-  visit(value);
-  return [...found.values()];
-}
-
-function configuredStableAsset(
-  ctx: OpContext,
-  network: Network,
-): { currency: string; issuer: string } | undefined {
-  const env = executionContext(ctx).env;
-  const suffix = network.toUpperCase().replaceAll("-", "_");
-  const code = env?.STABLE_CODE;
-  const issuer = env?.[`STABLE_ISSUER_${suffix}`];
-  if (typeof code === "string" && typeof issuer === "string") {
-    return { currency: code, issuer };
-  }
-  return network === "testnet"
-    ? { currency: RLUSD_HEX_CURRENCY, issuer: TESTNET_RLUSD_ISSUER }
-    : undefined;
-}
-
 export function createPolicyFactsAdapter(ctx: OpContext): PolicyFactsAdapter {
   return {
     async getPolicyFacts(build) {
-      const assets = collectIssuedAssets(build.tx_json);
+      const assets = collectIssuedPolicyAssets(build.tx_json);
       const issuerFacts = await Promise.all(
         assets.map(async (asset) => {
           // AccountRoot Flags includes lsfRequireAuth (0x00040000):
@@ -1893,12 +1856,15 @@ export function createPolicyFactsAdapter(ctx: OpContext): PolicyFactsAdapter {
           };
         }),
       );
+      const stableAsset = configuredStablePolicyAsset(
+        executionContext(ctx).env,
+        build.network,
+        { currency: RLUSD_HEX_CURRENCY, issuer: TESTNET_RLUSD_ISSUER },
+      );
       return {
         usdValue: build.summary.usd_value ?? "0",
         issuerFacts,
-        ...(configuredStableAsset(ctx, build.network)
-          ? { stableAsset: configuredStableAsset(ctx, build.network) }
-          : {}),
+        ...(stableAsset ? { stableAsset } : {}),
       };
     },
   };
@@ -5435,6 +5401,69 @@ function validateDirectOwnerDelegateSet(
   }
 }
 
+async function authorizeDirectOwnerSignature(
+  ctx: OpContext,
+  network: "testnet" | "devnet",
+  txBlob: string,
+  transaction: Readonly<Record<string, unknown>>,
+): Promise<number> {
+  const account = transaction.Account;
+  const publicKey = transaction.SigningPubKey;
+  if (
+    typeof account !== "string" ||
+    !isValidClassicAddress(account) ||
+    typeof publicKey !== "string" ||
+    publicKey.length === 0 ||
+    transaction.Signers !== undefined
+  ) {
+    throw new Error(
+      "direct owner submission requires one verifiable owner signature",
+    );
+  }
+
+  let signer: string;
+  try {
+    if (!verifySignature(txBlob)) {
+      throw new Error("signature verification failed");
+    }
+    signer = deriveAddress(publicKey);
+  } catch {
+    throw new Error("direct owner submission has an invalid signature");
+  }
+
+  const validatedLedger = await latestValidatedLedger(ctx, network);
+  const response = await requestXrpl(ctx, network, "account_info", {
+    account,
+    ledger_index: validatedLedger,
+  });
+  const accountData = isRecord(response.account_data)
+    ? response.account_data
+    : null;
+  const flags = accountData?.Flags;
+  if (
+    response.validated !== true ||
+    response.ledger_index !== validatedLedger ||
+    accountData?.Account !== account ||
+    !Number.isSafeInteger(flags) ||
+    Number(flags) < 0 ||
+    Number(flags) > 0xffff_ffff
+  ) {
+    throw new Error(
+      "direct owner submission could not verify owner authority from validated state",
+    );
+  }
+
+  const masterAuthorized =
+    signer === account && (Number(flags) & LSF_DISABLE_MASTER) === 0;
+  const regularAuthorized = accountData.RegularKey === signer;
+  if (!masterAuthorized && !regularAuthorized) {
+    throw new Error(
+      "direct owner submission signature is not authorized by the owner account",
+    );
+  }
+  return validatedLedger;
+}
+
 function directSubmissionEventId(principal: string, hash: string): string {
   return `direct-owner-submit:${principal}:${hash.toUpperCase()}`;
 }
@@ -6224,6 +6253,7 @@ export async function handleTxSubmit(
     throw new Error("direct owner submission binding is inconsistent");
   }
   const authority = new AccountSequenceLeaseAuthority(database(ctx));
+  let validatedHead: number | undefined;
   let lease = await authority.get({ network: args.network, account });
   if (lease && directLeaseMatches(lease, ctx.principal, hash)) {
     if (
@@ -6257,6 +6287,15 @@ export async function handleTxSubmit(
         "SUBMISSION_PENDING",
       );
     }
+    // A pending link is not proof that this principal controls its owner.
+    // Verify the exact signature against validated AccountRoot authority before
+    // creating a global account-sequence lease or durable submission binding.
+    validatedHead = await authorizeDirectOwnerSignature(
+      ctx,
+      args.network,
+      args.tx_blob,
+      decoded,
+    );
     const acquired = await authority.acquire({
       principal: ctx.principal,
       network: args.network,
@@ -6275,7 +6314,21 @@ export async function handleTxSubmit(
     lease = acquired.lease;
   }
   if (lease.state === "preparing") {
-    const validatedHead = await latestValidatedLedger(ctx, args.network);
+    try {
+      validatedHead ??= await authorizeDirectOwnerSignature(
+        ctx,
+        args.network,
+        args.tx_blob,
+        decoded,
+      );
+    } catch (error) {
+      await authority.releasePreSign({
+        ...accountSequenceIdentity(lease),
+        at: nowFor(services).toISOString(),
+        proof: "signing_never_began",
+      });
+      throw error;
+    }
     const firstLedgerSequence = validatedHead + 1;
     if (
       firstLedgerSequence > Number(lastLedgerSequence) ||

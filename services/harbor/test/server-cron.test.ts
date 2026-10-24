@@ -84,6 +84,14 @@ describe("Worker scheduled entrypoint", () => {
 		await worker.scheduled!(controller(), {
 			DB: {} as D1Database, EXEC_NETWORK: "testnet", AUTONOMOUS_STRATEGY_RUNNER: "true",
 		} as Env, context());
+		expect(runStrategyScheduler).not.toHaveBeenCalled();
+
+		await worker.scheduled!(controller(), {
+			DB: {} as D1Database,
+			EXEC_NETWORK: "testnet",
+			MAINNET_EXECUTION: "false",
+			AUTONOMOUS_STRATEGY_RUNNER: "true",
+		} as Env, context());
 		expect(runStrategyScheduler).toHaveBeenCalledOnce();
 	});
 
@@ -91,7 +99,10 @@ describe("Worker scheduled entrypoint", () => {
 		runWatcher.mockRejectedValueOnce(new Error("watchdog failed"));
 		const worker = createWorker(new OpRegistry());
 		await expect(worker.scheduled!(controller(), {
-			DB: {} as D1Database, EXEC_NETWORK: "testnet", AUTONOMOUS_STRATEGY_RUNNER: "true",
+			DB: {} as D1Database,
+			EXEC_NETWORK: "testnet",
+			MAINNET_EXECUTION: "false",
+			AUTONOMOUS_STRATEGY_RUNNER: "true",
 		} as Env, context())).rejects.toThrow("watchdog failed");
 		expect(runStrategyScheduler).not.toHaveBeenCalled();
 	});

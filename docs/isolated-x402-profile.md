@@ -19,13 +19,13 @@ missing credentials, and reused trading/x402 principals fail closed.
 No credential was created or read. The existing isolated Pilot file remains
 unchanged at:
 
-`${PILOT_PRIVATE_SECRETS_ROOT:?set PILOT_PRIVATE_SECRETS_ROOT}/pilot-isolated-v1.env.local`
+`/absolute/private/pilot/pilot-secrets/pilot-isolated-v1.env.local`
 
 It continues to contain only the existing isolated trading named credential and
 Pilot session secret. The isolated launcher reads those values from that file,
 then reads exactly one additional server-side capability from:
 
-`${PILOT_PRIVATE_SECRETS_ROOT:?set PILOT_PRIVATE_SECRETS_ROOT}/pilot-isolated-x402-capability-v1.env.local`
+`/absolute/private/pilot/pilot-secrets/pilot-isolated-x402-capability-v1.env.local`
 
 The checked-in template shows its single allowed entry. The Harbor isolated
 provisioner can publish that new file directly with owner-only mode and

@@ -259,6 +259,15 @@ async function runClaimed(due: DueStrategy, lease: StrategyLease, options: Strat
   const triggerId = await stableStrategyId("trigger", due.strategyId, String(due.scheduleGeneration), due.scheduledFor);
   const decisionId = await stableStrategyId("decision", triggerId, strategy.mandate.digest);
   const trigger = await scheduler.createTrigger(due, lease, triggerId, now);
+  if (trigger === "terminal") {
+    await scheduler.advanceSchedule(
+      due,
+      lease,
+      strategy.mandate.schedule.interval_seconds,
+      now,
+    );
+    return;
+  }
   if (trigger === "duplicate") return;
   const recoveredDecision = await scheduler.getTriggerDecision(due.principal, triggerId);
   if (recoveredDecision) {

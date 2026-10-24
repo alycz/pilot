@@ -32,6 +32,8 @@ describe("QuickNode REST client", () => {
     const headers = new Headers(init?.headers);
     expect(headers.get("x-api-key")).toBe("local-fixture-api-key");
     expect(headers.get("content-type")).toBe("application/json");
+    expect(init?.redirect).toBe("error");
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it.each([
@@ -131,5 +133,96 @@ describe("QuickNode REST client", () => {
         ...LOCAL_CONTEXT,
       }),
     ).rejects.toMatchObject({ code: "QN_API_KEY_MISSING" });
+  });
+
+  it("bounds declared and streamed response bodies", async () => {
+    await expect(
+      qnRest("GET", "/kv/rest/v1/lists/accounts", undefined, {
+        env: LOCAL_ENV,
+        ...LOCAL_CONTEXT,
+        maxResponseBytes: 8,
+        fetcher: vi.fn().mockResolvedValue(new Response("{}", {
+          headers: { "content-length": "9" },
+        })),
+      }),
+    ).rejects.toMatchObject({ code: "QN_MALFORMED_RESPONSE" });
+
+    await expect(
+      qnRest("GET", "/kv/rest/v1/lists/accounts", undefined, {
+        env: LOCAL_ENV,
+        ...LOCAL_CONTEXT,
+        maxResponseBytes: 8,
+        fetcher: vi.fn().mockResolvedValue(new Response(JSON.stringify({ long: true }))),
+      }),
+    ).rejects.toMatchObject({ code: "QN_MALFORMED_RESPONSE" });
+  });
+
+  it("never waits for best-effort response cleanup", async () => {
+    const never = () => new Promise<void>(() => undefined);
+    const outcomes = await Promise.all([
+      qnRest("GET", "/kv/rest/v1/lists/accounts", undefined, {
+        env: LOCAL_ENV,
+        ...LOCAL_CONTEXT,
+        fetcher: vi.fn().mockResolvedValue(new Response(
+          new ReadableStream<Uint8Array>({ cancel: never }),
+          { status: 503 },
+        )),
+      }).catch((error: unknown) => error),
+      qnRest("GET", "/kv/rest/v1/lists/accounts", undefined, {
+        env: LOCAL_ENV,
+        ...LOCAL_CONTEXT,
+        maxResponseBytes: 1,
+        fetcher: vi.fn().mockResolvedValue(new Response(
+          new ReadableStream<Uint8Array>({ cancel: never }),
+          { headers: { "content-length": "2" } },
+        )),
+      }).catch((error: unknown) => error),
+      qnRest("GET", "/kv/rest/v1/lists/accounts", undefined, {
+        env: LOCAL_ENV,
+        ...LOCAL_CONTEXT,
+        maxResponseBytes: 1,
+        fetcher: vi.fn().mockResolvedValue(new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new Uint8Array(2));
+            },
+            cancel: never,
+          }),
+        )),
+      }).catch((error: unknown) => error),
+    ]);
+
+    expect(outcomes).toEqual([
+      expect.objectContaining({ code: "QN_HTTP_503", retryable: true }),
+      expect.objectContaining({ code: "QN_MALFORMED_RESPONSE" }),
+      expect.objectContaining({ code: "QN_MALFORMED_RESPONSE" }),
+    ]);
+  });
+
+  it("applies one finite deadline to transport and body reads", async () => {
+    const never = new Promise<Response>(() => undefined);
+    await expect(
+      qnRest("GET", "/kv/rest/v1/lists/accounts", undefined, {
+        env: LOCAL_ENV,
+        ...LOCAL_CONTEXT,
+        timeoutMs: 5,
+        fetcher: vi.fn().mockReturnValue(never),
+      }),
+    ).rejects.toMatchObject({ code: "QN_TRANSPORT_ERROR", retryable: true });
+
+    await expect(
+      qnRest("GET", "/kv/rest/v1/lists/accounts", undefined, {
+        env: LOCAL_ENV,
+        ...LOCAL_CONTEXT,
+        timeoutMs: 5,
+        fetcher: vi.fn().mockResolvedValue(new Response(
+          new ReadableStream<Uint8Array>({
+            start() {
+              // The client must keep the same deadline while consuming the body.
+            },
+          }),
+        )),
+      }),
+    ).rejects.toMatchObject({ code: "QN_TRANSPORT_ERROR", retryable: true });
   });
 });

@@ -30,8 +30,7 @@ export async function runQ4Watchdog(
 ): Promise<void> {
   const args = parseProbeArgs(argv);
   const mode = probeMode(args.get("--mode") ?? process.env.QN_MODE);
-  const statusInput = args.get("--status") ?? (process.env.HARBOR_PRIVATE_EVIDENCE_ROOT ? resolve(process.env.HARBOR_PRIVATE_EVIDENCE_ROOT, "quicknode.md") : undefined);
-  const status = statusInput ? resolve(statusInput) : undefined;
+  const status = resolve(args.get("--status") ?? "status/H-qn.md");
   const proofPath = args.get("--proof");
 
   try {
@@ -67,7 +66,6 @@ export async function runQ4Watchdog(
       throw new Error("Watchdog proof identifiers do not agree");
     }
 
-    if (!status) throw new Error("--status or HARBOR_PRIVATE_EVIDENCE_ROOT is required");
     await recordProbeResult(
       "q4-watchdog",
       mode,
@@ -79,7 +77,7 @@ export async function runQ4Watchdog(
       dependencies,
     );
   } catch (error) {
-    if (status) await recordProbeResult(
+    await recordProbeResult(
       "q4-watchdog",
       mode,
       false,

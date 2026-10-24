@@ -26,7 +26,7 @@ export class JsonQnLocalStore implements QnLocalStore {
 	readonly path: string;
 	#writeQueue: Promise<void> = Promise.resolve();
 
-	constructor(path = (process.env.HARBOR_PRIVATE_STATE_ROOT ? join(process.env.HARBOR_PRIVATE_STATE_ROOT, 'qn-local', 'kv.json') : '/dev/null/pilot-disabled/qn-local-kv.json')) {
+	constructor(path = join('/absolute/private/pilot/harbor-state', 'qn-local', 'kv.json')) {
 		this.path = path;
 	}
 

@@ -501,3 +501,4 @@ class SQLiteClaimStore:
                 return cursor.rowcount == 1
 
         return await asyncio.to_thread(update)
+

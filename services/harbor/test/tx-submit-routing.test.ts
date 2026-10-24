@@ -126,22 +126,35 @@ function harness() {
     status,
     now: () => new Date("2026-10-18T10:00:00.000Z"),
   } satisfies ExecutionServices;
+  const db = new SequenceDatabase();
+  const xrplRpc = {
+    request: vi.fn(async (_network: string, command: string) => {
+      if (command === "ledger") {
+        return { validated: true, ledger_index: 100 };
+      }
+      if (command === "account_info") {
+        return {
+          validated: true,
+          ledger_index: 100,
+          account_data: {
+            Account: ownerWallet.classicAddress,
+            Flags: 0,
+          },
+        };
+      }
+      throw new Error(`unexpected XRPL command ${command}`);
+    }),
+  };
   const ctx = {
     principal: link.principal,
     env: { EXEC_NETWORK: "testnet" },
-    db: new SequenceDatabase() as unknown as D1Database,
-    xrplRpc: {
-      request: vi.fn(async (_network: string, command: string) => {
-        if (command === "ledger") {
-          return { validated: true, ledger_index: 100 };
-        }
-        throw new Error(`unexpected XRPL command ${command}`);
-      }),
-    },
+    db: db as unknown as D1Database,
+    xrplRpc,
     executionServices: services,
   } as OpContext;
   return {
     ctx,
+    db,
     events,
     getLink,
     insertEvent,
@@ -151,6 +164,7 @@ function harness() {
     status,
     submitSigned,
     transaction,
+    xrplRpc,
   };
 }
 
@@ -212,6 +226,103 @@ describe("direct owner submission routing", () => {
       handleTxSubmit(ctx, { tx_blob: signed.tx_blob, network: "devnet" }),
     ).resolves.toMatchObject({ hash: signed.hash, validated: true });
     expect(submitSigned).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects an unrelated signing key before binding or leasing the owner account", async () => {
+    const {
+      ctx,
+      db,
+      events,
+      ownerWallet,
+      submitSigned,
+      transaction,
+    } = harness();
+    const attacker = Wallet.generate();
+    const forged = attacker.sign({
+      ...transaction,
+      Account: ownerWallet.classicAddress,
+    });
+
+    await expect(
+      handleTxSubmit(ctx, { tx_blob: forged.tx_blob, network: "devnet" }),
+    ).rejects.toThrow(/signature is not authorized by the owner account/i);
+
+    expect(submitSigned).not.toHaveBeenCalled();
+    expect(events.size).toBe(0);
+    await expect(
+      db
+        .prepare("SELECT COUNT(*) AS count FROM account_sequence_leases")
+        .first<{ count: number }>(),
+    ).resolves.toEqual({ count: 0 });
+  });
+
+  it("accepts a cryptographically valid signing key recorded as the validated RegularKey", async () => {
+    const {
+      ctx,
+      link,
+      submitSigned,
+      transaction,
+      xrplRpc,
+    } = harness();
+    const regularKey = Wallet.generate();
+    const signed = regularKey.sign(transaction);
+    xrplRpc.request.mockImplementation(async (_network, command) => {
+      if (command === "ledger") {
+        return { validated: true, ledger_index: 100 };
+      }
+      if (command === "account_info") {
+        return {
+          validated: true,
+          ledger_index: 100,
+          account_data: {
+            Account: link.owner,
+            Flags: 0,
+            RegularKey: regularKey.classicAddress,
+          },
+        };
+      }
+      throw new Error(`unexpected XRPL command ${command}`);
+    });
+    submitSigned.mockResolvedValueOnce({
+      hash: signed.hash,
+      ledger_index: 101,
+      engine_result: "tesSUCCESS",
+      validated: true,
+      network: "devnet",
+    });
+
+    await expect(
+      handleTxSubmit(ctx, { tx_blob: signed.tx_blob, network: "devnet" }),
+    ).resolves.toMatchObject({ hash: signed.hash, validated: true });
+  });
+
+  it("rejects a master signature when validated AccountRoot state disables it", async () => {
+    const { ctx, db, events, link, signed, submitSigned, xrplRpc } = harness();
+    xrplRpc.request.mockImplementation(async (_network, command) => {
+      if (command === "ledger") {
+        return { validated: true, ledger_index: 100 };
+      }
+      if (command === "account_info") {
+        return {
+          validated: true,
+          ledger_index: 100,
+          account_data: { Account: link.owner, Flags: 0x0010_0000 },
+        };
+      }
+      throw new Error(`unexpected XRPL command ${command}`);
+    });
+
+    await expect(
+      handleTxSubmit(ctx, { tx_blob: signed.tx_blob, network: "devnet" }),
+    ).rejects.toThrow(/signature is not authorized by the owner account/i);
+
+    expect(submitSigned).not.toHaveBeenCalled();
+    expect(events.size).toBe(0);
+    await expect(
+      db
+        .prepare("SELECT COUNT(*) AS count FROM account_sequence_leases")
+        .first<{ count: number }>(),
+    ).resolves.toEqual({ count: 0 });
   });
 
   it("fails closed on missing or mismatched direct-submit routing", async () => {

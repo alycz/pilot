@@ -17,7 +17,7 @@ function runTag(run: string): string {
 }
 
 export function defaultQuickNodeStatePath(run: string): string {
-	return (process.env.HARBOR_PRIVATE_STATE_ROOT ? join(process.env.HARBOR_PRIVATE_STATE_ROOT, `qn-state.${runTag(run)}.json`) : '/dev/null/pilot-disabled/qn-state.json');
+	return join('/absolute/private/pilot/harbor-state', `qn-state.${runTag(run)}.json`);
 }
 
 function state(value: unknown): QuickNodeProvisionState {

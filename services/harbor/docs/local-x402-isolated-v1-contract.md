@@ -75,8 +75,8 @@ is created or read during offline verification. The checked-in
 filesystem, cryptography, faucet, ledger, and D1 tests, but it was not run. Its
 fixed private outputs are limited to:
 
-- `${HARBOR_PRIVATE_SECRETS_ROOT:?set HARBOR_PRIVATE_SECRETS_ROOT}/harbor-local-x402-isolated-v1.env.local`
-- `${PILOT_PRIVATE_SECRETS_ROOT:?set PILOT_PRIVATE_SECRETS_ROOT}/pilot-isolated-x402-capability-v1.env.local`
+- `/absolute/private/pilot/harbor-secrets/harbor-local-x402-isolated-v1.env.local`
+- `/absolute/private/pilot/pilot-secrets/pilot-isolated-x402-capability-v1.env.local`
 - one explicitly approved external state root, bound into the Harbor credential
   and its immutable root marker
 - D1 name `harbor-local-x402-isolated-v1-only`
@@ -119,7 +119,7 @@ creates a root or applies a migration.
 Before that command, an operator must capture and review the unmodified public
 `data` results from `account.status` and `onboarding.readiness`, then materialize
 them at the fixed input path
-`${HARBOR_PRIVATE_EVIDENCE_ROOT:?set HARBOR_PRIVATE_EVIDENCE_ROOT}/pilot-isolated-trading-delegate-v1.json`
+`/absolute/private/pilot/evidence/pilot-isolated-trading-delegate-v1.json`
 using the shape in
 `config/pilot-isolated-trading-delegate-evidence-v1.json.template`, mode `0600`
 with an empty native ACL. The provisioner requires an active Testnet account
@@ -163,7 +163,7 @@ or incomplete state fails closed before Worker startup.
 
 No real destination is approved or activated by this documentation. The path
 proposed for later operator review is
-`${HARBOR_PRIVATE_STATE_ROOT:?set HARBOR_PRIVATE_STATE_ROOT}/harbor-local-x402-isolated-v1`.
+`/absolute/private/pilot/harbor-state/harbor-local-x402-isolated-v1`.
 Creating its parent or leaf, writing its marker, applying migrations, creating
 credentials or a payer, requesting faucet funds, or starting a service remains
 a separately approved action-time operation.

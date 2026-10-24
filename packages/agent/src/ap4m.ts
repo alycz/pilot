@@ -7,8 +7,17 @@ import {
   type Envelope,
   type Network,
 } from "@pilot/contracts";
+import { HarborResultSchemas } from "@pilot/harbor-client";
 import { tool, type Tool } from "ai";
 import { z } from "zod";
+
+import {
+  Ap4mExactEvidenceEventSchema,
+  type Ap4mExactEvidenceEvent,
+} from "./ap4m-evidence-event";
+
+export { Ap4mExactEvidenceEventSchema } from "./ap4m-evidence-event";
+export type { Ap4mExactEvidenceEvent } from "./ap4m-evidence-event";
 
 export interface Ap4mHarborRest {
   op(name: any, args: any): Promise<Envelope<unknown>>;
@@ -22,11 +31,15 @@ export interface ActiveAp4mMandate {
 export interface Ap4mToolContext {
   activeMandate?: ActiveAp4mMandate;
   createIdempotencyKey?: () => string;
+  /** Server-local one-shot gate shared with every other mutating tool in this run. */
+  claimMutation?: () => boolean;
   revokeCredential?: (input: {
     mandate_id: string;
     owner: string;
     network: "testnet";
   }) => Promise<{ status: "revoked" }>;
+  /** Server-owned receipt channel. This value is never returned to the model. */
+  emitEvidence?: (event: Ap4mExactEvidenceEvent) => void | Promise<void>;
 }
 
 export interface CreateAp4mToolsOptions {
@@ -90,6 +103,15 @@ const OmittedMerchantTextSchema = z.string().max(200);
 const TransactionHashSchema = z.string().regex(/^[A-Fa-f0-9]{64}$/);
 const ChannelIdSchema = z.string().regex(/^[A-Fa-f0-9]{64}$/);
 const PositiveDropsSchema = z.string().regex(/^[1-9]\d*$/);
+const MastercardDiscoverySchema = z
+  .object({
+    source: z.literal("Mastercard Developers"),
+    results: z.array(z.object({
+      service_id: IdentifierSchema,
+      title: OmittedMerchantTextSchema,
+    }).passthrough()).max(20),
+  })
+  .passthrough();
 
 const YieldReportDataSchema = z
   .object({
@@ -183,6 +205,13 @@ async function purchase(
   ) {
     throw new Error("AP4M purchase blocked by rule MANDATE_NOT_ACTIVE.");
   }
+  if (
+    !mandate.constraints.payees.includes(input.merchant_id) ||
+    (mandate.constraints.skus !== undefined &&
+      !mandate.constraints.skus.includes(input.sku))
+  ) {
+    throw new Error("AP4M purchase blocked by rule MANDATE_SCOPE_MISMATCH.");
+  }
 
   const response = await options.harborRest.op("ap4m.purchase", {
     mandate_id: active.mandate_id,
@@ -192,13 +221,7 @@ async function purchase(
   });
   if (!response.ok) throw envelopeError(response);
 
-  const parsed = z
-    .object({
-      receipt: z.unknown(),
-      data: z.record(z.string(), z.unknown()),
-    })
-    .strict()
-    .parse(response.data);
+  const parsed = HarborResultSchemas["ap4m.purchase"].parse(response.data);
   const receipt = Ap4mReceiptSchema.parse(parsed.receipt);
   if (
     receipt.mandate_id !== active.mandate_id ||
@@ -254,6 +277,20 @@ async function purchase(
     throw new Error("AP4M merchant data schema did not match the purchased SKU.");
   }
 
+  if (parsed.evidence) {
+    if (pending || receipt.scheme !== "exact") {
+      throw new Error("AP4M public evidence is only valid for a validated exact settlement.");
+    }
+    const event = Ap4mExactEvidenceEventSchema.parse({ receipt, evidence: parsed.evidence });
+    if (
+      event.evidence.artifacts[0].digest !== mandate.l1_digest.toUpperCase() ||
+      event.evidence.artifacts[1].digest !== mandate.l2_digest.toUpperCase()
+    ) {
+      throw new Error("AP4M public evidence mandate references did not match the active mandate.");
+    }
+    await context?.emitEvidence?.(event);
+  }
+
   return Ap4mModelResultSchema.parse({
     status: pending ? "pending" : "completed",
     merchant: receipt.merchant_id,
@@ -291,6 +328,9 @@ async function merchantsSearch(
       })),
     };
   });
+  const mastercard = MastercardDiscoverySchema.parse(
+    HarborResultSchemas["mastercard.search"].parse(mastercardEnvelope.data),
+  );
 
   return {
     sources: [
@@ -298,7 +338,10 @@ async function merchantsSearch(
       {
         source: "Mastercard Developers",
         third_party: true,
-        result: mastercardEnvelope.data,
+        results: mastercard.results.map(({ service_id, title }) => ({
+          service_id,
+          title,
+        })),
       },
     ],
   };
@@ -308,14 +351,14 @@ async function merchantsSearch(
 export function createAp4mModelTools(
   options: CreateAp4mToolsOptions,
 ): Record<string, Tool<any, any>> {
-  const attempts = new Map<
-    string,
-    {
-      idempotencyKey: string;
-      result?: Ap4mModelResult;
-      blocked?: true;
-    }
-  >();
+  type PurchaseAttempt = {
+    idempotencyKey: string;
+    inFlight?: Promise<Ap4mModelResult>;
+    result?: Ap4mModelResult;
+    blocked?: true;
+  };
+  let purchaseInvocationClaimed = false;
+  const attempts = new Map<string, PurchaseAttempt>();
   const tools: Record<string, Tool<any, any>> = {
     merchants_search: tool({
       description:
@@ -337,18 +380,30 @@ export function createAp4mModelTools(
           throw new Error("AP4M purchase blocked: this request was already blocked in this run and was not retried.");
         }
         if (previous?.result) return previous.result;
-        const attempt = previous ?? {
+        if (previous?.inFlight) return previous.inFlight;
+        if (purchaseInvocationClaimed || options.ap4m?.claimMutation?.() === false) {
+          throw new Error(
+            "AP4M purchase blocked: this authenticated run already claimed its single mutating execution.",
+          );
+        }
+        purchaseInvocationClaimed = true;
+        const attempt: PurchaseAttempt = {
           idempotencyKey: idempotencyKey(options.ap4m!),
         };
         attempts.set(fingerprint, attempt);
-        try {
-          const result = await purchase(input, options, attempt.idempotencyKey);
-          attempt.result = result;
-          return result;
-        } catch (error) {
-          attempt.blocked = true;
-          throw error;
-        }
+        attempt.inFlight = purchase(input, options, attempt.idempotencyKey)
+          .then((result) => {
+            attempt.result = result;
+            return result;
+          })
+          .catch((error) => {
+            attempt.blocked = true;
+            throw error;
+          })
+          .finally(() => {
+            delete attempt.inFlight;
+          });
+        return attempt.inFlight;
       },
     });
   }

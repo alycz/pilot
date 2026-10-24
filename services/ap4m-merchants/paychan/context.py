@@ -143,3 +143,4 @@ class ClaimEventSink(Protocol):
 
 
 LocalVerifier = Callable[[ClaimProof], bool]
+

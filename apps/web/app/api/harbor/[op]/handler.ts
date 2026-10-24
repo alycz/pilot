@@ -23,6 +23,8 @@ const MAX_JSON_NODES = 10_000;
 const OP_PATTERN = /^[a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9]*)+$/;
 const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
+class HarborRequestTooLargeError extends Error {}
+
 export interface HarborProxyEnvironment {
   EXEC_NETWORK?: string;
   HARBOR_API_KEY?: string;
@@ -113,12 +115,25 @@ function isHarborOpName(value: string): value is HarborOpName {
   return Object.prototype.hasOwnProperty.call(HarborArgsSchemas, value);
 }
 
-function isMutation(op: HarborOpName): boolean {
+const SPONSOR_MUTATION_OPS = new Set<string>([
+  "mandate.prepare",
+  "mandate.register",
+  "mandate.revoke",
+  "credential.payerAccept",
+  "credential.revoke",
+  "ap4m.purchase",
+  "channel.settle",
+  "quicknode.unfreeze",
+  "quicknode.test.registerLink",
+]);
+
+function isMutation(op: string): boolean {
   return (
     op === "account.link" ||
     op === "account.revoke" ||
     op === "policy.set" ||
     op === "x402.pay" ||
+    SPONSOR_MUTATION_OPS.has(op) ||
     (op.startsWith("tx.") && op !== "tx.status")
   );
 }
@@ -219,6 +234,39 @@ function byteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength;
 }
 
+async function readBoundedRequestText(request: Request): Promise<string> {
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_BODY_BYTES) {
+        try {
+          void reader.cancel().catch(() => undefined);
+        } catch {
+          // Cancellation is best-effort cleanup. It must never delay or replace
+          // the deterministic oversized-request response.
+        }
+        throw new HarborRequestTooLargeError("Harbor request body exceeded its byte limit");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const output = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(output);
+}
+
 function isAbortError(error: unknown): boolean {
   return (
     (error instanceof DOMException && error.name === "AbortError") ||
@@ -310,8 +358,15 @@ export function createHarborProxyHandler(
 
     let requestBody: string;
     try {
-      requestBody = await request.text();
-    } catch {
+      requestBody = await readBoundedRequestText(request);
+    } catch (error) {
+      if (error instanceof HarborRequestTooLargeError) {
+        return errorResponse(
+          413,
+          "HARBOR_PROXY_REQUEST_TOO_LARGE",
+          "The Harbor operation request is too large.",
+        );
+      }
       return errorResponse(
         400,
         "HARBOR_PROXY_INVALID_BODY",

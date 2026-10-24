@@ -53,9 +53,9 @@ export const LOCAL_TRADING_ISOLATED_V1_CONFIG =
 export const LOCAL_TRADING_ISOLATED_V1_STATE_DIRECTORY =
 	".wrangler/harbor-local-trading-isolated-v1";
 export const LOCAL_TRADING_ISOLATED_V1_STATE_ROOT =
-	(process.env.HARBOR_PRIVATE_STATE_ROOT ? resolve(process.env.HARBOR_PRIVATE_STATE_ROOT, "harbor-local-trading-isolated-v1/.wrangler/harbor-local-trading-isolated-v1") : "/dev/null/pilot-disabled/harbor-local-trading-isolated-v1/.wrangler/harbor-local-trading-isolated-v1");
+	"/absolute/private/pilot/harbor-state/harbor-local-trading-isolated-v1/.wrangler/harbor-local-trading-isolated-v1";
 export const LOCAL_TRADING_ISOLATED_V1_SECRET_FILE =
-	(process.env.HARBOR_PRIVATE_SECRETS_ROOT ? resolve(process.env.HARBOR_PRIVATE_SECRETS_ROOT, "harbor-local-trading-isolated-v1.env.local") : "/dev/null/pilot-disabled/harbor-local-trading-isolated-v1.env.local");
+	"/absolute/private/pilot/harbor-secrets/harbor-local-trading-isolated-v1.env.local";
 export const LOCAL_TRADING_ISOLATED_V1_SIGNING_PROFILE =
 	"local-wallet-isolated-v1";
 export const LOCAL_TRADING_ISOLATED_V1_BUILD_ORIGIN =

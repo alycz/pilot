@@ -1,8 +1,10 @@
 import {
+  CardTrustSchema,
   ExecResultSchema,
   PolicySchema,
   TxBuildSchema,
   type CardEvent,
+  type CardTrust,
   type Envelope,
   type ExecResult,
   type Intent,
@@ -33,6 +35,7 @@ import {
   type GuardrailNoticeSink,
 } from "./guardrail-notice";
 import { createAp4mModelTools, type Ap4mToolContext } from "./ap4m";
+import { createStrategyProposalTool } from "./strategy-proposal";
 
 type AccountContext = {
   main_account: string;
@@ -73,6 +76,10 @@ export interface AgentToolOptions {
   };
   now?: () => Date;
   ap4m?: Ap4mToolContext;
+  /** Trusted server-side input for a paper-only strategy preview. */
+  strategyPaperObservation?: () =>
+    | Promise<Record<string, unknown>>
+    | Record<string, unknown>;
 }
 
 export type PreferenceProposalEvent = {
@@ -144,6 +151,7 @@ const READ_ONLY_HARBOR_OPERATIONS = new Set([
   "ledger.account.tx",
   "dex.book",
   "dex.depth",
+  "analytics.marketSnapshot",
   "amm.info",
   "tokens.lookup",
   "yield.options",
@@ -217,6 +225,35 @@ const IntentToolSchema = jsonSchema<Intent>(
 function harborError(envelope: Extract<Envelope<unknown>, { ok: false }>): Error {
   const code = envelope.error.code ? ` (${envelope.error.code})` : "";
   return new Error(`${envelope.error.service}${code}: ${envelope.error.message}`);
+}
+
+function mergeCardTrust(
+  ...parts: Array<CardTrust | undefined>
+): CardTrust | undefined {
+  const merged = Object.assign({}, ...parts.filter(Boolean));
+  return Object.keys(merged).length === 0
+    ? undefined
+    : CardTrustSchema.parse(merged);
+}
+
+/** Project only contract-bounded Harbor provenance; never infer provider use. */
+export function cardTrustFromHarborEnvelope(
+  envelope: Envelope<unknown>,
+): CardTrust | undefined {
+  if (!envelope.ok || !envelope.trust) return undefined;
+  return mergeCardTrust(
+    envelope.trust.screen ? { screen: envelope.trust.screen } : undefined,
+    envelope.trust.rpc ? { rpc: envelope.trust.rpc.route } : undefined,
+  );
+}
+
+function cardTrustFromExecutedResult(
+  exec: Extract<ExecResult, { status: "executed" }>,
+): CardTrust | undefined {
+  return mergeCardTrust(
+    exec.signer ? { signer: exec.signer } : undefined,
+    exec.confirmation ? { confirmation: exec.confirmation } : undefined,
+  );
 }
 
 async function callBuilder(
@@ -450,6 +487,7 @@ export async function executeProposedIntent(
   });
   let build: TxBuild | undefined;
   let exec: ExecResult | undefined;
+  let harborTrust: CardTrust | undefined;
 
   await card.drafting();
   try {
@@ -473,7 +511,8 @@ export async function executeProposedIntent(
     if (!buildEnvelope.ok) throw harborError(buildEnvelope);
     build = buildEnvelope.data;
     assertExecutableBuild(build, intent, request);
-    await card.simulated(build);
+    harborTrust = cardTrustFromHarborEnvelope(buildEnvelope);
+    await card.simulated(build, harborTrust);
 
     const policy = await options.loadPolicy?.();
     if (policy) {
@@ -498,8 +537,13 @@ export async function executeProposedIntent(
     if (!execEnvelope.ok) throw harborError(execEnvelope);
     exec = execEnvelope.data;
     assertSafeExecutionResult(exec, build, options.now?.() ?? new Date());
+    harborTrust = mergeCardTrust(
+      harborTrust,
+      cardTrustFromHarborEnvelope(execEnvelope),
+    );
     await card.policyChecked({
       build,
+      ...(harborTrust ? { trust: harborTrust } : {}),
       ...(exec.status === "needs_approval" || exec.status === "blocked"
         ? { policy: exec.policy }
         : {}),
@@ -511,9 +555,14 @@ export async function executeProposedIntent(
         // submission, and validation. Normalize it into ordered UI states, but
         // attach the final ExecResult only to the validated event so earlier
         // cards never claim validation before that state.
-        await card.executing(build);
-        await card.submitted(build, exec.hash);
-        await card.validated(build, exec, exec.hash);
+        await card.executing(build, harborTrust);
+        await card.submitted(build, exec.hash, harborTrust);
+        await card.validated(
+          build,
+          exec,
+          exec.hash,
+          mergeCardTrust(harborTrust, cardTrustFromExecutedResult(exec)),
+        );
         try {
           await options.onValidated?.({ intent, build, exec });
         } catch (error) {
@@ -528,14 +577,14 @@ export async function executeProposedIntent(
         return { intent, build, exec, state: "validated" };
       }
       case "needs_approval":
-        await card.awaitingApproval(build, exec);
+        await card.awaitingApproval(build, exec, harborTrust);
         return { intent, build, exec, state: "awaiting_approval" };
       case "blocked":
-        await card.blocked(build, exec);
+        await card.blocked(build, exec, harborTrust);
         return { intent, build, exec, state: "blocked" };
       case "failed":
-        await card.executing(build);
-        await card.failed(exec.detail, { build, exec });
+        await card.executing(build, harborTrust);
+        await card.failed(exec.detail, { build, exec, ...(harborTrust ? { trust: harborTrust } : {}) });
         return {
           intent,
           build,
@@ -545,7 +594,7 @@ export async function executeProposedIntent(
         };
     }
   } catch (error) {
-    if (!card.terminal) await card.failed(error, { build, exec });
+    if (!card.terminal) await card.failed(error, { build, exec, ...(harborTrust ? { trust: harborTrust } : {}) });
     return {
       intent,
       ...(build ? { build } : {}),
@@ -650,7 +699,12 @@ async function emitSafeGuardrailNotice(
 /** Tool set exposed to streamText. No signing capability is included. */
 export function createAgentTools(options: AgentToolOptions) {
   const blockedIntents = new Set<string>();
-  let intentInvocationClaimed = false;
+  let mutationInvocationClaimed = false;
+  const claimMutation = (): boolean => {
+    if (mutationInvocationClaimed) return false;
+    mutationInvocationClaimed = true;
+    return true;
+  };
   let guardrailNoticeEmitted = false;
   const turnOptions: AgentToolOptions = {
     ...options,
@@ -694,10 +748,25 @@ export function createAgentTools(options: AgentToolOptions) {
   // only the fixed receipt projection below.
   if (options.x402) return x402Tools;
 
+  const ap4mTools = createAp4mModelTools({
+    ...options,
+    ...(options.ap4m
+      ? { ap4m: { ...options.ap4m, claimMutation } }
+      : {}),
+  });
+
   return {
     ...harborTools,
     ...x402Tools,
-    ...createAp4mModelTools(options),
+    ...ap4mTools,
+    propose_strategy: createStrategyProposalTool({
+      account: options.account.budget_account,
+      harbor: options.harborRest,
+      ...(options.strategyPaperObservation
+        ? { paperObservation: options.strategyPaperObservation }
+        : {}),
+      ...(options.now ? { now: options.now } : {}),
+    }),
     propose_intent: tool({
       description:
         "Propose one explicit user-authorized typed intent. Server code validates, builds, simulates, checks policy, and executes or requests approval.",
@@ -715,7 +784,7 @@ export function createAgentTools(options: AgentToolOptions) {
               "This intent was already blocked in this run and was not retried.",
           };
         }
-        if (intentInvocationClaimed) {
+        if (!claimMutation()) {
           return {
             intent,
             state: "blocked" as const,
@@ -723,9 +792,6 @@ export function createAgentTools(options: AgentToolOptions) {
               "This authenticated run already invoked propose_intent; the same wallet proof cannot authorize another mutating execution.",
           };
         }
-        // Claim synchronously, before any awaited work, so concurrent tool calls
-        // cannot share one consumed wallet proof across multiple mutations.
-        intentInvocationClaimed = true;
 
         const result = await executeProposedIntent(intent, turnOptions);
         if (result.state === "blocked") blockedIntents.add(fingerprint);

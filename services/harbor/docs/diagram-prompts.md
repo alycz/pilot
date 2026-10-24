@@ -178,7 +178,7 @@ real Miniflare D1 layout and final x402 schema, then writes the marker once.
 `resume` and the launcher require the credential, marker, state root, Testnet
 profile, D1 ID/name, sole direct D1 payload, and schema to agree; they never
 create or migrate state. Label
-`${HARBOR_PRIVATE_STATE_ROOT:?set HARBOR_PRIVATE_STATE_ROOT}/harbor-local-x402-isolated-v1` as a
+`/absolute/private/pilot/harbor-state/harbor-local-x402-isolated-v1` as a
 proposal awaiting approval, not an active path. Mark actual root creation,
 evidence capture, provisioning, credential creation, funding, service startup,
 payment, and live ledger acceptance as unperformed and separately authorized.

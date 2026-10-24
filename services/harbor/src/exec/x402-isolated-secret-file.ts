@@ -23,9 +23,9 @@ import { assertMacAclFd } from '../../scripts/macos-acl.mjs';
 import { LOCAL_X402_ISOLATED_V1_MERCHANT_PAY_TO } from '../local-x402-isolated-v1.ts';
 
 export const LOCAL_X402_ISOLATED_SECRET_FILE =
-	(process.env.HARBOR_PRIVATE_SECRETS_ROOT ? `${process.env.HARBOR_PRIVATE_SECRETS_ROOT}/harbor-local-x402-isolated-v1.env.local` : "/dev/null/pilot-disabled/harbor-local-x402-isolated-v1.env.local");
+	'/absolute/private/pilot/harbor-secrets/harbor-local-x402-isolated-v1.env.local';
 export const PILOT_X402_ISOLATED_CAPABILITY_FILE =
-	(process.env.PILOT_PRIVATE_SECRETS_ROOT ? `${process.env.PILOT_PRIVATE_SECRETS_ROOT}/pilot-isolated-x402-capability-v1.env.local` : "/dev/null/pilot-disabled/pilot-isolated-x402-capability-v1.env.local");
+	'/absolute/private/pilot/pilot-secrets/pilot-isolated-x402-capability-v1.env.local';
 export const LOCAL_X402_ISOLATED_SECRET_MAX_BYTES = 16_384;
 export const LOCAL_X402_ISOLATED_SIGNING_PROFILE = 'reviewed-testnet-isolated-v1';
 

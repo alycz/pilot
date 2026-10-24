@@ -3,27 +3,19 @@
 import { open, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { dirname } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Client, Wallet, hashes, isValidClassicAddress } from "xrpl";
 
-function resolveInputPath(environment, directName, rootName, leaf) {
-  const direct = environment[directName];
-  const root = environment[rootName];
-  const value = direct ?? (root ? resolve(root, leaf) : undefined);
-  if (typeof value !== "string" || !isAbsolute(value)) {
-    throw new Error(`${directName} or ${rootName} is required as an absolute path`);
-  }
-  return value;
-}
-
-export function resolvePLivePaths(environment = process.env) {
-  return {
-    secretFile: resolveInputPath(environment, "P_LIVE_SECRET_FILE", "PILOT_PRIVATE_SECRETS_ROOT", "p-live.env.local"),
-    pilotEnvFile: resolveInputPath(environment, "PILOT_ENV_FILE", "PILOT_PRIVATE_SECRETS_ROOT", "pilot.env.local"),
-    acquisitionStateFile: resolveInputPath(environment, "P_LIVE_ACQUISITION_STATE_FILE", "PILOT_PRIVATE_STATE_ROOT", "p-live-rlusd-acquisition.json"),
-  };
-}
+const SECRET_FILE =
+  process.env.P_LIVE_SECRET_FILE ??
+  "/absolute/private/pilot/pilot-secrets/p-live.env.local";
+const PILOT_ENV_FILE =
+  process.env.PILOT_ENV_FILE ??
+  "/absolute/private/pilot/pilot-secrets/pilot.env.local";
+const ACQUISITION_STATE_FILE =
+  process.env.P_LIVE_ACQUISITION_STATE_FILE ??
+  "/absolute/private/pilot/pilot-state/p-live-rlusd-acquisition.json";
 
 const TESTNET_HTTP = "https://s.altnet.rippletest.net:51234";
 const TESTNET_WS = "wss://s.altnet.rippletest.net:51233";
@@ -244,7 +236,7 @@ export function assertExactOutputApprovalWindow(buildTransaction, approvalTransa
 
 async function loadAcquisitionState() {
   try {
-    const state = JSON.parse(await readFile(resolvePLivePaths().acquisitionStateFile, "utf8"));
+    const state = JSON.parse(await readFile(ACQUISITION_STATE_FILE, "utf8"));
     if (!isRecord(state)) throw new Error("Acquisition state is not an object");
     return state;
   } catch (error) {
@@ -254,7 +246,7 @@ async function loadAcquisitionState() {
 }
 
 async function persistAcquisitionState(state) {
-  const temporary = `${resolvePLivePaths().acquisitionStateFile}.${process.pid}.${randomUUID()}.tmp`;
+  const temporary = `${ACQUISITION_STATE_FILE}.${process.pid}.${randomUUID()}.tmp`;
   const temporaryHandle = await open(
     temporary,
     fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY,
@@ -266,8 +258,8 @@ async function persistAcquisitionState(state) {
   } finally {
     await temporaryHandle.close();
   }
-  await rename(temporary, resolvePLivePaths().acquisitionStateFile);
-  const directoryHandle = await open(dirname(resolvePLivePaths().acquisitionStateFile), "r");
+  await rename(temporary, ACQUISITION_STATE_FILE);
+  const directoryHandle = await open(dirname(ACQUISITION_STATE_FILE), "r");
   try {
     await directoryHandle.sync();
   } finally {
@@ -276,7 +268,7 @@ async function persistAcquisitionState(state) {
 }
 
 async function withAcquisitionLock(operationId, callback) {
-  const lockPath = `${resolvePLivePaths().acquisitionStateFile}.lock`;
+  const lockPath = `${ACQUISITION_STATE_FILE}.lock`;
   const token = randomUUID();
   let handle;
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -379,7 +371,7 @@ export async function resumeAcquisitionBeforeFreshQuote(
 
 async function loadOrCreateOwner({ allowCreate = true } = {}) {
   try {
-    const current = await loadEnv(resolvePLivePaths().secretFile);
+    const current = await loadEnv(SECRET_FILE);
     const seed = current.P_LIVE_OWNER_SEED;
     const address = current.P_LIVE_OWNER_ADDRESS;
     if (!seed || !address) throw new Error("P-live secret file is incomplete");
@@ -402,7 +394,7 @@ async function loadOrCreateOwner({ allowCreate = true } = {}) {
     `P_LIVE_OWNER_SEED=${wallet.seed}`,
     "",
   ].join("\n");
-  await writeFile(resolvePLivePaths().secretFile, contents, {
+  await writeFile(SECRET_FILE, contents, {
     encoding: "utf8",
     flag: fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY,
     mode: 0o600,
@@ -555,7 +547,7 @@ function assertApprovalMatchesBuild(build, execution) {
 }
 
 async function harborConfig() {
-  const env = await loadEnv(resolvePLivePaths().pilotEnvFile);
+  const env = await loadEnv(PILOT_ENV_FILE);
   if (!env.HARBOR_URL || !env.HARBOR_API_KEY) {
     throw new Error("Hosted Harbor configuration is missing");
   }

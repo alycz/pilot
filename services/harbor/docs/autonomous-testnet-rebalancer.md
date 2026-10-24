@@ -117,4 +117,13 @@ visible and reserved until reconciliation.
 
 ## Verification requirements
 
-Run the focused engine, store, runner, adapter, operation, cron, sequence, cross-producer, and x402 suites, followed by full typecheck and offline CI. These checks do not prove wallet signing, Testnet submission, funding, deployment, or scheduler activation.
+Run the focused engine, store, runner, adapter, operation, cron, sequence,
+cross-producer, and x402 suites from the destination. Then run its complete
+typecheck and offline CI. Those checks do not prove wallet signing, Testnet
+submission, funding, deployment, or scheduler activation.
+its own exact-head hosted CI before it can be used. Passing source checks are
+not live Testnet acceptance.
+
+Intentionally not run: live Testnet signing or submission, faucet use, grant or
+revocation, provider calls, owner-key access, mainnet execution, deployment, or
+cloud scheduler/resource creation.

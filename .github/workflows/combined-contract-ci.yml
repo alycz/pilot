@@ -34,3 +34,4 @@ jobs:
           actual="$(shasum -a 256 services/harbor/src/contracts.ts | awk '{print $1}')"
           expected="$(tr -d '[:space:]' < packages/contracts/CONTRACT_HASH)"
           test "$actual" = "$expected"
+

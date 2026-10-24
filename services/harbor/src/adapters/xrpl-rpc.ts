@@ -125,11 +125,11 @@ async function boundedResponseJson(response: Response): Promise<unknown> {
   const declaredLength = response.headers.get("content-length");
   if (declaredLength !== null) {
     if (!/^[0-9]+$/.test(declaredLength)) {
-      await response.body?.cancel().catch(() => undefined);
+      void response.body?.cancel().catch(() => undefined);
       throw malformedJsonResponse();
     }
     if (BigInt(declaredLength) > BigInt(XRPL_RPC_MAX_RESPONSE_BYTES)) {
-      await response.body?.cancel().catch(() => undefined);
+      void response.body?.cancel().catch(() => undefined);
       throw oversizedJsonResponse();
     }
   }
@@ -145,14 +145,14 @@ async function boundedResponseJson(response: Response): Promise<unknown> {
       if (next.done) break;
       totalBytes += next.value.byteLength;
       if (totalBytes > XRPL_RPC_MAX_RESPONSE_BYTES) {
-        await reader.cancel().catch(() => undefined);
+        void reader.cancel().catch(() => undefined);
         throw oversizedJsonResponse();
       }
       chunks.push(next.value);
     }
   } catch (error) {
     if (error instanceof XrplRpcError) throw error;
-    await reader.cancel().catch(() => undefined);
+    void reader.cancel().catch(() => undefined);
     throw malformedJsonResponse();
   } finally {
     reader.releaseLock();
@@ -196,6 +196,7 @@ export class JsonRpcTransport implements XrplTransport {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ method: request.command, params: [request.params] }),
+        redirect: "error",
         signal: request.signal,
       });
     } catch {
@@ -208,6 +209,7 @@ export class JsonRpcTransport implements XrplTransport {
     }
 
     if (!response.ok) {
+      void response.body?.cancel().catch(() => undefined);
       throw new XrplRpcError(
         `XRPL endpoint returned HTTP ${response.status}`,
         `HTTP_${response.status}`,

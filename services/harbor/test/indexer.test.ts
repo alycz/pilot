@@ -83,6 +83,7 @@ describe("indexer adapter", () => {
     );
     expect(url.searchParams.get("desc")).toBe("yes");
     expect((init?.headers as Headers).get("x-api-key")).toBe("fixture-key");
+    expect(init?.redirect).toBe("error");
   });
 
   it("demonstrably uses XRPSCAN when the forced primary request fails", async () => {

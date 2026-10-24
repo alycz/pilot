@@ -1,18 +1,10 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
-
 /*
- * Pilot design tokens. The product ships light-only ("paper"); the dark block below is dormant.
- * Neutral graphite surfaces, hairline borders, square corners, Geist Sans for
- * reading text and Geist Mono uppercase for labels and data. Orange is reserved
- * for focus and selection; green / amber / red stay semantic.
- * A light theme only needs to redefine this block.
- */
-/*
- * Neutral functional design tokens.
- * Semantic state colors remain distinct across supported themes.
+ * Neutral functional tokens for the twelve-PR reconstruction sequence.
+ * Product branding and final visual design are applied only in the separately
+ * authorized post-sequence stage. Semantic state colors remain distinct.
  */
 :root {
   color-scheme: light;
@@ -129,6 +121,11 @@
   --sidebar-ring: var(--ring);
 
   --color-white: #ffffff;
+}
+
+
+.dark {
+  color-scheme: dark;
 }
 
 @theme inline {

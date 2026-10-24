@@ -103,3 +103,4 @@ describe("synthetic hosted-read contract fixture", () => {
     }
   });
 });
+

@@ -1,7 +1,10 @@
+import { join } from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
 import {
   LOCAL_AUTONOMY_TESTNET_V1_ORIGIN,
+  LOCAL_AUTONOMY_TESTNET_V1_STATE_ROOT,
   LOCAL_AUTONOMY_TESTNET_V1_SCHEDULED_URL,
 } from "../scripts/dev-local-autonomy-testnet-v1.mjs";
 import {
@@ -111,7 +114,7 @@ describe("local autonomy Testnet v1 tick evidence", () => {
     const sequence: string[] = [];
     const writeEvidence = vi.fn(async (path: string, contents: string, options: object) => {
       sequence.push("write");
-      expect(path).toMatch(/\/absolute\/private\/pilot\/harbor-state\/harbor-autonomy-testnet-v1\/evidence\/scheduled-buy-001\.json$/);
+      expect(path).toBe(join(LOCAL_AUTONOMY_TESTNET_V1_STATE_ROOT, "evidence", "scheduled-buy-001.json"));
       expect(options).toEqual({ encoding: "utf8", flag: "wx", mode: 0o600 });
       expect(JSON.parse(contents)).toEqual({ schema: "test" });
     });

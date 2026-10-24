@@ -6,6 +6,6 @@ test("golden 01 authenticates, funds, links, and validates DelegateSet on a test
   requireLane(lane, "authenticated-live");
   test.fixme(
     true,
-    "Requires an explicitly authorized test-network signer, faucet/funding handoff, and ledger mutation; this test remains disabled until that live lane is explicitly authorized.",
+    "Requires an explicitly authorized test-network signer, faucet/funding handoff, and ledger mutation; this preparation task performs no live actions.",
   );
 });

@@ -1,6 +1,6 @@
 # Local runbook
 
-Run from the Pilot repository root with Python 3.11, matching CI and the lock's resolver target. Use a temporary virtual environment and install the complete hash-locked graph from official PyPI. Initial installation needs network access; the tests below do not.
+Run from the Pilot repository root with Python 3.11, matching CI and the lock's resolver target. The checked task used a temporary virtual environment and installed the complete hash-locked graph from official PyPI. Initial installation needs network access; the tests below do not.
 
 ## Install and test
 
@@ -50,7 +50,7 @@ Invoice storage is fixed at `apps/web/api/x402/.local/invoices.sqlite3`; an envi
 
 ## Start on loopback only
 
-The isolated lane must use its fail-closed entrypoint:
+The reviewed isolated lane must use its fail-closed entrypoint:
 
 ```bash
 /tmp/pilot-x402-venv/bin/python -m uvicorn apps.web.api.x402.isolated_compare:app \
@@ -58,7 +58,7 @@ The isolated lane must use its fail-closed entrypoint:
 ```
 
 The reusable `apps.web.api.x402.compare:app` entrypoint retains the generic
-configurable-price contract and is not the isolated fail-closed lane.
+configurable-price contract and is not the reviewed isolated lane.
 
 In another shell, inspect the unpaid challenge:
 

@@ -44,14 +44,14 @@ test("desktop harness opens, minimizes, and tolerates repeated toggle clicks", a
   const panel = page.getByTestId(panelTestId);
   await expect(toggle).toHaveCount(1);
   await expect(panel).toHaveCount(1);
-  await expect(toggle).toHaveAccessibleName(/open pilot harness chat/i);
+  await expect(toggle).toHaveAccessibleName(/open workspace chat/i);
   await expect(panel).not.toBeVisible();
 
   for (let index = 0; index < 3; index += 1) {
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
     await expect(panel).toBeVisible();
-    await expect(page.getByRole("region", { name: "Pilot harness chat" })).toHaveCount(1);
+    await expect(page.getByRole("region", { name: "Workspace chat" })).toHaveCount(1);
     if (index === 0) {
       const composer = panel.getByLabel("Message Pilot");
       await composer.click();
@@ -101,7 +101,7 @@ test("mobile harness is a contained overlay and Escape returns focus to its open
   expect(bounds?.x ?? -1).toBeGreaterThanOrEqual(0);
   expect((bounds?.x ?? 0) + (bounds?.width ?? 376)).toBeLessThanOrEqual(375);
 
-  await expect(panel.getByRole("button", { name: "Minimize Pilot harness chat" })).toBeFocused();
+  await expect(panel.getByRole("button", { name: "Minimize workspace chat" })).toBeFocused();
   await page.keyboard.press("Shift+Tab");
   expect(await panel.evaluate((element) => element.contains(document.activeElement))).toBe(true);
   await page.getByTestId(backdropTestId).click({ position: { x: 374, y: 400 } });
@@ -159,7 +159,7 @@ test("full chat route reuses the one persistent conversation instead of mounting
   await page.goto("/chat");
 
   await expect(page.getByTestId(panelTestId)).toHaveCount(1);
-  await expect(page.getByRole("region", { name: "Pilot harness chat" })).toHaveCount(1);
+  await expect(page.getByRole("region", { name: "Workspace chat" })).toHaveCount(1);
   await expect(page.getByLabel("Message Pilot")).toHaveCount(1);
   await expect(page.getByTestId(toggleTestId)).toHaveCount(0);
 

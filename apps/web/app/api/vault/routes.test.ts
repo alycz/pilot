@@ -342,6 +342,68 @@ describe("vault API routes", () => {
     expect(response.status).toBe(400);
   });
 
+  it("rejects an oversized JSON mutation before calling the vault service", async () => {
+    const service = getVaultService();
+    const write = vi.spyOn(service, "write");
+    try {
+      const response = await writeNote(
+        new Request("http://local/api/vault/write", {
+          method: "POST",
+          headers: {
+            authorization: vaultApiAuthorizationHeader(),
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            path: "../must-not-be-reached.md",
+            content: "x".repeat(1_048_576),
+          }),
+        }),
+      );
+
+      expect(response.status).toBe(413);
+      expect((await payload(response)).error.message).toMatch(/too large/i);
+      expect(write).not.toHaveBeenCalled();
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it("does not wait for an oversized request stream to finish cancelling", async () => {
+    const service = getVaultService();
+    const write = vi.spyOn(service, "write");
+    const never = new Promise<void>(() => undefined);
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(1_048_577));
+      },
+      cancel() {
+        return never;
+      },
+    });
+    try {
+      const response = await Promise.race([
+        writeNote(new Request("http://local/api/vault/write", {
+          method: "POST",
+          headers: {
+            authorization: vaultApiAuthorizationHeader(),
+            "content-type": "application/json",
+          },
+          body,
+          duplex: "half",
+        } as RequestInit & { duplex: "half" })),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error("oversized response timed out")), 250);
+        }),
+      ]);
+
+      expect(response.status).toBe(413);
+      expect((await payload(response)).error.message).toMatch(/too large/i);
+      expect(write).not.toHaveBeenCalled();
+    } finally {
+      write.mockRestore();
+    }
+  });
+
   it("redacts configured secrets from error responses", async () => {
     vi.stubEnv("VAULT_GITHUB_TOKEN", "vault-token-that-must-not-leak");
     const response = errorResponse(new Error("failed with vault-token-that-must-not-leak"));

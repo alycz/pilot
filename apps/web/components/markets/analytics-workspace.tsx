@@ -364,15 +364,15 @@ function StateDot({ status }: { status: AnalyticsSnapshot["status"] }) {
 function WorkspaceLoading() {
   return (
     <div aria-live="polite" aria-busy="true" aria-label="Loading market analytics" className="grid gap-5 xl:grid-cols-[13rem_minmax(0,1fr)_18rem]">
-      <div className="h-72 animate-pulse border border-border bg-card" />
+      <div className="h-72 animate-pulse border border-border bg-card motion-reduce:animate-none" />
       <div className="space-y-5">
-        <div className="h-28 animate-pulse border border-border bg-card" />
+        <div className="h-28 animate-pulse border border-border bg-card motion-reduce:animate-none" />
         <div className="grid grid-cols-2 gap-px border border-border bg-border sm:grid-cols-3 xl:grid-cols-6">
-          {Array.from({ length: 6 }).map((_, index) => <div key={index} className="h-20 animate-pulse bg-card" />)}
+          {Array.from({ length: 6 }).map((_, index) => <div key={index} className="h-20 animate-pulse bg-card motion-reduce:animate-none" />)}
         </div>
-        <div className="h-80 animate-pulse border border-border bg-card" />
+        <div className="h-80 animate-pulse border border-border bg-card motion-reduce:animate-none" />
       </div>
-      <div className="hidden h-[34rem] animate-pulse border border-border bg-card xl:block" />
+      <div className="hidden h-[34rem] animate-pulse border border-border bg-card motion-reduce:animate-none xl:block" />
     </div>
   );
 }

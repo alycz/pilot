@@ -105,8 +105,7 @@ export async function runQ1Coverage(
     args.get("--output") ?? "src/quicknode/coverage.testnet.json",
   );
   const fixture = args.get("--fixture");
-  const statusInput = args.get("--status") ?? (process.env.HARBOR_PRIVATE_EVIDENCE_ROOT ? resolve(process.env.HARBOR_PRIVATE_EVIDENCE_ROOT, "quicknode.md") : undefined);
-  const status = statusInput ? resolve(statusInput) : undefined;
+  const status = resolve(args.get("--status") ?? "status/H-qn.md");
 
   try {
     if (fixture && mode === "live") {
@@ -132,7 +131,6 @@ export async function runQ1Coverage(
     ) {
       throw new Error("Coverage output does not contain the exact method set");
     }
-    if (!status) throw new Error("--status or HARBOR_PRIVATE_EVIDENCE_ROOT is required");
     await recordProbeResult(
       "q1-coverage",
       mode,
@@ -144,7 +142,7 @@ export async function runQ1Coverage(
       dependencies,
     );
   } catch (error) {
-    if (status) await recordProbeResult(
+    await recordProbeResult(
       "q1-coverage",
       mode,
       false,

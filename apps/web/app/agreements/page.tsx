@@ -14,7 +14,7 @@ type WorkAgreementPageProps = Readonly<{
   searchParams?: Promise<Readonly<{ demo?: string }>>;
 }>;
 
-export default async function WorkAgreementPage({ searchParams }: WorkAgreementPageProps = {}) {
+export default async function WorkAgreementPage({ searchParams }: WorkAgreementPageProps) {
   const params: Readonly<{ demo?: string }> = await (
     searchParams ?? Promise.resolve({} as Readonly<{ demo?: string }>)
   );

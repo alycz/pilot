@@ -22,7 +22,7 @@ describe("work-agreement fixture UI", () => {
   });
 
   it("mounts the durable owner-reviewed workspace by default", async () => {
-    const page = await WorkAgreementFixturePage();
+    const page = await WorkAgreementFixturePage({});
     const markup = renderToStaticMarkup(page);
     expect(markup).toContain("Owner-reviewed escrow workspace");
     expect(markup).toContain("Local mock settlement only");

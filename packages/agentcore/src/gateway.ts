@@ -1,14 +1,16 @@
 import { randomUUID } from "node:crypto";
 
+import { z } from "zod";
+
 import {
   AGENTCORE_MCP_PROTOCOL_VERSION,
   AgentCoreGatewayArgumentsSchema,
   AgentCoreGatewayErrorSchema,
+  AgentCoreGatewayInitializeResultSchema,
   AgentCoreGatewayResultSchema,
+  AgentCoreGatewaySessionIdSchema,
   AgentCoreGatewayToolNameSchema,
-  AgentCoreServerScopeSchema,
   type AgentCoreGatewayArguments,
-  type AgentCoreServerScope,
 } from "./contracts";
 
 export type AgentCoreGatewayAuth = Readonly<{
@@ -17,12 +19,16 @@ export type AgentCoreGatewayAuth = Readonly<{
 
 export type AgentCoreGatewayClient = Readonly<{
   callReadTool(
-    input: Omit<AgentCoreGatewayArguments, "scope">,
+    input: Omit<AgentCoreGatewayArguments, "scopeDigest">,
     options?: Readonly<{ signal?: AbortSignal }>,
   ): Promise<Readonly<Record<string, unknown>>>;
 }>;
 
-async function boundedBytes(response: Response, maxBytes: number): Promise<Uint8Array> {
+async function boundedBytes(
+  response: Response,
+  maxBytes: number,
+  signal: AbortSignal,
+): Promise<Uint8Array> {
   const declared = response.headers.get("content-length");
   if (declared && /^\d+$/.test(declared) && Number(declared) > maxBytes) {
     await response.body?.cancel().catch(() => undefined);
@@ -34,7 +40,34 @@ async function boundedBytes(response: Response, maxBytes: number): Promise<Uint8
   let total = 0;
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      if (signal.aborted) {
+        await reader.cancel().catch(() => undefined);
+        throw new Error("AgentCore Gateway response read timed out");
+      }
+      const { done, value } = await new Promise<ReadableStreamReadResult<Uint8Array>>(
+        (resolve, reject) => {
+          let settled = false;
+          const finish = (work: () => void): void => {
+            if (settled) return;
+            settled = true;
+            signal.removeEventListener("abort", onAbort);
+            work();
+          };
+          const onAbort = (): void => {
+            void reader.cancel().catch(() => undefined);
+            finish(() => reject(new Error("AgentCore Gateway response read timed out")));
+          };
+          signal.addEventListener("abort", onAbort, { once: true });
+          if (signal.aborted) {
+            onAbort();
+            return;
+          }
+          reader.read().then(
+            (result) => finish(() => resolve(result)),
+            () => finish(() => reject(new Error("AgentCore Gateway response read failed"))),
+          );
+        },
+      );
       if (done) break;
       total += value.byteLength;
       if (total > maxBytes) {
@@ -44,7 +77,11 @@ async function boundedBytes(response: Response, maxBytes: number): Promise<Uint8
       chunks.push(value);
     }
   } finally {
-    reader.releaseLock();
+    try {
+      reader.releaseLock();
+    } catch {
+      // A non-compliant stream may retain a pending read after cancellation.
+    }
   }
   const result = new Uint8Array(total);
   let offset = 0;
@@ -55,9 +92,13 @@ async function boundedBytes(response: Response, maxBytes: number): Promise<Uint8
   return result;
 }
 
-async function boundedPayloads(response: Response, maxBytes: number): Promise<unknown[]> {
+async function boundedPayloads(
+  response: Response,
+  maxBytes: number,
+  signal: AbortSignal,
+): Promise<unknown[]> {
   const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
-  const bytes = await boundedBytes(response, maxBytes);
+  const bytes = await boundedBytes(response, maxBytes, signal);
   let text: string;
   try {
     text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
@@ -85,7 +126,7 @@ async function boundedPayloads(response: Response, maxBytes: number): Promise<un
 export function createAgentCoreGatewayClient(input: Readonly<{
   gatewayUrl: string;
   gatewayToolName: string;
-  scope: AgentCoreServerScope;
+  scopeDigest: string;
   auth: AgentCoreGatewayAuth;
   fetch?: typeof fetch;
   timeoutMs?: number;
@@ -102,13 +143,13 @@ export function createAgentCoreGatewayClient(input: Readonly<{
   }
   const transport = input.fetch ?? globalThis.fetch;
   const gatewayToolName = AgentCoreGatewayToolNameSchema.parse(input.gatewayToolName);
-  const scope = AgentCoreServerScopeSchema.parse(input.scope);
+  const scopeDigest = z.string().regex(/^[a-f0-9]{64}$/).parse(input.scopeDigest);
   const timeoutMs = input.timeoutMs ?? 30_000;
   const maxResponseBytes = input.maxResponseBytes ?? 256 * 1024;
 
   return {
     async callReadTool(raw, options = {}) {
-      const args = AgentCoreGatewayArgumentsSchema.parse({ ...raw, scope });
+      const args = AgentCoreGatewayArgumentsSchema.parse({ ...raw, scopeDigest });
       const signal = options.signal
         ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)])
         : AbortSignal.timeout(timeoutMs);
@@ -121,16 +162,10 @@ export function createAgentCoreGatewayClient(input: Readonly<{
       if (!/^Bearer [^\s]+$/.test(authorization)) {
         throw new Error("AgentCore Gateway authorization is unavailable");
       }
-      const id = randomUUID();
-      const body = JSON.stringify({
-        jsonrpc: "2.0",
-        id,
-        method: "tools/call",
-        params: { name: gatewayToolName, arguments: args },
-      });
-      let response: Response;
+      const initializeId = randomUUID();
+      let initializeResponse: Response;
       try {
-        response = await transport(url, {
+        initializeResponse = await transport(url, {
           method: "POST",
           redirect: "error",
           signal,
@@ -138,32 +173,180 @@ export function createAgentCoreGatewayClient(input: Readonly<{
             accept: "application/json, text/event-stream",
             authorization,
             "content-type": "application/json",
-            "mcp-protocol-version": AGENTCORE_MCP_PROTOCOL_VERSION,
           },
-          body,
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: initializeId,
+            method: "initialize",
+            params: {
+              protocolVersion: AGENTCORE_MCP_PROTOCOL_VERSION,
+              capabilities: {},
+              clientInfo: { name: "pilot-agentcore-runtime", version: "1.0.0" },
+            },
+          }),
         });
       } catch {
-        throw new Error("AgentCore Gateway transport failed");
+        throw new Error("AgentCore Gateway initialization failed");
       }
-      if (!response.ok || response.redirected) {
-        await response.body?.cancel().catch(() => undefined);
-        throw new Error(`AgentCore Gateway request failed with status ${response.status}`);
+      if (!initializeResponse.ok || initializeResponse.redirected) {
+        await initializeResponse.body?.cancel().catch(() => undefined);
+        throw new Error(`AgentCore Gateway initialization failed with status ${initializeResponse.status}`);
       }
-      const payloads = await boundedPayloads(response, maxResponseBytes);
-      if (payloads.some((payload) => {
-        const parsed = AgentCoreGatewayErrorSchema.safeParse(payload);
-        return parsed.success && parsed.data.id === id;
-      })) {
-        throw new Error("AgentCore Gateway returned a JSON-RPC error");
+      const sessionId = AgentCoreGatewaySessionIdSchema.safeParse(
+        initializeResponse.headers.get("mcp-session-id"),
+      );
+      if (!sessionId.success) {
+        await initializeResponse.body?.cancel().catch(() => undefined);
+        throw new Error("AgentCore Gateway returned an invalid session");
       }
-      const matches = payloads
-        .map((payload) => AgentCoreGatewayResultSchema.safeParse(payload))
-        .filter((parsed) => parsed.success && parsed.data.id === id);
-      const match = matches[0];
-      if (matches.length !== 1 || !match?.success) {
-        throw new Error("AgentCore Gateway returned an invalid scoped result");
+      const sessionHeaders = {
+        accept: "application/json, text/event-stream",
+        authorization,
+        "content-type": "application/json",
+        "mcp-session-id": sessionId.data,
+        "mcp-protocol-version": AGENTCORE_MCP_PROTOCOL_VERSION,
+      } as const;
+      const cleanupTimeoutMs = Math.max(100, Math.min(timeoutMs, 1_000));
+      const boundedCleanup = async (
+        work: (cleanupSignal: AbortSignal) => Promise<void>,
+        cleanupSignal: AbortSignal,
+      ): Promise<void> => {
+        if (cleanupSignal.aborted) return;
+        const pending = Promise.resolve().then(() => work(cleanupSignal));
+        let onAbort!: () => void;
+        const aborted = new Promise<void>((resolve) => {
+          onAbort = resolve;
+          cleanupSignal.addEventListener("abort", onAbort, { once: true });
+          if (cleanupSignal.aborted) onAbort();
+        });
+        try {
+          await Promise.race([pending.catch(() => undefined), aborted]);
+        } finally {
+          cleanupSignal.removeEventListener("abort", onAbort);
+          void pending.catch(() => undefined);
+        }
+      };
+      const cleanup = async (cancelRequestId?: string): Promise<void> => {
+        if (cancelRequestId) {
+          await boundedCleanup(async (requestSignal) => {
+            const cancellation = await transport(url, {
+              method: "POST",
+              redirect: "error",
+              signal: requestSignal,
+              headers: sessionHeaders,
+              body: JSON.stringify({
+                jsonrpc: "2.0",
+                method: "notifications/cancelled",
+                params: { requestId: cancelRequestId, reason: "request cancelled" },
+              }),
+            });
+            await cancellation.body?.cancel().catch(() => undefined);
+          }, AbortSignal.timeout(cleanupTimeoutMs));
+        }
+        await boundedCleanup(async (requestSignal) => {
+          const ended = await transport(url, {
+            method: "DELETE",
+            redirect: "error",
+            signal: requestSignal,
+            headers: {
+              accept: "application/json, text/event-stream",
+              authorization,
+              "mcp-session-id": sessionId.data,
+              "mcp-protocol-version": AGENTCORE_MCP_PROTOCOL_VERSION,
+            },
+          });
+          await ended.body?.cancel().catch(() => undefined);
+        }, AbortSignal.timeout(cleanupTimeoutMs));
+      };
+
+      let toolRequestId: string | undefined;
+      let toolDispatched = false;
+      let cleanupStarted = false;
+      try {
+        const initializePayloads = await boundedPayloads(initializeResponse, maxResponseBytes, signal);
+        if (initializePayloads.some((payload) => {
+          const parsed = AgentCoreGatewayErrorSchema.safeParse(payload);
+          return parsed.success && parsed.data.id === initializeId;
+        })) {
+          throw new Error("AgentCore Gateway initialization returned a JSON-RPC error");
+        }
+        const initialized = initializePayloads
+          .map((payload) => AgentCoreGatewayInitializeResultSchema.safeParse(payload))
+          .filter((parsed) => parsed.success && parsed.data.id === initializeId);
+        if (initialized.length !== 1) {
+          throw new Error("AgentCore Gateway returned an invalid initialization result");
+        }
+        let notificationResponse: Response;
+        try {
+          notificationResponse = await transport(url, {
+            method: "POST",
+            redirect: "error",
+            signal,
+            headers: sessionHeaders,
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              method: "notifications/initialized",
+            }),
+          });
+        } catch {
+          throw new Error("AgentCore Gateway initialization acknowledgement failed");
+        }
+        if (notificationResponse.redirected || notificationResponse.status !== 202) {
+          await notificationResponse.body?.cancel().catch(() => undefined);
+          throw new Error(
+            `AgentCore Gateway initialization acknowledgement failed with status ${notificationResponse.status}`,
+          );
+        }
+        await notificationResponse.body?.cancel().catch(() => undefined);
+        toolRequestId = randomUUID();
+        const body = JSON.stringify({
+          jsonrpc: "2.0",
+          id: toolRequestId,
+          method: "tools/call",
+          params: { name: gatewayToolName, arguments: args },
+        });
+        if (signal.aborted) throw new Error("AgentCore Gateway transport failed");
+        let response: Response;
+        try {
+          toolDispatched = true;
+          response = await transport(url, {
+            method: "POST",
+            redirect: "error",
+            signal,
+            headers: sessionHeaders,
+            body,
+          });
+        } catch {
+          throw new Error("AgentCore Gateway transport failed");
+        }
+        if (!response.ok || response.redirected) {
+          await response.body?.cancel().catch(() => undefined);
+          throw new Error(`AgentCore Gateway request failed with status ${response.status}`);
+        }
+        const payloads = await boundedPayloads(response, maxResponseBytes, signal);
+        if (payloads.some((payload) => {
+          const parsed = AgentCoreGatewayErrorSchema.safeParse(payload);
+          return parsed.success && parsed.data.id === toolRequestId;
+        })) {
+          throw new Error("AgentCore Gateway returned a JSON-RPC error");
+        }
+        const matches = payloads
+          .map((payload) => AgentCoreGatewayResultSchema.safeParse(payload))
+          .filter((parsed) => parsed.success && parsed.data.id === toolRequestId);
+        const match = matches[0];
+        if (matches.length !== 1 || !match?.success) {
+          throw new Error("AgentCore Gateway returned an invalid scoped result");
+        }
+        return match.data.result.structuredContent;
+      } catch (error) {
+        if (toolDispatched) {
+          cleanupStarted = true;
+          await cleanup(toolRequestId);
+        }
+        throw error;
+      } finally {
+        if (!cleanupStarted) await cleanup();
       }
-      return match.data.result.structuredContent;
     },
   };
 }

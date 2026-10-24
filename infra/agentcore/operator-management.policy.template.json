@@ -1,0 +1,87 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CreateTaggedPilotRuntime",
+      "Effect": "Allow",
+      "Action": "bedrock-agentcore:CreateAgentRuntime",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestTag/pilot:project": "pilot",
+          "aws:RequestTag/pilot:component": "agentcore-runtime",
+          "aws:RequestTag/pilot:authority": "read-only-research",
+          "aws:RequestTag/pilot:environment": "testnet"
+        },
+        "ForAllValues:StringEquals": {
+          "aws:TagKeys": ["pilot:project", "pilot:component", "pilot:authority", "pilot:environment"]
+        }
+      }
+    },
+    {
+      "Sid": "CreateTaggedPilotGateway",
+      "Effect": "Allow",
+      "Action": "bedrock-agentcore:CreateGateway",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestTag/pilot:project": "pilot",
+          "aws:RequestTag/pilot:component": "agentcore-gateway",
+          "aws:RequestTag/pilot:authority": "read-only-research",
+          "aws:RequestTag/pilot:environment": "testnet"
+        },
+        "ForAllValues:StringEquals": {
+          "aws:TagKeys": ["pilot:project", "pilot:component", "pilot:authority", "pilot:environment"]
+        }
+      }
+    },
+    {
+      "Sid": "ManageOnlyPilotAgentCoreResources",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock-agentcore:GetAgentRuntime",
+        "bedrock-agentcore:UpdateAgentRuntime",
+        "bedrock-agentcore:DeleteAgentRuntime",
+        "bedrock-agentcore:CreateAgentRuntimeEndpoint",
+        "bedrock-agentcore:GetAgentRuntimeEndpoint",
+        "bedrock-agentcore:UpdateAgentRuntimeEndpoint",
+        "bedrock-agentcore:DeleteAgentRuntimeEndpoint",
+        "bedrock-agentcore:GetGateway",
+        "bedrock-agentcore:UpdateGateway",
+        "bedrock-agentcore:DeleteGateway",
+        "bedrock-agentcore:CreateGatewayTarget",
+        "bedrock-agentcore:GetGatewayTarget",
+        "bedrock-agentcore:UpdateGatewayTarget",
+        "bedrock-agentcore:DeleteGatewayTarget",
+        "bedrock-agentcore:SynchronizeGatewayTargets",
+        "bedrock-agentcore:TagResource",
+        "bedrock-agentcore:UntagResource"
+      ],
+      "Resource": [
+        "arn:aws:bedrock-agentcore:us-east-1:ACCOUNT_ID:runtime/PilotResearchRuntime-*",
+        "arn:aws:bedrock-agentcore:us-east-1:ACCOUNT_ID:runtime/PilotResearchRuntime-*/runtime-endpoint/*",
+        "arn:aws:bedrock-agentcore:us-east-1:ACCOUNT_ID:gateway/PilotResearchGateway-*"
+      ]
+    },
+    {
+      "Sid": "PassOnlyAgentCoreExecutionRoles",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": [
+        "RUNTIME_EXECUTION_ROLE_ARN",
+        "GATEWAY_EXECUTION_ROLE_ARN"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "bedrock-agentcore.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "DenyKeyAndSecretManagement",
+      "Effect": "Deny",
+      "Action": ["kms:*", "secretsmanager:*", "ssm:*"],
+      "Resource": "*"
+    }
+  ]
+}

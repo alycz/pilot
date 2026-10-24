@@ -135,13 +135,14 @@ const PreferenceProposalSchema = z
 const AgentCoreResearchSchema = z
   .object({
     query: z.string().trim().min(1).max(4_000),
-    context: z.object({
-      pair: z.string().trim().min(3).max(32).regex(/^[A-Z0-9]{2,12}\/[A-Z0-9]{2,12}$/).optional(),
-      venue: z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9._-]+$/).optional(),
-      timeframe: z.enum(["spot", "1h", "1d", "7d", "30d"]).optional(),
-    }).strict().default({}),
   })
   .strict();
+
+const AGENTCORE_PUBLIC_MARKET_CONTEXT = Object.freeze({
+  pair: "XRP/RLUSD",
+  venue: "xrpl-testnet-dex",
+  timeframe: "spot",
+} as const);
 
 const HarborExecuteSchema = z
   .object({
@@ -777,9 +778,9 @@ export function createAgentTools(options: AgentToolOptions) {
     ? {
       agentcore_research: tool({
         description:
-          "Ask the configured AgentCore research runtime for bounded read-only advice. It cannot build, approve, sign, submit, or pay for transactions; any later action still requires propose_intent and Harbor policy.",
+          "Ask the configured AgentCore runtime for bounded read-only XRP/RLUSD XRPL Testnet spot research. The server fixes all market selectors. It cannot build, approve, sign, submit, or pay for transactions; any later action still requires propose_intent and Harbor policy.",
         inputSchema: AgentCoreResearchSchema,
-        execute: async ({ query, context }, callOptions) => {
+        execute: async ({ query }, callOptions) => {
           if (mutationInvocationClaimed || agentCoreInvocationClaimed) {
             throw new Error("AgentCore research is limited to one isolated read-only call per chat run");
           }
@@ -788,7 +789,7 @@ export function createAgentTools(options: AgentToolOptions) {
             requestId: `agentcore-${randomUUID()}`,
             purpose: "read",
             prompt: query,
-            context,
+            context: AGENTCORE_PUBLIC_MARKET_CONTEXT,
           }, { signal: callOptions?.abortSignal });
         },
       }),

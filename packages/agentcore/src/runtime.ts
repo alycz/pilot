@@ -44,7 +44,41 @@ export class AgentCoreInvocationError extends Error {
   }
 }
 
-async function readSdkBody(body: InvokeAgentRuntimeCommandOutput["response"], maxBytes: number): Promise<Uint8Array> {
+async function readBeforeAbort<T>(
+  work: Promise<T>,
+  signal: AbortSignal,
+  cancel: () => void,
+): Promise<T> {
+  if (signal.aborted) {
+    cancel();
+    throw new AgentCoreInvocationError("uncertain", "AgentCore Runtime response read timed out");
+  }
+  let onAbort!: () => void;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => {
+      cancel();
+      reject(new AgentCoreInvocationError("uncertain", "AgentCore Runtime response read timed out"));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) onAbort();
+  });
+  try {
+    const result = await Promise.race([work, aborted]);
+    if (signal.aborted) {
+      throw new AgentCoreInvocationError("uncertain", "AgentCore Runtime response read timed out");
+    }
+    return result;
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+    void work.catch(() => undefined);
+  }
+}
+
+async function readSdkBody(
+  body: InvokeAgentRuntimeCommandOutput["response"],
+  maxBytes: number,
+  signal: AbortSignal,
+): Promise<Uint8Array> {
   if (!body) throw new AgentCoreInvocationError("failed", "AgentCore Runtime returned an empty response");
   if (body instanceof Uint8Array) {
     if (body.byteLength > maxBytes) throw new AgentCoreInvocationError("failed", "AgentCore Runtime response exceeded the byte limit");
@@ -55,12 +89,26 @@ async function readSdkBody(body: InvokeAgentRuntimeCommandOutput["response"], ma
     const chunks: Uint8Array[] = [];
     let total = 0;
     const iterator = stream[Symbol.asyncIterator]();
+    let cancelRequested = false;
+    const cancel = () => {
+      if (cancelRequested) return;
+      cancelRequested = true;
+      try {
+        void Promise.resolve(iterator.return?.()).catch(() => undefined);
+      } catch {
+        // Cancellation is best effort; the deadline still wins the race.
+      }
+    };
     while (true) {
-      const { done, value } = await iterator.next();
+      const { done, value } = await readBeforeAbort(
+        Promise.resolve(iterator.next()),
+        signal,
+        cancel,
+      );
       if (done) break;
       total += value.byteLength;
       if (total > maxBytes) {
-        await iterator.return?.();
+        cancel();
         throw new AgentCoreInvocationError("failed", "AgentCore Runtime response exceeded the byte limit");
       }
       chunks.push(value);
@@ -114,8 +162,20 @@ function parseResponse(
 
 async function withDeadline<T>(timeoutMs: number, caller: AbortSignal | undefined, work: (signal: AbortSignal) => Promise<T>): Promise<T> {
   const signal = caller ? AbortSignal.any([caller, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs);
+  if (signal.aborted) {
+    throw new AgentCoreInvocationError("uncertain", "AgentCore Runtime invocation outcome is uncertain");
+  }
+  const pending = Promise.resolve().then(() => work(signal));
+  let onAbort!: () => void;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(
+      new AgentCoreInvocationError("uncertain", "AgentCore Runtime invocation outcome is uncertain"),
+    );
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) onAbort();
+  });
   try {
-    return await work(signal);
+    return await Promise.race([pending, aborted]);
   } catch (error) {
     if (error instanceof AgentCoreInvocationError) throw error;
     if (signal.aborted) throw new AgentCoreInvocationError("uncertain", "AgentCore Runtime invocation outcome is uncertain");
@@ -124,27 +184,46 @@ async function withDeadline<T>(timeoutMs: number, caller: AbortSignal | undefine
       throw new AgentCoreInvocationError("failed", `AgentCore Runtime rejected the request with status ${status}`);
     }
     throw new AgentCoreInvocationError("uncertain", "AgentCore Runtime transport failed after dispatch");
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+    // A noncompliant dependency may ignore AbortSignal. Observe late rejection
+    // while allowing the deadline to release the caller immediately.
+    void pending.catch(() => undefined);
   }
 }
 
-async function readFetchBody(response: Response, maxBytes: number): Promise<Uint8Array> {
+async function readFetchBody(
+  response: Response,
+  maxBytes: number,
+  signal: AbortSignal,
+): Promise<Uint8Array> {
   if (!response.body) return new Uint8Array();
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
+  let cancelRequested = false;
+  const cancel = () => {
+    if (cancelRequested) return;
+    cancelRequested = true;
+    void reader.cancel().catch(() => undefined);
+  };
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      const { done, value } = await readBeforeAbort(reader.read(), signal, cancel);
       if (done) break;
       total += value.byteLength;
       if (total > maxBytes) {
-        await reader.cancel();
+        cancel();
         throw new AgentCoreInvocationError("failed", "AgentCore Runtime response exceeded the byte limit");
       }
       chunks.push(value);
     }
   } finally {
-    reader.releaseLock();
+    try {
+      reader.releaseLock();
+    } catch {
+      // A noncompliant stream may keep the read pending after cancellation.
+    }
   }
   const result = new Uint8Array(total);
   let offset = 0;
@@ -236,7 +315,7 @@ export function createAgentCoreProposalProvider(input: Readonly<{
             await response.body?.cancel().catch(() => undefined);
             throw new AgentCoreInvocationError("failed", "AgentCore Runtime returned an unsupported content type");
           }
-          return parseResponse(await readFetchBody(response, config.maxResponseBytes), expected);
+          return parseResponse(await readFetchBody(response, config.maxResponseBytes, signal), expected);
         }
         const output = await sender!.send(new InvokeAgentRuntimeCommand({
           agentRuntimeArn: config.runtimeArn,
@@ -249,7 +328,7 @@ export function createAgentCoreProposalProvider(input: Readonly<{
         if (output.contentType?.split(";", 1)[0]?.trim() !== "application/json") {
           throw new AgentCoreInvocationError("failed", "AgentCore Runtime returned an unsupported content type");
         }
-        return parseResponse(await readSdkBody(output.response, config.maxResponseBytes), expected);
+        return parseResponse(await readSdkBody(output.response, config.maxResponseBytes, signal), expected);
       });
     },
   };

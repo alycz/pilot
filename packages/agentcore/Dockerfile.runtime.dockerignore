@@ -1,0 +1,11 @@
+**
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!packages/
+!packages/*/
+!packages/*/package.json
+!packages/agentcore/src/
+!packages/agentcore/src/**
+!packages/agent/src/
+!packages/agent/src/proposal-provider.ts

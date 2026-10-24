@@ -1,0 +1,264 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Inert account-time template for the bounded Pilot AgentCore public XRPL Testnet Lambda target. Requires an approved, versioned same-account package declaration and a two-phase target-ID activation.",
+  "Parameters": {
+    "TargetLambdaFunctionName": {
+      "Type": "String",
+      "AllowedPattern": "^[A-Za-z0-9_-]{1,64}$"
+    },
+    "TargetName": {
+      "Type": "String",
+      "Default": "PilotReadTarget",
+      "AllowedPattern": "^([0-9A-Za-z]-?){1,100}$"
+    },
+    "LambdaPackageBucketName": {
+      "Type": "String",
+      "AllowedPattern": "^[0-9A-Za-z._-]{3,63}$"
+    },
+    "LambdaPackageBucketOwnerAccountId": {
+      "Type": "String",
+      "AllowedPattern": "^[0-9]{12}$"
+    },
+    "LambdaPackageKey": {
+      "Type": "String",
+      "AllowedPattern": "^[A-Za-z0-9._/-]{1,512}$"
+    },
+    "LambdaPackageObjectVersion": {
+      "Type": "String",
+      "AllowedPattern": "^[A-Za-z0-9._~+/=-]{1,1024}$"
+    },
+    "LambdaPackageSha256Base64": {
+      "Type": "String",
+      "AllowedPattern": "^[A-Za-z0-9+/]{43}=$",
+      "Description": "Base64 SHA-256 of the exact accepted versioned zip object. Verify independently before stack activation."
+    },
+    "ConfiguredGatewayId": {
+      "Type": "String",
+      "Default": "",
+      "AllowedPattern": "^$|^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$"
+    },
+    "ConfiguredTargetId": {
+      "Type": "String",
+      "Default": "",
+      "AllowedPattern": "^$|^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$"
+    },
+    "RlusdTestnetIssuer": {
+      "Type": "String",
+      "AllowedPattern": "^r[1-9A-HJ-NP-Za-km-z]{24,34}$"
+    },
+    "MaxLedgerAgeSeconds": {
+      "Type": "Number",
+      "MinValue": 15,
+      "MaxValue": 300
+    },
+    "LambdaReservedConcurrency": {
+      "Type": "Number",
+      "MinValue": 1,
+      "MaxValue": 10
+    },
+    "LambdaLogRetentionDays": {
+      "Type": "Number",
+      "AllowedValues": [1, 3, 5, 7, 14, 30, 60, 90]
+    }
+  },
+  "Rules": {
+    "PackageOwnerMustMatchDestinationAccount": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Equals": [
+              { "Ref": "LambdaPackageBucketOwnerAccountId" },
+              { "Ref": "AWS::AccountId" }
+            ]
+          },
+          "AssertDescription": "The declared package-bucket owner must equal the destination stack account. Independently verify the actual object owner before deployment."
+        }
+      ]
+    },
+    "GatewayAndTargetIdsActivateTogether": {
+      "Assertions": [
+        {
+          "Assert": {
+            "Fn::Or": [
+              {
+                "Fn::And": [
+                  { "Fn::Equals": [{ "Ref": "ConfiguredGatewayId" }, ""] },
+                  { "Fn::Equals": [{ "Ref": "ConfiguredTargetId" }, ""] }
+                ]
+              },
+              {
+                "Fn::And": [
+                  { "Fn::Not": [{ "Fn::Equals": [{ "Ref": "ConfiguredGatewayId" }, ""] }] },
+                  { "Fn::Not": [{ "Fn::Equals": [{ "Ref": "ConfiguredTargetId" }, ""] }] }
+                ]
+              }
+            ]
+          },
+          "AssertDescription": "Gateway and target IDs must both be absent for the fail-closed bootstrap or both be present for activation."
+        }
+      ]
+    }
+  },
+  "Conditions": {
+    "TargetConfigured": {
+      "Fn::Not": [{ "Fn::Equals": [{ "Ref": "ConfiguredTargetId" }, ""] }]
+    }
+  },
+  "Resources": {
+    "TargetLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "LogGroupName": { "Fn::Sub": "/aws/lambda/${TargetLambdaFunctionName}" },
+        "LogGroupClass": "STANDARD",
+        "RetentionInDays": { "Ref": "LambdaLogRetentionDays" },
+        "DeletionProtectionEnabled": true,
+        "Tags": [
+          { "Key": "pilot:project", "Value": "pilot" },
+          { "Key": "pilot:component", "Value": "agentcore-lambda-target" },
+          { "Key": "pilot:authority", "Value": "read-public-testnet" },
+          { "Key": "pilot:environment", "Value": "testnet" }
+        ]
+      }
+    },
+    "TargetLambdaExecutionRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": { "Service": "lambda.amazonaws.com" },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "WriteOnlyOwnLogStream",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${TargetLambdaFunctionName}:log-stream:*"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "PolicyName": "DenySecretsSigningPaymentAndMutation",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Deny",
+                  "Action": [
+                    "iam:*",
+                    "kms:*",
+                    "secretsmanager:*",
+                    "ssm:GetParameter*",
+                    "sts:AssumeRole",
+                    "dynamodb:*",
+                    "bedrock-agentcore:GetResourceApiKey",
+                    "bedrock-agentcore:GetResourceOauth2Token",
+                    "bedrock-agentcore:GetResourcePaymentToken"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          { "Key": "pilot:component", "Value": "agentcore-lambda-target" },
+          { "Key": "pilot:authority", "Value": "logs-only" }
+        ]
+      }
+    },
+    "PublicMarketTargetFunction": {
+      "Type": "AWS::Lambda::Function",
+      "DependsOn": ["TargetLogGroup"],
+      "Properties": {
+        "FunctionName": { "Ref": "TargetLambdaFunctionName" },
+        "Description": "Bounded read-only XRP/RLUSD XRPL Testnet market context target; fails closed until exact Gateway and target IDs are configured.",
+        "Architectures": ["arm64"],
+        "Runtime": "nodejs22.x",
+        "PackageType": "Zip",
+        "Handler": "lambda-entry.handler",
+        "Code": {
+          "S3Bucket": { "Ref": "LambdaPackageBucketName" },
+          "S3Key": { "Ref": "LambdaPackageKey" },
+          "S3ObjectVersion": { "Ref": "LambdaPackageObjectVersion" }
+        },
+        "Role": { "Fn::GetAtt": ["TargetLambdaExecutionRole", "Arn"] },
+        "MemorySize": 256,
+        "Timeout": 10,
+        "EphemeralStorage": { "Size": 512 },
+        "ReservedConcurrentExecutions": { "Ref": "LambdaReservedConcurrency" },
+        "RecursiveLoop": "Terminate",
+        "LoggingConfig": {
+          "ApplicationLogLevel": "ERROR",
+          "SystemLogLevel": "WARN",
+          "LogFormat": "JSON",
+          "LogGroup": { "Ref": "TargetLogGroup" }
+        },
+        "Environment": {
+          "Variables": {
+            "AGENTCORE_LAMBDA_GATEWAY_ID": {
+              "Fn::If": ["TargetConfigured", { "Ref": "ConfiguredGatewayId" }, { "Ref": "AWS::NoValue" }]
+            },
+            "AGENTCORE_LAMBDA_TARGET_ID": {
+              "Fn::If": ["TargetConfigured", { "Ref": "ConfiguredTargetId" }, { "Ref": "AWS::NoValue" }]
+            },
+            "AGENTCORE_LAMBDA_TARGET_NAME": { "Ref": "TargetName" },
+            "AGENTCORE_MARKET_XRPL_ENDPOINT": "https://s.altnet.rippletest.net:51234/",
+            "AGENTCORE_MARKET_RLUSD_ISSUER": { "Ref": "RlusdTestnetIssuer" },
+            "AGENTCORE_MARKET_MAX_LEDGER_AGE_SECONDS": { "Ref": "MaxLedgerAgeSeconds" }
+          }
+        },
+        "Tags": [
+          { "Key": "pilot:project", "Value": "pilot" },
+          { "Key": "pilot:component", "Value": "agentcore-lambda-target" },
+          { "Key": "pilot:authority", "Value": "read-public-testnet" },
+          { "Key": "pilot:environment", "Value": "testnet" }
+        ]
+      }
+    },
+    "AcceptedFunctionVersion": {
+      "Type": "AWS::Lambda::Version",
+      "Condition": "TargetConfigured",
+      "Properties": {
+        "FunctionName": { "Ref": "PublicMarketTargetFunction" },
+        "CodeSha256": { "Ref": "LambdaPackageSha256Base64" },
+        "Description": "Accepted only after exact Gateway/target binding and package checksum verification."
+      }
+    },
+    "AcceptedFunctionAlias": {
+      "Type": "AWS::Lambda::Alias",
+      "Condition": "TargetConfigured",
+      "Properties": {
+        "Name": "accepted",
+        "Description": "Only the version published after exact Gateway and target IDs were configured.",
+        "FunctionName": { "Ref": "PublicMarketTargetFunction" },
+        "FunctionVersion": { "Fn::GetAtt": ["AcceptedFunctionVersion", "Version"] }
+      }
+    }
+  },
+  "Outputs": {
+    "TargetLambdaFunctionName": { "Value": { "Ref": "PublicMarketTargetFunction" } },
+    "TargetLambdaFunctionArn": { "Value": { "Fn::GetAtt": ["PublicMarketTargetFunction", "Arn"] } },
+    "AcceptedAliasArn": {
+      "Condition": "TargetConfigured",
+      "Value": { "Ref": "AcceptedFunctionAlias" }
+    },
+    "ActivationState": {
+      "Value": { "Fn::If": ["TargetConfigured", "configured-version-published", "bootstrap-fail-closed"] }
+    }
+  }
+}

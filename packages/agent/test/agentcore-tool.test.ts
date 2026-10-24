@@ -31,15 +31,23 @@ describe("AgentCore research tool", () => {
     const tools = createAgentTools({ ...base, agentCore: { enabled: true, propose } }) as Record<string, any>;
     const response = await tools.agentcore_research.execute({
       query: "Compare market context",
-      context: { pair: "XRP/USD" },
     });
     expect(response).toMatchObject({ kind: "read_only", summary: "Scoped result" });
     expect(propose).toHaveBeenCalledWith({
       requestId: expect.stringMatching(/^agentcore-[0-9a-f-]{36}$/),
       purpose: "read",
       prompt: "Compare market context",
-      context: { pair: "XRP/USD" },
+      context: {
+        pair: "XRP/RLUSD",
+        venue: "xrpl-testnet-dex",
+        timeframe: "spot",
+      },
     }, { signal: undefined });
+
+    expect(() => tools.agentcore_research.inputSchema.parse({
+      query: "Try another pair",
+      context: { pair: "XRP/USD" },
+    })).toThrow();
 
     expect(tools.propose_intent).toBeUndefined();
     expect(tools.x402_compare).toBeUndefined();

@@ -4,6 +4,8 @@ import {
   AGENTCORE_MCP_PROTOCOL_VERSION,
   AGENTCORE_PROTOCOL_VERSION,
   AgentCoreInvocationSchema,
+  AgentCoreGatewayResearchContextSchema,
+  AgentCorePublicMarketRequestContextSchema,
   AgentCoreMarketContextSchema,
   AgentCoreRuntimeResponseSchema,
   deriveAgentCoreGatewayBindingDigest,
@@ -47,10 +49,12 @@ export function createAgentCoreRuntimeHandler(input: Readonly<{
       if (requestDigest !== invocation.requestDigest) {
         throw new Error("AgentCore Runtime request binding mismatch");
       }
+      AgentCorePublicMarketRequestContextSchema.parse(invocation.request.context);
+      const gatewayContext = AgentCoreGatewayResearchContextSchema.parse({});
       const gateway = createAgentCoreGatewayClient({
         gatewayUrl: input.gatewayUrl,
         gatewayToolName: input.gatewayToolName,
-        scope: invocation.scope,
+        scopeDigest,
         auth: input.gatewayAuth,
         fetch: input.gatewayFetch,
         timeoutMs: input.timeoutMs,
@@ -58,8 +62,7 @@ export function createAgentCoreRuntimeHandler(input: Readonly<{
       });
       const market = AgentCoreMarketContextSchema.parse(await gateway.callReadTool({
         requestId: invocation.request.requestId,
-        prompt: invocation.request.prompt,
-        context: invocation.request.context,
+        context: gatewayContext,
       }, { signal }));
       return AgentCoreRuntimeResponseSchema.parse({
         protocolVersion: AGENTCORE_PROTOCOL_VERSION,

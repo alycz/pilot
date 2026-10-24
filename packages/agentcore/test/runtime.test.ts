@@ -159,4 +159,72 @@ describe("AgentCore Runtime provider", () => {
     })).rejects.toThrow("Sensitive material is not accepted");
     expect(send).not.toHaveBeenCalled();
   });
+
+  it("bounds a noncompliant AWS SDK response stream and requests iterator cleanup", async () => {
+    const returned = vi.fn(async () => ({ done: true, value: undefined }));
+    const response = {
+      [Symbol.asyncIterator]() {
+        return {
+          next: () => new Promise<IteratorResult<Uint8Array>>(() => undefined),
+          return: returned,
+        };
+      },
+    };
+    const provider = createAgentCoreProposalProvider({
+      config: {
+        mode: "aws",
+        region: "us-east-1",
+        runtimeAuthMode: "iam",
+        runtimeArn: "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/pilot_research-AbCdEf1234",
+        qualifier: "pilot_v1",
+        gatewayUrl: "https://pilotgateway-abcdefghij.gateway.bedrock-agentcore.us-east-1.amazonaws.com/mcp",
+        gatewayToolName,
+        gatewayAuthMode: "custom_jwt",
+        gatewayProtocolVersion: "2025-11-25",
+        timeoutMs: 25,
+        maxRequestBytes: 65_536,
+        maxResponseBytes: 262_144,
+      },
+      scope,
+      runtimeClient: {
+        async send() { return { contentType: "application/json", response } as never; },
+      },
+    });
+    await expect(provider.propose({
+      requestId: "research-hung-sdk-body",
+      purpose: "read",
+      prompt: "Research",
+      context: {},
+    })).rejects.toMatchObject({ code: "uncertain" });
+    expect(returned).toHaveBeenCalledOnce();
+  });
+
+  it("bounds a noncompliant stand-in response body and cancels its reader", async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({
+      pull: () => new Promise<void>(() => undefined),
+      cancel,
+    });
+    const provider = createAgentCoreProposalProvider({
+      config: {
+        mode: "standin",
+        endpoint: "http://127.0.0.1:32147",
+        gatewayToolName,
+        timeoutMs: 25,
+        maxRequestBytes: 65_536,
+        maxResponseBytes: 262_144,
+      },
+      scope,
+      fetch: async () => new Response(body, {
+        headers: { "content-type": "application/json" },
+      }),
+    });
+    await expect(provider.propose({
+      requestId: "research-hung-fetch-body",
+      purpose: "read",
+      prompt: "Research",
+      context: {},
+    })).rejects.toMatchObject({ code: "uncertain" });
+    expect(cancel).toHaveBeenCalledOnce();
+  });
 });

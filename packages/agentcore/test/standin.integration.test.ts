@@ -8,8 +8,8 @@ afterEach(async () => Promise.all(close.splice(0).map((entry) => entry())));
 
 describe("AgentCore local stand-in", () => {
   it("runs Runtime to MCP Gateway to one injected read-only tool", async () => {
-    const invoke = vi.fn(async (input) => ({
-      summary: `Synthetic market fixture for ${input.scope.network}`,
+    const invoke = vi.fn(async (_input: unknown) => ({
+      summary: "Synthetic market fixture for an opaque scope",
       evidence: [{ source: "local-fixture", claim: "No live market data was queried." }],
       caveats: [],
     }));
@@ -35,7 +35,7 @@ describe("AgentCore local stand-in", () => {
       requestId: "standin-1",
       purpose: "read",
       prompt: "Read public market context",
-      context: { pair: "XRP/USD" },
+      context: { pair: "XRP/RLUSD", venue: "xrpl-testnet-dex", timeframe: "spot" },
     });
     expect(response).toMatchObject({
       kind: "read_only",
@@ -44,10 +44,24 @@ describe("AgentCore local stand-in", () => {
     });
     expect(provider.trust).toEqual({ transport: "agentcore-standin", localStandin: true });
     expect(invoke).toHaveBeenCalledOnce();
-    expect(invoke.mock.calls[0]?.[0]).toMatchObject({
+    const captured = invoke.mock.calls[0]?.[0];
+    expect(captured).toMatchObject({
       name: "PilotStandin___pilot_read_market_context",
       requestId: "standin-1",
-      scope: { tenantId: "tenant-1", network: "testnet" },
+      scopeDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
     });
+    expect(captured).not.toHaveProperty("scope");
+    expect(captured).not.toHaveProperty("owner");
+    expect(captured).not.toHaveProperty("tenantId");
+    expect(captured).not.toHaveProperty("network");
+
+    invoke.mockClear();
+    await expect(provider.propose({
+      requestId: "standin-wrong-pair",
+      purpose: "read",
+      prompt: "Read another public market",
+      context: { pair: "XRP/USD", timeframe: "spot" },
+    })).rejects.toMatchObject({ code: "failed" });
+    expect(invoke).not.toHaveBeenCalled();
   });
 });

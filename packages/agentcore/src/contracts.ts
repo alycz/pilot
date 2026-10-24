@@ -10,6 +10,8 @@ import { z } from "zod";
 export const AGENTCORE_PROTOCOL_VERSION = "pilot-agentcore.research.v1" as const;
 export const AGENTCORE_MCP_PROTOCOL_VERSION = "2025-11-25" as const;
 export const AGENTCORE_STANDIN_TOOL = "PilotStandin___pilot_read_market_context" as const;
+export const AGENTCORE_PUBLIC_MARKET_PAIR = "XRP/RLUSD" as const;
+export const AGENTCORE_PUBLIC_MARKET_VENUE = "xrpl-testnet-dex" as const;
 
 const IdentifierSchema = z
   .string()
@@ -58,6 +60,20 @@ export const AgentCoreResearchContextSchema = z
     venue: z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9._-]+$/).optional(),
     timeframe: z.enum(["spot", "1h", "1d", "7d", "30d"]).optional(),
   })
+  .strict();
+
+/** The Runtime validates these selectors but never sends them beyond Runtime. */
+export const AgentCorePublicMarketRequestContextSchema = z
+  .object({
+    pair: z.literal(AGENTCORE_PUBLIC_MARKET_PAIR),
+    venue: z.literal(AGENTCORE_PUBLIC_MARKET_VENUE).optional(),
+    timeframe: z.literal("spot").optional(),
+  })
+  .strict();
+
+/** The public-market Gateway target receives no caller-controlled selectors. */
+export const AgentCoreGatewayResearchContextSchema = z
+  .object({})
   .strict();
 
 export const AgentCoreResearchRequestSchema = z
@@ -133,15 +149,70 @@ export const AgentCoreRuntimeResponseSchema = z
 export const AgentCoreGatewayArgumentsSchema = z
   .object({
     requestId: IdentifierSchema,
-    scope: AgentCoreServerScopeSchema,
-    prompt: publicText(4_000),
-    context: AgentCoreResearchContextSchema,
+    scopeDigest: z.string().regex(/^[a-f0-9]{64}$/),
+    context: AgentCoreGatewayResearchContextSchema,
   })
   .strict();
 
 export type AgentCoreGatewayArguments = z.infer<typeof AgentCoreGatewayArgumentsSchema>;
 
 const JsonRpcIdSchema = z.union([z.string().max(128), z.number().int().nonnegative()]);
+
+export const AgentCoreGatewaySessionIdSchema = z
+  .string()
+  .min(16)
+  .max(256)
+  .regex(/^[A-Za-z0-9._~-]+$/);
+
+export const AgentCoreGatewayInitializeCallSchema = z
+  .object({
+    jsonrpc: z.literal("2.0"),
+    id: JsonRpcIdSchema,
+    method: z.literal("initialize"),
+    params: z.object({
+      protocolVersion: z.literal(AGENTCORE_MCP_PROTOCOL_VERSION),
+      capabilities: z.object({}).strict(),
+      clientInfo: z.object({
+        name: z.literal("pilot-agentcore-runtime"),
+        version: z.string().min(1).max(32).regex(/^[A-Za-z0-9._-]+$/),
+      }).strict(),
+    }).strict(),
+  })
+  .strict();
+
+export const AgentCoreGatewayInitializeResultSchema = z
+  .object({
+    jsonrpc: z.literal("2.0"),
+    id: JsonRpcIdSchema,
+    result: z.object({
+      protocolVersion: z.literal(AGENTCORE_MCP_PROTOCOL_VERSION),
+      capabilities: z.record(z.string(), z.unknown()),
+      serverInfo: z.object({
+        name: z.string().min(1).max(128),
+        version: z.string().min(1).max(64),
+      }).strict(),
+      instructions: z.string().max(2_000).optional(),
+    }).strict(),
+  })
+  .strict();
+
+export const AgentCoreGatewayInitializedNotificationSchema = z
+  .object({
+    jsonrpc: z.literal("2.0"),
+    method: z.literal("notifications/initialized"),
+  })
+  .strict();
+
+export const AgentCoreGatewayCancelledNotificationSchema = z
+  .object({
+    jsonrpc: z.literal("2.0"),
+    method: z.literal("notifications/cancelled"),
+    params: z.object({
+      requestId: JsonRpcIdSchema,
+      reason: z.literal("request cancelled"),
+    }).strict(),
+  })
+  .strict();
 
 export const AgentCoreGatewayCallSchema = z
   .object({
@@ -190,9 +261,8 @@ export interface AgentCoreScopedToolInvoker {
   invoke(input: Readonly<{
     name: string;
     requestId: string;
-    scope: AgentCoreServerScope;
-    prompt: string;
-    context: z.infer<typeof AgentCoreResearchContextSchema>;
+    scopeDigest: string;
+    context: z.infer<typeof AgentCoreGatewayResearchContextSchema>;
     signal?: AbortSignal;
   }>): Promise<unknown>;
 }

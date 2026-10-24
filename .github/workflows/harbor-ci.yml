@@ -1,4 +1,4 @@
-name: Execution service CI
+name: Harbor CI
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  execution-service:
+  harbor:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -27,14 +27,21 @@ jobs:
           cache: npm
           cache-dependency-path: services/harbor/package-lock.json
 
-      - name: Verify committed execution-service integrity
+      - name: Verify destination integrity
+        working-directory: .
         run: node scripts/integrity/verify.mjs
 
-      - name: Install dependencies
+      - name: Verify execution-service integrity
+        run: node scripts/integrity/verify.mjs
+
+      - name: Install Harbor dependencies
         run: npm ci
 
-      - name: Typecheck
+      - name: Verify generated files
+        run: node scripts/build-catalog.mjs && git diff --exit-code
+
+      - name: Typecheck Harbor
         run: npm run typecheck
 
-      - name: Run offline unit tests
+      - name: Run Harbor offline tests
         run: npm test

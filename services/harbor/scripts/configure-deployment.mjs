@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { writeFileSync } from "node:fs";
-import { isAbsolute, relative, resolve } from "node:path";
+import { lstatSync, realpathSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const FREE_QUICKJS_PROFILE = "free-quickjs";
@@ -117,7 +117,20 @@ export function writeFreeQuickJsConfig(argv) {
 	const output = resolve(values["--output"]);
 	const serviceRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 	const repositoryRoot = resolve(serviceRoot, "../..");
-	const repositoryRelativeOutput = relative(repositoryRoot, output);
+	const outputParent = dirname(output);
+	let canonicalOutputParent;
+	try {
+		const parentInfo = lstatSync(outputParent);
+		canonicalOutputParent = realpathSync(outputParent);
+		if (!parentInfo.isDirectory() || parentInfo.isSymbolicLink()) {
+			fail("output parent must be an existing canonical directory without symlinks");
+		}
+	} catch (error) {
+		if (error instanceof Error && error.message.startsWith("deployment config:")) throw error;
+		fail("output parent must be an existing canonical directory without symlinks");
+	}
+	const canonicalOutput = resolve(canonicalOutputParent, output.slice(outputParent.length + 1));
+	const repositoryRelativeOutput = relative(realpathSync(repositoryRoot), canonicalOutput);
 	if (
 		repositoryRelativeOutput === "" ||
 		(!repositoryRelativeOutput.startsWith("..") &&
@@ -134,8 +147,8 @@ export function writeFreeQuickJsConfig(argv) {
 		databaseId: values["--database-id"],
 		origin: values["--origin"],
 	});
-	writeFileSync(output, `${JSON.stringify(config, null, 2)}\n`, { flag: "wx", mode: 0o644 });
-	return output;
+	writeFileSync(canonicalOutput, `${JSON.stringify(config, null, 2)}\n`, { flag: "wx", mode: 0o644 });
+	return canonicalOutput;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

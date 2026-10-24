@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -108,6 +108,25 @@ describe("Free/QuickJS deployment configuration", () => {
 		], { encoding: "utf8" });
 		expect(result.status).toBe(1);
 		expect(result.stderr).toContain("outside the repository checkout");
+	});
+
+	it("rejects an outside parent symlink that resolves back into the checkout", () => {
+		const root = temporaryRoot();
+		const linkedParent = join(root, "linked-checkout");
+		const target = join(serviceRoot, "wrangler.generated-via-symlink.jsonc");
+		symlinkSync(serviceRoot, linkedParent, "dir");
+		const result = spawnSync(process.execPath, [
+			join(serviceRoot, "scripts/configure-deployment.mjs"),
+			"--profile", "free-quickjs",
+			"--worker-name", "approved-harbor",
+			"--database-name", "approved-harbor-db",
+			"--database-id", "123e4567-e89b-42d3-a456-426614174000",
+			"--origin", "https://harbor.example.com",
+			"--output", join(linkedParent, "wrangler.generated-via-symlink.jsonc"),
+		], { encoding: "utf8" });
+		expect(result.status).toBe(1);
+		expect(result.stderr).toContain("canonical directory without symlinks");
+		expect(existsSync(target)).toBe(false);
 	});
 
 	it("keeps the provisioning bootstrap out of the Free profile", () => {

@@ -17,6 +17,7 @@ describe("work-agreement fixture UI", () => {
     expect(markup).toContain("signatures are not valid");
     expect(markup).toContain("nothing is submitted to XRPL");
     expect(markup).toContain("Start offline fixture");
+    expect(markup.match(/<main(?:\s|>)/g)).toHaveLength(1);
     expect(metadata.title).toBe("Ledger work agreements");
   });
 
@@ -26,6 +27,7 @@ describe("work-agreement fixture UI", () => {
     expect(markup).toContain("Owner-reviewed escrow workspace");
     expect(markup).toContain("Local mock settlement only");
     expect(markup).not.toContain("Start offline fixture");
+    expect(markup.match(/<main(?:\s|>)/g)).toHaveLength(1);
   });
 
   it("does not render a live or validated claim before the user starts the fixture", () => {

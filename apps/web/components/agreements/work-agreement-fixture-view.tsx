@@ -44,7 +44,7 @@ export function WorkAgreementFixtureViewComponent() {
 
   const approval = view?.approval;
   return (
-    <main className="mx-auto min-h-[calc(100dvh-4rem)] max-w-4xl space-y-6 px-4 py-10 sm:px-6">
+    <div className="mx-auto min-h-[calc(100dvh-4rem)] max-w-4xl space-y-6 px-4 py-10 sm:px-6">
       <header className="space-y-3">
         <p className="label-mono">Ledger work agreement · offline fixture</p>
         <h1 className="text-3xl font-semibold tracking-tight">Escrow approval lifecycle</h1>
@@ -141,7 +141,7 @@ export function WorkAgreementFixtureViewComponent() {
       )}
 
       {error ? <p className="text-sm text-blocked" role="alert">{error}</p> : null}
-    </main>
+    </div>
   );
 }
 

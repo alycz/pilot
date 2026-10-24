@@ -113,7 +113,7 @@ export function WorkAgreementView({
     recovery?.phase === "submission_unknown";
 
   return (
-    <main className="mx-auto min-h-[calc(100dvh-4rem)] max-w-5xl space-y-8 px-4 py-10 sm:px-6">
+    <div className="mx-auto min-h-[calc(100dvh-4rem)] max-w-5xl space-y-8 px-4 py-10 sm:px-6">
       <header className="grid gap-5 border-b border-border pb-8 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
         <div className="space-y-3">
           <p className="label-mono">Ledger work agreements · Testnet</p>
@@ -256,7 +256,7 @@ export function WorkAgreementView({
 
       {notice ? <p className="rounded-xl border border-executed/30 bg-executed/10 p-4 text-sm" role="status">{notice}</p> : null}
       {error ? <p className="rounded-xl border border-blocked/35 bg-blocked/10 p-4 text-sm text-blocked" role="alert">{error}</p> : null}
-    </main>
+    </div>
   );
 }
 

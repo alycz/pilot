@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import {
   CardTrustSchema,
   ExecResultSchema,
@@ -34,6 +36,9 @@ import {
   guardrailNoticeFromEnvelope,
   type GuardrailNoticeSink,
 } from "./guardrail-notice";
+import {
+  type ProposalProvider,
+} from "./proposal-provider";
 import { createAp4mModelTools, type Ap4mToolContext } from "./ap4m";
 import { createStrategyProposalTool } from "./strategy-proposal";
 
@@ -80,6 +85,8 @@ export interface AgentToolOptions {
   strategyPaperObservation?: () =>
     | Promise<Record<string, unknown>>
     | Record<string, unknown>;
+  /** Optional advisory provider. It receives no Harbor, wallet, or signing capability. */
+  agentCore?: ProposalProvider;
 }
 
 export type PreferenceProposalEvent = {
@@ -122,6 +129,17 @@ const PreferenceProposalSchema = z
     id: z.string().trim().min(1).max(128),
     preference: z.string().trim().min(1).max(500),
     reason: z.string().trim().min(1).max(500).optional(),
+  })
+  .strict();
+
+const AgentCoreResearchSchema = z
+  .object({
+    query: z.string().trim().min(1).max(4_000),
+    context: z.object({
+      pair: z.string().trim().min(3).max(32).regex(/^[A-Z0-9]{2,12}\/[A-Z0-9]{2,12}$/).optional(),
+      venue: z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9._-]+$/).optional(),
+      timeframe: z.enum(["spot", "1h", "1d", "7d", "30d"]).optional(),
+    }).strict().default({}),
   })
   .strict();
 
@@ -705,6 +723,7 @@ export function createAgentTools(options: AgentToolOptions) {
     mutationInvocationClaimed = true;
     return true;
   };
+  let agentCoreInvocationClaimed = false;
   let guardrailNoticeEmitted = false;
   const turnOptions: AgentToolOptions = {
     ...options,
@@ -754,6 +773,32 @@ export function createAgentTools(options: AgentToolOptions) {
       ? { ap4m: { ...options.ap4m, claimMutation } }
       : {}),
   });
+  const agentCoreTools = options.agentCore?.enabled
+    ? {
+      agentcore_research: tool({
+        description:
+          "Ask the configured AgentCore research runtime for bounded read-only advice. It cannot build, approve, sign, submit, or pay for transactions; any later action still requires propose_intent and Harbor policy.",
+        inputSchema: AgentCoreResearchSchema,
+        execute: async ({ query, context }, callOptions) => {
+          if (mutationInvocationClaimed || agentCoreInvocationClaimed) {
+            throw new Error("AgentCore research is limited to one isolated read-only call per chat run");
+          }
+          agentCoreInvocationClaimed = true;
+          return options.agentCore!.propose({
+            requestId: `agentcore-${randomUUID()}`,
+            purpose: "read",
+            prompt: query,
+            context,
+          }, { signal: callOptions?.abortSignal });
+        },
+      }),
+    }
+    : {};
+
+  // AgentCore output is untrusted external evidence. Its dedicated model run
+  // never co-exposes transaction, payment, preference, or memory tools, so a
+  // prompt injection cannot spend the already-verified wallet proof.
+  if (options.agentCore?.enabled) return agentCoreTools;
 
   return {
     ...harborTools,
@@ -792,7 +837,6 @@ export function createAgentTools(options: AgentToolOptions) {
               "This authenticated run already invoked propose_intent; the same wallet proof cannot authorize another mutating execution.",
           };
         }
-
         const result = await executeProposedIntent(intent, turnOptions);
         if (result.state === "blocked") blockedIntents.add(fingerprint);
         return result;

@@ -19,6 +19,7 @@
     "@ledgerhq/device-transport-kit-web-hid": "1.2.4",
     "@openrouter/ai-sdk-provider": "^1.2.0",
     "@pilot/agent": "workspace:*",
+    "@pilot/agentcore": "workspace:*",
     "@pilot/contracts": "workspace:*",
     "@pilot/harbor-client": "workspace:*",
     "@pilot/intents": "workspace:*",

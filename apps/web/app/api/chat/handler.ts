@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   modelTrustForAccess,
   resolveChatModel,
@@ -26,6 +26,11 @@ import {
 } from "@pilot/agent";
 import type { Ap4mExactEvidenceEvent } from "@pilot/agent/ap4m-evidence-event";
 import type { WorkflowLessonTarget } from "@pilot/agent/workflow-lessons";
+import {
+  createAgentCoreProposalProviderFromEnv,
+  type AgentCoreProposalProvider,
+  type AgentCoreServerScope,
+} from "@pilot/agentcore";
 import {
   NetworkSchema,
   type CardEvent,
@@ -201,6 +206,11 @@ export interface ChatHandlerDependencies {
       network: Exclude<Network, "mainnet">;
     };
   }) => HermesWorkflowAdvisor | Promise<HermesWorkflowAdvisor>;
+  /** Testable/default-off factory receives only authenticated server-derived scope. */
+  agentCoreProviderForRequest?: (input: {
+    scope: AgentCoreServerScope;
+    signal: AbortSignal;
+  }) => AgentCoreProposalProvider | Promise<AgentCoreProposalProvider>;
 }
 
 export type ChatContext = {
@@ -1661,6 +1671,7 @@ export function createChatHandler(dependencies: ChatHandlerDependencies = {}) {
     let x402Requested = false;
     let requestMode: ChatRequestMode = "auto";
     let pageContext: HarnessPageContext | undefined;
+    let agentCoreRequested = false;
     let requestBody: string;
     try {
       requestBody = await readBoundedRequestBody(
@@ -1705,10 +1716,15 @@ export function createChatHandler(dependencies: ChatHandlerDependencies = {}) {
       requestMode = parseChatRequestMode(body.request_mode);
       pageContext = parseHarnessPageContext(body.page_context);
       operationId = x402OperationId(body.operation_id);
-      if (body.operation !== undefined && body.operation !== "x402_compare") {
+      if (
+        body.operation !== undefined &&
+        body.operation !== "x402_compare" &&
+        body.operation !== "agentcore_research"
+      ) {
         throw new Error("The requested chat operation is invalid.");
       }
       x402Requested = body.operation === "x402_compare";
+      agentCoreRequested = body.operation === "agentcore_research";
       if (x402Requested !== (operationId !== undefined)) {
         throw new Error("x402_compare requires exactly one bound operation_id.");
       }
@@ -1962,6 +1978,38 @@ export function createChatHandler(dependencies: ChatHandlerDependencies = {}) {
         : {}),
     };
 
+    let agentCore: AgentCoreProposalProvider | undefined;
+    if (agentCoreRequested && context.network !== "mainnet") {
+      const scope: AgentCoreServerScope = {
+        tenantId: preferenceTenant ?? `wallet-${createHash("sha256")
+          .update(`${context.budget_account}\0${context.network}`, "utf8")
+          .digest("hex")
+          .slice(0, 32)}`,
+        owner: context.budget_account,
+        network: context.network,
+        invocationNonce: randomUUID(),
+      };
+      try {
+        agentCore = dependencies.agentCoreProviderForRequest
+          ? await dependencies.agentCoreProviderForRequest({ scope, signal: request.signal })
+          : createAgentCoreProposalProviderFromEnv({
+              env: environment as Readonly<Record<string, string | undefined>>,
+              scope,
+            });
+      } catch {
+        if (ownsMcpClient) await harborMcp.close();
+        await settleDemo("uncertain");
+        await closeDemoBudget();
+        return errorResponse("AgentCore research configuration is invalid.", 503);
+      }
+      if (!agentCore.enabled) {
+        if (ownsMcpClient) await harborMcp.close();
+        await settleDemo("uncertain");
+        await closeDemoBudget();
+        return errorResponse("AgentCore research is not configured.", 503);
+      }
+    }
+
     const baseSystem = dependencies.systemPrompt ?? (await loadSystemPrompt());
     const stream = createUIMessageStream<PilotUIMessage>({
       execute: async ({ writer }) => {
@@ -1994,6 +2042,7 @@ export function createChatHandler(dependencies: ChatHandlerDependencies = {}) {
           network: context.network,
           harborRest,
           harborMcp,
+          agentCore,
           memory: dependencies.memory ?? scopedVaultMemory(context),
           emitCard: (event) => {
             writer.write({

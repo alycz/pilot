@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools==80.9.0", "wheel==0.45.1"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "pilot-ap4m-merchants"
 version = "0.1.0"
@@ -19,3 +23,9 @@ test = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+include = ["app*", "paychan*", "validator*"]
+
+[tool.setuptools.package-data]
+"validator._vendor.verifiable_intent" = ["LICENSE", "PROVENANCE.md"]

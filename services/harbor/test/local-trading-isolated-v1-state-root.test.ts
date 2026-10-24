@@ -39,6 +39,10 @@ const roots: string[] = [];
 const PAYLOAD_NAME = `${"a".repeat(64)}.sqlite`;
 const EXTRA_PAYLOAD_NAME = `${"b".repeat(64)}.sqlite`;
 const OBSERVABILITY_PAYLOAD_NAME = `${"c".repeat(64)}.sqlite`;
+// This integration-style fixture synchronously applies the eight pinned
+// production migrations before validating the full filesystem and SQLite
+// shape. Keep its CI scheduling allowance local to this one expensive case.
+const REAL_LAYOUT_VALIDATION_TIMEOUT_MS = 15_000;
 
 function temporaryRoot(label: string): string {
   const root = mkdtempSync(join(process.cwd(), `.harbor-${label}-`));
@@ -213,7 +217,7 @@ describe("local trading isolated v1 preserved state root", () => {
       payloadPath(state),
     );
     await expect(validateExistingIsolatedTradingState(state)).resolves.toBeUndefined();
-  });
+  }, REAL_LAYOUT_VALIDATION_TIMEOUT_MS);
 
   it.each([
     ["missing D1 metadata", { d1Metadata: false }],

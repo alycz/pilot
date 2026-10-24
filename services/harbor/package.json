@@ -2,8 +2,9 @@
 	"name": "pilot-execution-service",
 	"version": "0.0.0",
 	"private": true,
+	"packageManager": "npm@11.9.0",
 	"engines": {
-		"node": ">=24"
+		"node": "24.14.0"
 	},
 	"scripts": {
 		"aws-local": "node --experimental-transform-types tools/aws-local/src/index.ts",
@@ -24,10 +25,12 @@
 		"typecheck": "tsc --noEmit",
 		"pretest": "node scripts/build-catalog.mjs",
 		"test": "vitest run",
+		"repro:verify": "node ../../scripts/integrity/verify.mjs",
 		"test:smoke": "vitest run --config vitest.smoke.config.mts",
 		"predeploy": "node scripts/build-catalog.mjs",
 		"deploy": "wrangler deploy",
-		"cf-typegen": "wrangler types"
+		"cf-typegen": "wrangler types --env-file .env.example",
+		"cf-typegen:check": "wrangler types --env-file .env.example --check"
 	},
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.32.1",
@@ -45,6 +48,6 @@
 		"@types/node": "^26.6.5",
 		"typescript": "^5.9.3",
 		"vitest": "~4.1.0",
-		"wrangler": "^4.151.1"
+		"wrangler": "4.151.1"
 	}
 }

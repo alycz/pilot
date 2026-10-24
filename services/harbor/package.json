@@ -1,0 +1,35 @@
+{
+	"name": "pilot-execution-service",
+	"version": "0.0.0",
+	"private": true,
+	"engines": {
+		"node": ">=24"
+	},
+	"scripts": {
+		"predev": "node scripts/build-catalog.mjs",
+		"dev": "wrangler dev",
+		"pretypecheck": "node scripts/build-catalog.mjs",
+		"typecheck": "tsc --noEmit",
+		"pretest": "node scripts/build-catalog.mjs",
+		"test": "vitest run",
+		"test:smoke": "vitest run --config vitest.smoke.config.mts",
+		"predeploy": "node scripts/build-catalog.mjs",
+		"deploy": "wrangler deploy",
+		"cf-typegen": "wrangler types"
+	},
+	"dependencies": {
+		"@modelcontextprotocol/sdk": "^1.32.1",
+		"minisearch": "^7.2.0",
+		"quickjs-emscripten": "^0.32.0",
+		"xrpl": "^5.3.0",
+		"yaml": "^2.9.1",
+		"zod": "^4.6.7"
+	},
+	"devDependencies": {
+		"@cloudflare/vitest-plugin": "^1.4.4",
+		"@types/node": "^26.6.5",
+		"typescript": "^5.9.3",
+		"vitest": "~4.1.0",
+		"wrangler": "^4.151.1"
+	}
+}

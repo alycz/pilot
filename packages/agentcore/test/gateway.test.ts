@@ -86,7 +86,7 @@ describe("AgentCore Gateway MCP client", () => {
       }), { status: 200, headers: { "content-type": "application/json" } });
     });
     const client = createAgentCoreGatewayClient({
-      gatewayUrl: "https://pilotgateway-abcdefghij.gateway.bedrock-agentcore.us-east-1.amazonaws.com/mcp",
+      gatewayUrl: "https://pilotgateway-abcdefghij.gateway.bedrock-agentcore.us-east-2.amazonaws.com/mcp",
       gatewayToolName,
       scopeDigest,
       auth: { async authorization() { return "Bearer opaque-test-token"; } },

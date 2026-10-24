@@ -5,10 +5,12 @@ import {
   AGENTCORE_STANDIN_TOOL,
   AgentCoreGatewayToolNameSchema,
 } from "./contracts";
+import {
+  isExactAgentCoreGatewayHost,
+  parseAgentCoreAwsRegion,
+  type AgentCoreAwsRegion,
+} from "./regions";
 
-const AWS_REGION = "us-east-1" as const;
-const RUNTIME_ARN = /^arn:aws:bedrock-agentcore:us-east-1:\d{12}:runtime\/[A-Za-z][A-Za-z0-9_]{0,47}-[A-Za-z0-9]{10}$/;
-const GATEWAY_HOST = /^[0-9a-z](?:[0-9a-z-]{0,98}[0-9a-z])?-[0-9a-z]{10}\.gateway\.bedrock-agentcore\.us-east-1\.amazonaws\.com$/;
 const QualifierSchema = z.union([
   z.literal("DEFAULT"),
   z.string().min(1).max(48).regex(/^[A-Za-z][A-Za-z0-9_]{0,47}$/),
@@ -23,7 +25,7 @@ export type AgentCoreConfig =
   | ({ mode: "standin"; endpoint: string; gatewayToolName: string } & Limits)
   | ({
       mode: "aws";
-      region: typeof AWS_REGION;
+      region: AgentCoreAwsRegion;
       runtimeAuthMode: "iam";
       runtimeArn: string;
       qualifier: string;
@@ -61,13 +63,13 @@ function standinEndpoint(value: string | undefined): string {
   return url.origin;
 }
 
-function gatewayUrl(value: string | undefined): string {
+function gatewayUrl(value: string | undefined, region: AgentCoreAwsRegion): string {
   if (!value?.trim()) throw new Error("AGENTCORE_GATEWAY_URL is required in aws mode");
   const url = new URL(value);
   if (
-    url.protocol !== "https:" || !GATEWAY_HOST.test(url.hostname) ||
+    url.protocol !== "https:" || !isExactAgentCoreGatewayHost(url.hostname, region) ||
     url.pathname !== "/mcp" || url.username || url.password || url.search || url.hash
-  ) throw new Error("AGENTCORE_GATEWAY_URL must be the exact us-east-1 AgentCore MCP endpoint");
+  ) throw new Error(`AGENTCORE_GATEWAY_URL must be the exact ${region} AgentCore MCP endpoint`);
   return url.href;
 }
 
@@ -86,9 +88,12 @@ export function readAgentCoreConfig(env: Env = process.env): AgentCoreConfig {
     };
   }
   if (mode !== "aws") throw new Error("AGENTCORE_MODE must be off, standin, or aws");
-  if ((env.AWS_REGION?.trim() || AWS_REGION) !== AWS_REGION) throw new Error(`AWS_REGION must be ${AWS_REGION}`);
+  const region = parseAgentCoreAwsRegion(env.AGENTCORE_AWS_REGION);
   const runtimeArn = env.AGENTCORE_RUNTIME_ARN?.trim() || "";
-  if (!RUNTIME_ARN.test(runtimeArn)) throw new Error("AGENTCORE_RUNTIME_ARN must be an exact us-east-1 Runtime ARN");
+  const runtimeArnPattern = new RegExp(
+    `^arn:aws:bedrock-agentcore:${region}:\\d{12}:runtime\\/[A-Za-z][A-Za-z0-9_]{0,47}-[A-Za-z0-9]{10}$`,
+  );
+  if (!runtimeArnPattern.test(runtimeArn)) throw new Error(`AGENTCORE_RUNTIME_ARN must be an exact ${region} Runtime ARN`);
   const qualifier = QualifierSchema.parse(env.AGENTCORE_RUNTIME_QUALIFIER?.trim() || "DEFAULT");
   if ((env.AGENTCORE_RUNTIME_AUTH_MODE?.trim() || "iam") !== "iam") {
     throw new Error("AGENTCORE_RUNTIME_AUTH_MODE must be iam for the SDK Runtime adapter");
@@ -102,11 +107,11 @@ export function readAgentCoreConfig(env: Env = process.env): AgentCoreConfig {
   }
   return {
     mode,
-    region: AWS_REGION,
+    region,
     runtimeAuthMode: "iam",
     runtimeArn,
     qualifier,
-    gatewayUrl: gatewayUrl(env.AGENTCORE_GATEWAY_URL),
+    gatewayUrl: gatewayUrl(env.AGENTCORE_GATEWAY_URL, region),
     gatewayToolName: AgentCoreGatewayToolNameSchema.parse(env.AGENTCORE_GATEWAY_TOOL_NAME),
     gatewayAuthMode: "custom_jwt",
     gatewayProtocolVersion: AGENTCORE_MCP_PROTOCOL_VERSION,

@@ -1,11 +1,87 @@
+import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { describe, expect, it, vi } from "vitest";
-import { createDynamoDbAgentCoreReplayStore } from "../src/replay-dynamodb";
+import {
+  createAwsSdkDynamoDbAgentCoreReplayStore,
+  createAwsSdkDynamoDbClientConfig,
+  createAwsSdkDynamoDbReplayClient,
+  createDynamoDbAgentCoreReplayStore,
+} from "../src/replay-dynamodb";
 const D = { namespaceDigest: "1".repeat(64), requestDigest: "2".repeat(64), bindingDigest: "3".repeat(64) };
 const leaseId = "00000000-0000-4000-8000-000000000001";
 const response = { protocolVersion: "pilot-agentcore.research.v1" as const, transport: "aws-agentcore-runtime" as const, dataProvenance: "external-unverified" as const, requestId: "request-1", scopeDigest: "4".repeat(64), gatewayBindingDigest: "5".repeat(64), requestDigest: D.requestDigest, result: { kind: "read_only" as const, summary: "Public result", evidence: [], caveats: [] } };
 function client(updateItem: ReturnType<typeof vi.fn>, getItem = vi.fn()) { return { updateItem, getItem, isConditionalFailure: (error: unknown) => (error as { name?: string })?.name === "ConditionalCheckFailedException" }; }
 
 describe("DynamoDB replay command adapter", () => {
+  it("pins the production SDK to one attempt", () => {
+    expect(createAwsSdkDynamoDbClientConfig("us-east-2")).toEqual({
+      region: "us-east-2",
+      maxAttempts: 1,
+      ignoreConfiguredEndpointUrls: true,
+    });
+  });
+
+  it("composes the official SDK with one attempt and forwards cancellation", async () => {
+    const sdk = new DynamoDBClient({ region: "us-east-2", maxAttempts: 1 });
+    const destroy = vi.spyOn(sdk, "destroy");
+    const send = vi.spyOn(sdk, "send")
+      .mockResolvedValueOnce({ Attributes: { fence: { N: "1" } } } as never)
+      .mockResolvedValueOnce({ Item: { state: { S: "completed" } } } as never);
+    const transport = createAwsSdkDynamoDbReplayClient({ region: "us-east-2", client: sdk });
+    const signal = new AbortController().signal;
+    const update = {
+      TableName: "pilot-agentcore-replay",
+      Key: { namespace: { S: D.namespaceDigest }, requestDigest: { S: D.requestDigest } },
+      ConditionExpression: "attribute_not_exists(#namespace)",
+      UpdateExpression: "SET #state = :state",
+      ExpressionAttributeNames: { "#namespace": "namespace", "#state": "state" },
+      ExpressionAttributeValues: { ":state": { S: "claimed" } },
+      ReturnValues: "ALL_NEW" as const,
+    };
+    const get = {
+      TableName: "pilot-agentcore-replay",
+      Key: update.Key,
+      ConsistentRead: true as const,
+    };
+
+    await expect(transport.updateItem(update, { signal })).resolves.toEqual({
+      Attributes: { fence: { N: "1" } },
+    });
+    await expect(transport.getItem(get, { signal })).resolves.toEqual({
+      Item: { state: { S: "completed" } },
+    });
+    expect(send.mock.calls[0]![0]).toBeInstanceOf(UpdateItemCommand);
+    expect((send.mock.calls[0]![0] as UpdateItemCommand).input).toEqual(update);
+    expect(send.mock.calls[0]![1]).toEqual({ abortSignal: signal });
+    expect(send.mock.calls[1]![0]).toBeInstanceOf(GetItemCommand);
+    expect((send.mock.calls[1]![0] as GetItemCommand).input).toEqual(get);
+
+    const conditional = Object.assign(new Error("redacted"), {
+      name: "ConditionalCheckFailedException",
+    });
+    expect(transport.isConditionalFailure(conditional)).toBe(true);
+    expect(transport.isConditionalFailure(new Error("other"))).toBe(false);
+    transport.destroy?.();
+    expect(destroy).toHaveBeenCalledOnce();
+  });
+
+  it("composes and cleans up the production replay resources", () => {
+    const sdk = new DynamoDBClient({ region: "us-east-2", maxAttempts: 1 });
+    const destroy = vi.spyOn(sdk, "destroy");
+    const resources = createAwsSdkDynamoDbAgentCoreReplayStore({
+      region: "us-east-2",
+      tableName: "pilot-agentcore-replay",
+      client: sdk,
+    });
+    expect(resources.replayStore).toMatchObject({
+      claim: expect.any(Function),
+      markDispatched: expect.any(Function),
+      complete: expect.any(Function),
+      releaseClaim: expect.any(Function),
+    });
+    resources.destroy();
+    expect(destroy).toHaveBeenCalledOnce();
+  });
+
   it("claims conditionally and persists digests only", async () => {
     const updateItem = vi.fn().mockResolvedValue({ Attributes: { fence: { N: "1" } } });
     const replay = createDynamoDbAgentCoreReplayStore({ tableName: "pilot-agentcore-replay", client: client(updateItem), nextLeaseId: () => leaseId });

@@ -9,8 +9,9 @@ import {
   AgentCoreJwtError,
   type AgentCoreWorkloadJwtResolver,
 } from "./jwt";
+import { AGENTCORE_AWS_REGIONS, type AgentCoreAwsRegion } from "./regions";
 
-const RegionSchema = z.literal("us-east-1");
+const RegionSchema = z.enum(AGENTCORE_AWS_REGIONS);
 const NameSchema = z.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9_.-]*$/);
 const ValueSchema = z.string().min(1).max(256).refine(
   (value) => !/[\u0000-\u001f\u007f]/.test(value),
@@ -18,7 +19,7 @@ const ValueSchema = z.string().min(1).max(256).refine(
 );
 
 export type AgentCoreIdentityM2mConfig = Readonly<{
-  region: "us-east-1";
+  region: AgentCoreAwsRegion;
   resourceCredentialProviderName: string;
   scopes: readonly string[];
   audiences: readonly string[];

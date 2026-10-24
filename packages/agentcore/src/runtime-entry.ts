@@ -4,21 +4,25 @@ import { pathToFileURL } from "node:url";
 import { createAgentCoreIdentityM2mJwtResolver } from "./identity-sdk";
 import type { AgentCoreJwtAlgorithm, AgentCoreJwtPolicy, AgentCoreWorkloadJwtResolver } from "./jwt";
 import type { AgentCoreReplayStore } from "./replay";
+import { createAwsSdkDynamoDbAgentCoreReplayStore } from "./replay-dynamodb";
+import {
+  isExactAgentCoreGatewayHost,
+  parseAgentCoreAwsRegion,
+  type AgentCoreAwsRegion,
+} from "./regions";
 import {
   startAgentCoreProductionRuntime,
   type AgentCoreProductionRuntimeConfig,
 } from "./runtime-production";
 import type { AgentCoreRuntimeHttpServer } from "./runtime-http";
 
-const AWS_REGION = "us-east-1" as const;
-const GATEWAY_HOST = /^[0-9a-z](?:[0-9a-z-]{0,98}[0-9a-z])?-[0-9a-z]{10}\.gateway\.bedrock-agentcore\.us-east-1\.amazonaws\.com$/;
 const NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
 const CLAIM = /^[A-Za-z][A-Za-z0-9_.:-]{0,127}$/;
 
 type Env = Readonly<Record<string, string | undefined>>;
 
 export type AgentCoreRuntimeEnvironment = Readonly<{
-  region: typeof AWS_REGION;
+  region: AgentCoreAwsRegion;
   resourceCredentialProviderName: string;
   replayTableName: string;
   config: AgentCoreProductionRuntimeConfig;
@@ -100,7 +104,7 @@ function integer(
   return value;
 }
 
-function exactGatewayUrl(env: Env): string {
+function exactGatewayUrl(env: Env, region: AgentCoreAwsRegion): string {
   const raw = required(env, "AGENTCORE_GATEWAY_URL", 2_048);
   let url: URL;
   try {
@@ -109,10 +113,10 @@ function exactGatewayUrl(env: Env): string {
     throw new Error("AGENTCORE_GATEWAY_URL must be an exact AgentCore MCP endpoint");
   }
   if (
-    url.protocol !== "https:" || !GATEWAY_HOST.test(url.hostname) || url.pathname !== "/mcp" ||
+    url.protocol !== "https:" || !isExactAgentCoreGatewayHost(url.hostname, region) || url.pathname !== "/mcp" ||
     url.username || url.password || url.search || url.hash
   ) {
-    throw new Error("AGENTCORE_GATEWAY_URL must be an exact us-east-1 AgentCore MCP endpoint");
+    throw new Error(`AGENTCORE_GATEWAY_URL must be an exact ${region} AgentCore MCP endpoint`);
   }
   return url.href;
 }
@@ -132,9 +136,7 @@ export function readAgentCoreRuntimeEnvironment(env: Env = process.env): AgentCo
   ) {
     throw new Error("Static AgentCore token environment variables are unsupported");
   }
-  if ((env.AWS_REGION?.trim() || AWS_REGION) !== AWS_REGION) {
-    throw new Error(`AWS_REGION must be ${AWS_REGION}`);
-  }
+  const region = parseAgentCoreAwsRegion(env.AGENTCORE_AWS_REGION);
   const audiences = exactList(env, "AGENTCORE_GATEWAY_JWT_AUDIENCES_JSON", 8);
   const requiredScopes = exactList(env, "AGENTCORE_GATEWAY_JWT_REQUIRED_SCOPES_JSON", 16);
   const clientClaim = required(env, "AGENTCORE_GATEWAY_JWT_CLIENT_CLAIM");
@@ -170,14 +172,14 @@ export function readAgentCoreRuntimeEnvironment(env: Env = process.env): AgentCo
     throw new Error("AGENTCORE_REPLAY_RETENTION_MS must exceed AGENTCORE_REPLAY_LEASE_MS");
   }
   return Object.freeze({
-    region: AWS_REGION,
+    region,
     resourceCredentialProviderName: identifier(
       env,
       "AGENTCORE_IDENTITY_CREDENTIAL_PROVIDER_NAME",
     ),
     replayTableName: replayTableName(env),
     config: Object.freeze({
-      gatewayUrl: exactGatewayUrl(env),
+      gatewayUrl: exactGatewayUrl(env, region),
       gatewayToolName: required(env, "AGENTCORE_GATEWAY_TOOL_NAME"),
       jwtDeploymentTenantId: required(env, "AGENTCORE_GATEWAY_JWT_DEPLOYMENT_TENANT_ID"),
       replayDeploymentId: replayDeploymentId(env),
@@ -224,17 +226,29 @@ export async function startAgentCoreRuntimeFromEnvironment(input: Readonly<{
 export async function runAgentCoreRuntimeMain(
   replayStore?: AgentCoreReplayStore,
 ): Promise<void> {
-  if (!replayStore) {
-    throw new Error("A durable AgentCore replay adapter is required before Runtime can bind");
+  const environment = readAgentCoreRuntimeEnvironment();
+  const durableResources = replayStore ? undefined : createAwsSdkDynamoDbAgentCoreReplayStore({
+    tableName: environment.replayTableName,
+    region: environment.region,
+  });
+  let runtime: AgentCoreRuntimeHttpServer;
+  try {
+    runtime = await startAgentCoreRuntimeFromEnvironment({
+      replayStore: replayStore ?? durableResources!.replayStore,
+    });
+  } catch (error) {
+    durableResources?.destroy();
+    throw error;
   }
-  const runtime = await startAgentCoreRuntimeFromEnvironment({ replayStore });
   let stopping = false;
   const stop = () => {
     if (stopping) return;
     stopping = true;
     void runtime.close().then(() => {
+      durableResources?.destroy();
       process.exitCode = 0;
     }).catch(() => {
+      durableResources?.destroy();
       process.exitCode = 1;
     });
   };

@@ -58,9 +58,9 @@
         "bedrock-agentcore:UntagResource"
       ],
       "Resource": [
-        "arn:aws:bedrock-agentcore:us-east-1:ACCOUNT_ID:runtime/PilotResearchRuntime-*",
-        "arn:aws:bedrock-agentcore:us-east-1:ACCOUNT_ID:runtime/PilotResearchRuntime-*/runtime-endpoint/*",
-        "arn:aws:bedrock-agentcore:us-east-1:ACCOUNT_ID:gateway/PilotResearchGateway-*"
+        "arn:aws:bedrock-agentcore:REGION:ACCOUNT_ID:runtime/PilotResearchRuntime-*",
+        "arn:aws:bedrock-agentcore:REGION:ACCOUNT_ID:runtime/PilotResearchRuntime-*/runtime-endpoint/*",
+        "arn:aws:bedrock-agentcore:REGION:ACCOUNT_ID:gateway/PilotResearchGateway-*"
       ]
     },
     {

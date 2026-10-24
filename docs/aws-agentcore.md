@@ -41,10 +41,13 @@ platform-provided `WorkloadAccessToken`, exchange it only through
 `GetResourceOauth2Token`, verify the resulting JWT locally, and then perform
 the pinned MCP initialize/session/initialized/tool-call lifecycle. The ARM64
 non-root image recipe is `packages/agentcore/Dockerfile.runtime`. Runtime startup
-currently fails before binding unless a durable replay adapter is injected; the
-checked-in DynamoDB seam does not yet compose an official AWS SDK transport.
-The image therefore has not been built, pushed, or run on AgentCore and is not
-currently an AWS-bootable artifact.
+composes the pinned official DynamoDB SDK with the validated table name and
+Region. SDK retries are disabled and replay calls have bounded deadlines, so an
+ambiguous write fails closed instead of being silently replayed. Graceful
+Runtime shutdown also destroys the SDK client and its pooled transports;
+ambient AWS SDK endpoint overrides are ignored. The image has
+not been built, pushed, or run on AgentCore; account-side bootability remains
+unproven.
 
 Wallet identity remains inside the Pilot-to-Runtime digest boundary. The
 Runtime-to-Gateway-to-Lambda request contains only `requestId`, an opaque
@@ -72,7 +75,7 @@ the deployment's managed configuration. Do not commit a populated env file.
 
 Required AWS-side resources:
 
-- one AgentCore Runtime version/endpoint in `us-east-1`, with an execution role
+- one AgentCore Runtime version/endpoint in `us-east-2`, with an execution role
   limited to the one research path and
   `metadataConfiguration.requireMMDSV2=true`;
 - one separately authenticated AgentCore MCP Gateway;
@@ -107,11 +110,15 @@ prompt, wallet identity, or private personalization.
 
 Required non-secret configuration:
 
-- `AWS_REGION=us-east-1`;
+- `AGENTCORE_AWS_REGION=us-east-2`;
 - `AGENTCORE_RUNTIME_ARN` and `AGENTCORE_RUNTIME_QUALIFIER`;
 - the exact `/mcp` `AGENTCORE_GATEWAY_URL`;
 - the exact target-prefixed `AGENTCORE_GATEWAY_TOOL_NAME`; and
 - the fixed auth/protocol settings in the template.
+
+`AGENTCORE_AWS_REGION` is intentionally independent from the global
+`AWS_REGION` used by existing Bedrock and Harbor paths. AgentCore never changes,
+defaults, or interprets those integrations' Region policy.
 
 The Lambda separately requires the exact Gateway and target IDs, target name,
 verified public Testnet RLUSD issuer, and fixed public endpoint shown in
@@ -179,8 +186,7 @@ Remaining implementation/account work before live deployment:
 - run and inspect the implemented deterministic Lambda bundle, create the
   reviewed versioned zip, deploy the reviewed
   fail-closed Lambda resource, then complete the two-phase target-ID binding;
-- finish and test the concrete AWS SDK DynamoDB replay transport/composition,
-  then build and inspect the ARM64 image, validate CloudFormation and IAM policies in
+- build and inspect the ARM64 image, validate CloudFormation and IAM policies in
   the destination account, then use the staged Create -> READY -> mandatory
   MMDSv2 Update -> READY -> Get attestation sequence in `infra/agentcore`;
 - account-test Gateway session compatibility, JWT expiry/revocation, tenant

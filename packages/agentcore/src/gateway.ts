@@ -12,6 +12,7 @@ import {
   AgentCoreGatewayToolNameSchema,
   type AgentCoreGatewayArguments,
 } from "./contracts";
+import { AGENTCORE_AWS_REGIONS, isExactAgentCoreGatewayHost } from "./regions";
 
 export type AgentCoreGatewayAuth = Readonly<{
   authorization(signal?: AbortSignal): Promise<string>;
@@ -134,7 +135,9 @@ export function createAgentCoreGatewayClient(input: Readonly<{
 }>): AgentCoreGatewayClient {
   const url = new URL(input.gatewayUrl);
   const isLoopback = url.protocol === "http:" && ["127.0.0.1", "[::1]", "localhost"].includes(url.hostname);
-  const isAws = url.protocol === "https:" && url.hostname.endsWith(".gateway.bedrock-agentcore.us-east-1.amazonaws.com");
+  const isAws = url.protocol === "https:" && AGENTCORE_AWS_REGIONS.some(
+    (region) => isExactAgentCoreGatewayHost(url.hostname, region),
+  );
   if (
     (!isLoopback && !isAws) || url.pathname !== "/mcp" ||
     url.username || url.password || url.search || url.hash

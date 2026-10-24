@@ -7,7 +7,7 @@
   "additionalProperties": false,
   "required": ["region", "destinationAccountId", "createInput", "postCreateVerification"],
   "properties": {
-    "region": { "const": "us-east-1" },
+    "region": { "enum": ["us-east-1", "us-east-2"] },
     "destinationAccountId": { "type": "string", "pattern": "^[0-9]{12}$" },
     "createInput": {
       "type": "object",
@@ -30,7 +30,7 @@
               "properties": {
                 "containerUri": {
                   "type": "string",
-                  "pattern": "^[0-9]{12}\\.dkr\\.ecr\\.us-east-1\\.amazonaws\\.com/[a-z0-9]+(?:[._/-][a-z0-9]+)*@sha256:[a-f0-9]{64}$"
+                  "pattern": "^[0-9]{12}\\.dkr\\.ecr\\.(?:us-east-1|us-east-2)\\.amazonaws\\.com/[a-z0-9]+(?:[._/-][a-z0-9]+)*@sha256:[a-f0-9]{64}$"
                 }
               }
             }
@@ -57,7 +57,7 @@
           "additionalProperties": false,
           "required": [
             "AGENTCORE_RUNTIME_SERVER_MODE",
-            "AWS_REGION",
+            "AGENTCORE_AWS_REGION",
             "AGENTCORE_IDENTITY_CREDENTIAL_PROVIDER_NAME",
             "AGENTCORE_GATEWAY_URL",
             "AGENTCORE_GATEWAY_TOOL_NAME",
@@ -82,9 +82,9 @@
           ],
           "properties": {
             "AGENTCORE_RUNTIME_SERVER_MODE": { "const": "aws" },
-            "AWS_REGION": { "const": "us-east-1" },
+            "AGENTCORE_AWS_REGION": { "enum": ["us-east-1", "us-east-2"] },
             "AGENTCORE_IDENTITY_CREDENTIAL_PROVIDER_NAME": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$" },
-            "AGENTCORE_GATEWAY_URL": { "type": "string", "pattern": "^https://[0-9a-z](?:[0-9a-z-]{0,98}[0-9a-z])?-[0-9a-z]{10}\\.gateway\\.bedrock-agentcore\\.us-east-1\\.amazonaws\\.com/mcp$" },
+            "AGENTCORE_GATEWAY_URL": { "type": "string", "pattern": "^https://[0-9a-z](?:[0-9a-z-]{0,98}[0-9a-z])?-[0-9a-z]{10}\\.gateway\\.bedrock-agentcore\\.(?:us-east-1|us-east-2)\\.amazonaws\\.com/mcp$" },
             "AGENTCORE_GATEWAY_TOOL_NAME": { "type": "string", "pattern": "^[A-Za-z0-9_-]+___pilot\\.read_market_context$" },
             "AGENTCORE_GATEWAY_JWT_ISSUER": { "type": "string", "pattern": "^https://[^?#]+$" },
             "AGENTCORE_GATEWAY_JWT_JWKS_URL": { "type": "string", "pattern": "^https://[^?#]+$" },
@@ -131,7 +131,7 @@
           "properties": {
             "url": {
               "type": "string",
-              "pattern": "^https://[0-9a-z](?:[0-9a-z-]{0,98}[0-9a-z])?-[0-9a-z]{10}\\.gateway\\.bedrock-agentcore\\.us-east-1\\.amazonaws\\.com/mcp$"
+              "pattern": "^https://[0-9a-z](?:[0-9a-z-]{0,98}[0-9a-z])?-[0-9a-z]{10}\\.gateway\\.bedrock-agentcore\\.(?:us-east-1|us-east-2)\\.amazonaws\\.com/mcp$"
             },
             "toolName": {
               "type": "string",

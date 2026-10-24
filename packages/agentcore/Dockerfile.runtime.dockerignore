@@ -5,6 +5,7 @@
 !packages/
 !packages/*/
 !packages/*/package.json
+!packages/agentcore/THIRD_PARTY_NOTICES.md
 !packages/agentcore/src/
 !packages/agentcore/src/**
 !packages/agent/src/

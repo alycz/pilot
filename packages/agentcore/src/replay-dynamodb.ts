@@ -1,11 +1,22 @@
 import { randomUUID } from "node:crypto";
 
+import {
+  ConditionalCheckFailedException,
+  DynamoDBClient,
+  GetItemCommand,
+  UpdateItemCommand,
+  type DynamoDBClientConfig,
+  type GetItemCommandInput,
+  type UpdateItemCommandInput,
+} from "@aws-sdk/client-dynamodb";
+
 import { AgentCoreRuntimeResponseSchema } from "./contracts";
 import {
   AgentCoreReplayError,
   validateAgentCoreReplayDurations,
   type AgentCoreReplayStore,
 } from "./replay";
+import type { AgentCoreAwsRegion } from "./regions";
 
 type AttributeValue = Readonly<{ S?: string; N?: string }>;
 type Item = Readonly<Record<string, AttributeValue>>;
@@ -31,6 +42,7 @@ export interface DynamoDbReplayClient {
   updateItem(input: DynamoReplayUpdateInput, options?: Readonly<{ signal?: AbortSignal }>): Promise<Readonly<{ Attributes?: Item }>>;
   getItem(input: DynamoReplayGetInput, options?: Readonly<{ signal?: AbortSignal }>): Promise<Readonly<{ Item?: Item }>>;
   isConditionalFailure(error: unknown): boolean;
+  destroy?(): void;
 }
 
 export type DynamoDbReplayConfig = Readonly<{
@@ -39,6 +51,89 @@ export type DynamoDbReplayConfig = Readonly<{
   nextLeaseId?: () => string;
   timeoutMs?: number;
 }>;
+
+export type AwsSdkDynamoDbReplayClientConfig = Readonly<{
+  region: AgentCoreAwsRegion;
+  /** Test seam only. Production uses the SDK's default short-lived credential chain. */
+  client?: DynamoDBClient;
+}>;
+
+export function createAwsSdkDynamoDbClientConfig(
+  region: AgentCoreAwsRegion,
+): DynamoDBClientConfig {
+  return Object.freeze({
+    region,
+    maxAttempts: 1,
+    ignoreConfiguredEndpointUrls: true,
+  });
+}
+
+/**
+ * Compose the narrow replay transport with the official DynamoDB SDK. The SDK
+ * client is deliberately configured with no static credentials and no retries:
+ * an ambiguous write must surface as `uncertain`, never be replayed by a hidden
+ * transport retry.
+ */
+export function createAwsSdkDynamoDbReplayClient(
+  config: AwsSdkDynamoDbReplayClientConfig,
+): DynamoDbReplayClient {
+  const client = config.client ?? new DynamoDBClient(
+    createAwsSdkDynamoDbClientConfig(config.region),
+  );
+  const transport: DynamoDbReplayClient = {
+    async updateItem(input, options) {
+      const output = await client.send(
+        new UpdateItemCommand(input as UpdateItemCommandInput),
+        options?.signal ? { abortSignal: options.signal } : undefined,
+      );
+      return output.Attributes ? { Attributes: output.Attributes } : {};
+    },
+    async getItem(input, options) {
+      const output = await client.send(
+        new GetItemCommand(input as GetItemCommandInput),
+        options?.signal ? { abortSignal: options.signal } : undefined,
+      );
+      return output.Item ? { Item: output.Item } : {};
+    },
+    isConditionalFailure(error) {
+      return error instanceof ConditionalCheckFailedException ||
+        (error instanceof Error && error.name === "ConditionalCheckFailedException");
+    },
+    destroy() {
+      client.destroy();
+    },
+  };
+  return Object.freeze(transport);
+}
+
+export type AwsSdkDynamoDbReplayResources = Readonly<{
+  replayStore: AgentCoreReplayStore;
+  destroy(): void;
+}>;
+
+/** Compose the production SDK transport and durable replay state machine. */
+export function createAwsSdkDynamoDbAgentCoreReplayStore(config: Readonly<{
+  region: AgentCoreAwsRegion;
+  tableName: string;
+  client?: DynamoDBClient;
+  timeoutMs?: number;
+}>): AwsSdkDynamoDbReplayResources {
+  const transport = createAwsSdkDynamoDbReplayClient({
+    region: config.region,
+    ...(config.client ? { client: config.client } : {}),
+  });
+  const replayStore = createDynamoDbAgentCoreReplayStore({
+    tableName: config.tableName,
+    client: transport,
+    ...(config.timeoutMs ? { timeoutMs: config.timeoutMs } : {}),
+  });
+  return Object.freeze({
+    replayStore,
+    destroy() {
+      transport.destroy?.();
+    },
+  });
+}
 
 const allNames = Object.freeze({
   "#namespace": "namespace",

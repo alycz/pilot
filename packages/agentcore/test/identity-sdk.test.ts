@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createAgentCoreIdentityM2mJwtResolver } from "../src/identity-sdk";
 
 const config = {
-  region: "us-east-1",
+  region: "us-east-2",
   resourceCredentialProviderName: "pilot-gateway-jwt",
   scopes: ["gateway:invoke"],
   audiences: ["pilot-agentcore-gateway"],

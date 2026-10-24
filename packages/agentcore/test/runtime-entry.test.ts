@@ -9,9 +9,10 @@ import { createInMemoryAgentCoreReplayStore } from "../src/replay";
 
 const environment = Object.freeze({
   AGENTCORE_RUNTIME_SERVER_MODE: "aws",
-  AWS_REGION: "us-east-1",
+  AWS_REGION: "us-west-2",
+  AGENTCORE_AWS_REGION: "us-east-2",
   AGENTCORE_GATEWAY_URL:
-    "https://pilotgateway-abcdefghij.gateway.bedrock-agentcore.us-east-1.amazonaws.com/mcp",
+    "https://pilotgateway-abcdefghij.gateway.bedrock-agentcore.us-east-2.amazonaws.com/mcp",
   AGENTCORE_GATEWAY_TOOL_NAME: "PilotReadTarget___pilot.read_market_context",
   AGENTCORE_IDENTITY_CREDENTIAL_PROVIDER_NAME: "pilot-gateway-jwt",
   AGENTCORE_GATEWAY_JWT_ISSUER: "https://identity.example.test/",
@@ -42,7 +43,7 @@ describe("AgentCore Runtime executable configuration", () => {
   it("parses exact allowlists and keeps the deployment tenant separate", () => {
     const parsed = readAgentCoreRuntimeEnvironment(environment);
     expect(parsed).toMatchObject({
-      region: "us-east-1",
+      region: "us-east-2",
       resourceCredentialProviderName: "pilot-gateway-jwt",
       replayTableName: "pilot-agentcore-replay",
       config: {
@@ -63,7 +64,10 @@ describe("AgentCore Runtime executable configuration", () => {
   });
 
   it.each([
-    ["wrong region", { AWS_REGION: "us-west-2" }],
+    ["wrong region", { AGENTCORE_AWS_REGION: "us-west-2" }],
+    ["cross-region Gateway", {
+      AGENTCORE_GATEWAY_URL: "https://pilotgateway-abcdefghij.gateway.bedrock-agentcore.us-east-1.amazonaws.com/mcp",
+    }],
     ["non-AWS Gateway", { AGENTCORE_GATEWAY_URL: "https://example.test/mcp" }],
     ["duplicate audience", { AGENTCORE_GATEWAY_JWT_AUDIENCES_JSON: '["same","same"]' }],
     ["unsupported algorithm", { AGENTCORE_GATEWAY_JWT_ALGORITHMS_JSON: '["HS256"]' }],
@@ -99,9 +103,9 @@ describe("AgentCore Runtime executable configuration", () => {
     }
   });
 
-  it("refuses to bind the executable entrypoint without a durable replay adapter", async () => {
+  it("fails closed before constructing the durable client when production configuration is absent", async () => {
     await expect(runAgentCoreRuntimeMain()).rejects.toThrow(
-      "A durable AgentCore replay adapter is required",
+      "AGENTCORE_RUNTIME_SERVER_MODE must be aws",
     );
   });
 });

@@ -4,6 +4,16 @@ These files are inert, account-neutral review artifacts. Do not deploy them or
 replace placeholders until the account owner approves the account, Region,
 roles, target, identity provider, retention, and spend.
 
+AWS currently documents AgentCore Runtime, Gateway, and Identity support in US
+East (Ohio), `us-east-2`. The inert examples use that Region because the event
+account reports access there. Validation also accepts `us-east-1`, but requires
+the selected Region to match the Runtime environment, ECR image, and Gateway
+endpoint exactly. Region availability does not prove the account has permission
+to create or invoke any resource. See
+https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/agentcore-regions.html.
+Runtime configuration uses `AGENTCORE_AWS_REGION`; it does not consume or alter
+the global `AWS_REGION` policy owned by the existing Bedrock and Harbor paths.
+
 `gateway-and-roles.template.json` contains only supported CloudFormation
 resources: a `CUSTOM_JWT` MCP Gateway pinned to `2025-11-25`, one Lambda-backed
 read target, one retained durable Runtime replay table, and separate Runtime and Gateway
@@ -93,14 +103,16 @@ uncertain record has TTL removed and is never silently retried or expired. The
 table never stores raw prompts, wallet scope, owner or tenant identifiers,
 tokens, credentials, or private material.
 
-The checked-in replay adapter currently exposes an injected DynamoDB-client
-seam, and Runtime refuses to bind without a durable adapter. The official
-`@aws-sdk/client-dynamodb` production transport and Runtime composition are not
-yet present because dependency installation was unavailable. Lambda ESM
-bundling and offline smoke invocation are scripted, but creation of a versioned
-zip remains a reviewed operator step. The table, bundle, and Lambda templates
-therefore define reviewed account-time resources and interfaces, not deployed
-or live-ready evidence.
+The checked-in replay adapter uses the pinned official
+`@aws-sdk/client-dynamodb` transport. Runtime composes it from the validated
+Region and replay-table name before binding. SDK retries are disabled so an
+ambiguous conditional write fails closed as `uncertain`; the adapter supplies
+its own bounded deadline, forwards cancellation, and destroys the SDK client
+after Runtime shutdown. Ambient AWS SDK endpoint overrides are ignored. Lambda ESM bundling and
+offline smoke invocation are scripted, but creation of a versioned zip remains
+a reviewed operator step. The table, bundle, and Lambda templates therefore
+define reviewed account-time resources and interfaces, not deployed or
+live-ready evidence.
 
 CloudFormation's current `AWS::BedrockAgentCore::Runtime` schema does not expose
 `metadataConfiguration`. Because `requireMMDSV2=true` is mandatory after
@@ -179,7 +191,8 @@ This split avoids weakening the caller policy with a pre-creation Runtime
 wildcard.
 
 `operator-management.policy.template.json` is kept separate because it contains
-resource-management and deletion actions. An account owner must replace every
+resource-management and deletion actions. Its literal `ACCOUNT_ID` and `REGION`
+tokens are placeholders, not deployable values. An account owner must replace every
 placeholder, independently review the resulting scope, and decide who may
 assume that role. The policy denies KMS, Secrets Manager, and Parameter Store
 management and cannot create, tag, alias, sign with, decrypt with, or delete a

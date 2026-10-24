@@ -7,6 +7,7 @@ const readJsonPath = async (path) => JSON.parse(await readFile(path, "utf8"));
 const fail = (message) => { throw new Error(message); };
 const assert = (condition, message) => { if (!condition) fail(message); };
 const clone = (value) => JSON.parse(JSON.stringify(value));
+const supportedRegions = new Set(["us-east-1", "us-east-2"]);
 const expectFailure = (operation, expected, label) => {
   try {
     operation();
@@ -19,7 +20,7 @@ const expectFailure = (operation, expected, label) => {
 
 const runtimeEnvironmentKeys = [
   "AGENTCORE_RUNTIME_SERVER_MODE",
-  "AWS_REGION",
+  "AGENTCORE_AWS_REGION",
   "AGENTCORE_IDENTITY_CREDENTIAL_PROVIDER_NAME",
   "AGENTCORE_GATEWAY_URL",
   "AGENTCORE_GATEWAY_TOOL_NAME",
@@ -97,19 +98,25 @@ const validateRuntimeAccountBinding = (createDocument, updateDocument, label) =>
   validateJsonSchema(schema, createDocument, `${label}: create`);
   validateJsonSchema(updateSchema, updateDocument, `${label}: update`);
   const destinationAccountId = createDocument.destinationAccountId;
+  const region = createDocument.region;
+  assert(supportedRegions.has(region), `${label}: create Region is unsupported`);
+  assert(updateDocument.region === region, `${label}: create and update Regions differ`);
   assert(/^[0-9]{12}$/.test(destinationAccountId), `${label}: create destinationAccountId is invalid`);
   assert(updateDocument.destinationAccountId === destinationAccountId, `${label}: create and update destination accounts differ`);
 
   for (const [phase, input] of [["create", createDocument.createInput], ["update", updateDocument.updateInput]]) {
     assert(input && typeof input === "object", `${label}: ${phase} input is missing`);
     const containerUri = input.agentRuntimeArtifact?.containerConfiguration?.containerUri;
-    const ecrAccountId = typeof containerUri === "string"
-      ? containerUri.match(/^([0-9]{12})\.dkr\.ecr\.us-east-1\.amazonaws\.com\//)?.[1]
+    const ecrMatch = typeof containerUri === "string"
+      ? containerUri.match(/^([0-9]{12})\.dkr\.ecr\.(us-east-[12])\.amazonaws\.com\//)
       : undefined;
+    const ecrAccountId = ecrMatch?.[1];
+    const ecrRegion = ecrMatch?.[2];
     const roleAccountId = typeof input.roleArn === "string"
       ? input.roleArn.match(/^arn:aws:iam::([0-9]{12}):role\//)?.[1]
       : undefined;
     assert(ecrAccountId === destinationAccountId, `${label}: ${phase} ECR image is not in the destination account`);
+    assert(ecrRegion === region, `${label}: ${phase} ECR image is not in the selected Region`);
     assert(roleAccountId === destinationAccountId, `${label}: ${phase} Runtime role is not in the destination account`);
   }
 
@@ -121,9 +128,10 @@ const validateRuntimeAccountBinding = (createDocument, updateDocument, label) =>
   const environment = createDocument.createInput.environmentVariables;
   assert(environment && JSON.stringify(Object.keys(environment).sort()) === JSON.stringify(runtimeEnvironmentKeys), `${label}: Runtime environment inventory is not exact`);
   assert(environment.AGENTCORE_RUNTIME_SERVER_MODE === "aws", `${label}: Runtime server mode must be aws`);
-  assert(environment.AWS_REGION === "us-east-1", `${label}: Runtime region must be us-east-1`);
+  assert(environment.AGENTCORE_AWS_REGION === region, `${label}: Runtime environment Region differs from the selected Region`);
   assert(/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(environment.AGENTCORE_IDENTITY_CREDENTIAL_PROVIDER_NAME), `${label}: Identity credential-provider name is invalid`);
-  assert(/^https:\/\/[0-9a-z](?:[0-9a-z-]{0,98}[0-9a-z])?-[0-9a-z]{10}\.gateway\.bedrock-agentcore\.us-east-1\.amazonaws\.com\/mcp$/.test(environment.AGENTCORE_GATEWAY_URL), `${label}: Gateway URL is invalid`);
+  const gatewayRegion = environment.AGENTCORE_GATEWAY_URL.match(/^https:\/\/[0-9a-z](?:[0-9a-z-]{0,98}[0-9a-z])?-[0-9a-z]{10}\.gateway\.bedrock-agentcore\.(us-east-[12])\.amazonaws\.com\/mcp$/)?.[1];
+  assert(gatewayRegion === region, `${label}: Gateway URL is not in the selected Region`);
   assert(/^[A-Za-z0-9_-]+___pilot\.read_market_context$/.test(environment.AGENTCORE_GATEWAY_TOOL_NAME), `${label}: Gateway tool name is invalid`);
   for (const name of ["AGENTCORE_GATEWAY_JWT_ISSUER", "AGENTCORE_GATEWAY_JWT_JWKS_URL"]) {
     assert(typeof environment[name] === "string" && environment[name].length <= 2_048 && /^https:\/\/[^?#]+$/.test(environment[name]), `${label}: ${name} must be a bounded HTTPS URL`);
@@ -335,8 +343,8 @@ assert(JSON.stringify([...createEnvironmentSchema.required].sort()) === JSON.str
 assert(JSON.stringify([...updateEnvironmentSchema.required].sort()) === JSON.stringify(runtimeEnvironmentKeys), "Runtime update schema environment inventory drifted");
 assert(JSON.stringify(Object.keys(createEnvironmentSchema.properties).sort()) === JSON.stringify(runtimeEnvironmentKeys), "Runtime create environment schema exposes an unexpected field");
 assert(JSON.stringify(Object.keys(updateEnvironmentSchema.properties).sort()) === JSON.stringify(runtimeEnvironmentKeys), "Runtime update environment schema exposes an unexpected field");
-assert(schema.properties.region.const === example.region, "Runtime create Region violates the contract");
-assert(updateSchema.properties.region.const === updateExample.region, "Runtime update Region violates the contract");
+assert(schema.properties.region.enum.includes(example.region), "Runtime create Region violates the contract");
+assert(updateSchema.properties.region.enum.includes(updateExample.region), "Runtime update Region violates the contract");
 assert(schema.properties.destinationAccountId.pattern === "^[0-9]{12}$", "Runtime create destination account boundary changed");
 assert(updateSchema.properties.destinationAccountId.pattern === "^[0-9]{12}$", "Runtime update destination account boundary changed");
 assert(!Object.hasOwn(createInput, "metadataConfiguration"), "CreateAgentRuntime input must not contain unsupported metadataConfiguration");
@@ -378,6 +386,27 @@ expectFailure(
   () => validateRuntimeAccountBinding(crossAccountCreate, crossAccountUpdate, "cross-account regression"),
   "ECR image is not in the destination account",
   "Runtime validator must reject a cross-account image",
+);
+
+const crossRegionCreate = clone(example);
+const crossRegionUpdate = clone(updateExample);
+crossRegionCreate.createInput.agentRuntimeArtifact.containerConfiguration.containerUri = crossRegionCreate.createInput.agentRuntimeArtifact.containerConfiguration.containerUri.replace("us-east-2", "us-east-1");
+crossRegionUpdate.updateInput.agentRuntimeArtifact.containerConfiguration.containerUri = crossRegionUpdate.updateInput.agentRuntimeArtifact.containerConfiguration.containerUri.replace("us-east-2", "us-east-1");
+expectFailure(
+  () => validateRuntimeAccountBinding(crossRegionCreate, crossRegionUpdate, "cross-region ECR regression"),
+  "ECR image is not in the selected Region",
+  "Runtime validator must reject a cross-Region image",
+);
+
+const crossRegionGatewayCreate = clone(example);
+const crossRegionGatewayUpdate = clone(updateExample);
+crossRegionGatewayCreate.createInput.environmentVariables.AGENTCORE_GATEWAY_URL = crossRegionGatewayCreate.createInput.environmentVariables.AGENTCORE_GATEWAY_URL.replace("us-east-2", "us-east-1");
+crossRegionGatewayUpdate.updateInput.environmentVariables.AGENTCORE_GATEWAY_URL = crossRegionGatewayUpdate.updateInput.environmentVariables.AGENTCORE_GATEWAY_URL.replace("us-east-2", "us-east-1");
+crossRegionGatewayCreate.postCreateVerification.gateway.url = crossRegionGatewayCreate.postCreateVerification.gateway.url.replace("us-east-2", "us-east-1");
+expectFailure(
+  () => validateRuntimeAccountBinding(crossRegionGatewayCreate, crossRegionGatewayUpdate, "cross-region Gateway regression"),
+  "Gateway URL is not in the selected Region",
+  "Runtime validator must reject a cross-Region Gateway",
 );
 
 const invalidRetentionCreate = clone(example);

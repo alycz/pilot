@@ -1,11 +1,11 @@
 {
-  "region": "us-east-1",
+  "region": "us-east-2",
   "destinationAccountId": "000000000000",
   "agentRuntimeId": "PilotResearchRuntime-0000000000",
   "updateInput": {
     "agentRuntimeArtifact": {
       "containerConfiguration": {
-        "containerUri": "000000000000.dkr.ecr.us-east-1.amazonaws.com/pilot-agentcore@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+        "containerUri": "000000000000.dkr.ecr.us-east-2.amazonaws.com/pilot-agentcore@sha256:0000000000000000000000000000000000000000000000000000000000000000"
       }
     },
     "roleArn": "arn:aws:iam::000000000000:role/pilot-agentcore-runtime-example",
@@ -17,9 +17,9 @@
     },
     "environmentVariables": {
       "AGENTCORE_RUNTIME_SERVER_MODE": "aws",
-      "AWS_REGION": "us-east-1",
+      "AGENTCORE_AWS_REGION": "us-east-2",
       "AGENTCORE_IDENTITY_CREDENTIAL_PROVIDER_NAME": "pilot-agentcore-gateway-oauth",
-      "AGENTCORE_GATEWAY_URL": "https://pilotgateway-0000000000.gateway.bedrock-agentcore.us-east-1.amazonaws.com/mcp",
+      "AGENTCORE_GATEWAY_URL": "https://pilotgateway-0000000000.gateway.bedrock-agentcore.us-east-2.amazonaws.com/mcp",
       "AGENTCORE_GATEWAY_TOOL_NAME": "PilotReadTarget___pilot.read_market_context",
       "AGENTCORE_GATEWAY_JWT_ISSUER": "https://identity.example.invalid/",
       "AGENTCORE_GATEWAY_JWT_JWKS_URL": "https://identity.example.invalid/.well-known/jwks.json",

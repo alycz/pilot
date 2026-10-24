@@ -30,22 +30,29 @@ describe("readAgentCoreConfig", () => {
   it("requires an exact Runtime ARN and Gateway endpoint in aws mode", () => {
     expect(readAgentCoreConfig({
       AGENTCORE_MODE: "aws",
-      AWS_REGION: "us-east-1",
-      AGENTCORE_RUNTIME_ARN: "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/pilot_research-AbCdEf1234",
+      AWS_REGION: "us-west-2",
+      AGENTCORE_AWS_REGION: "us-east-2",
+      AGENTCORE_RUNTIME_ARN: "arn:aws:bedrock-agentcore:us-east-2:123456789012:runtime/pilot_research-AbCdEf1234",
       AGENTCORE_RUNTIME_QUALIFIER: "pilot_v1",
       AGENTCORE_RUNTIME_AUTH_MODE: "iam",
-      AGENTCORE_GATEWAY_URL: "https://pilotgateway-abcdefghij.gateway.bedrock-agentcore.us-east-1.amazonaws.com/mcp",
+      AGENTCORE_GATEWAY_URL: "https://pilotgateway-abcdefghij.gateway.bedrock-agentcore.us-east-2.amazonaws.com/mcp",
       AGENTCORE_GATEWAY_TOOL_NAME: "PilotReadTarget___pilot.read_market_context",
       AGENTCORE_GATEWAY_AUTH_MODE: "custom_jwt",
     })).toMatchObject({
       mode: "aws",
-      region: "us-east-1",
+      region: "us-east-2",
       qualifier: "pilot_v1",
       runtimeAuthMode: "iam",
       gatewayAuthMode: "custom_jwt",
       gatewayProtocolVersion: "2025-11-25",
     });
     expect(() => readAgentCoreConfig({ AGENTCORE_MODE: "aws" })).toThrow("AGENTCORE_RUNTIME_ARN");
+    expect(() => readAgentCoreConfig({
+      AGENTCORE_MODE: "aws",
+      AGENTCORE_AWS_REGION: "us-east-2",
+      AGENTCORE_RUNTIME_ARN: "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/pilot_research-AbCdEf1234",
+      AGENTCORE_GATEWAY_URL: "https://pilotgateway-abcdefghij.gateway.bedrock-agentcore.us-east-2.amazonaws.com/mcp",
+    })).toThrow("us-east-2 Runtime ARN");
   });
 
   it("never projects ambient credentials", () => {

@@ -8,3 +8,4 @@ export * from "./runtime";
 export * from "./runtime-handler";
 export * from "./replay";
 export * from "./replay-dynamodb";
+export * from "./regions";

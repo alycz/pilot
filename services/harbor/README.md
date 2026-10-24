@@ -564,7 +564,8 @@ should use a deliberately scoped principal rather than a personal credential.
 [`wrangler.free-quickjs.jsonc`](wrangler.free-quickjs.jsonc) is an inert
 template for a no-spend deployment review. It has no Worker Loader binding and
 no cron, keeps mainnet, autonomous execution, QuickNode, Mastercard MCP, KMS,
-AP4M, and shared model access off, and exposes only MCP search. MCP `execute`
+AP4M, and shared model access off, and exposes only MCP search. REST operations
+return a fail-closed deployment-profile error, and MCP `execute`
 stays unregistered until a separately authorized Workers Free CPU acceptance
 run shows that the QuickJS path fits the plan's CPU budget.
 

@@ -29,6 +29,7 @@ describe("Free/QuickJS deployment configuration", () => {
 		expect(config).not.toHaveProperty("worker_loaders");
 		expect(config.triggers).toEqual({ crons: [] });
 		expect(config.vars).toMatchObject({
+			HARBOR_DEPLOYMENT_PROFILE: "free-quickjs",
 			EXECUTOR: "quickjs",
 			MAINNET_EXECUTION: "false",
 			HARBOR_MCP_EXECUTION_ENABLED: "false",
@@ -95,10 +96,24 @@ describe("Free/QuickJS deployment configuration", () => {
 		expect(config.vars.HARBOR_MCP_EXECUTION_ENABLED).toBe("false");
 	});
 
+	it("refuses to write generated operator configuration into the checkout", () => {
+		const result = spawnSync(process.execPath, [
+			join(serviceRoot, "scripts/configure-deployment.mjs"),
+			"--profile", "free-quickjs",
+			"--worker-name", "approved-harbor",
+			"--database-name", "approved-harbor-db",
+			"--database-id", "123e4567-e89b-42d3-a456-426614174000",
+			"--origin", "https://harbor.example.com",
+			"--output", join(serviceRoot, "wrangler.generated.jsonc"),
+		], { encoding: "utf8" });
+		expect(result.status).toBe(1);
+		expect(result.stderr).toContain("outside the repository checkout");
+	});
+
 	it("keeps the provisioning bootstrap out of the Free profile", () => {
 		const bootstrap = readFileSync(join(serviceRoot, "scripts/bootstrap.sh"), "utf8");
-		expect(bootstrap).not.toContain("probe_quickjs");
-		expect(bootstrap).toContain("will not silently select QuickJS");
+		expect(bootstrap).toContain("probe_quickjs");
+		expect(bootstrap).toContain("Worker Loader and QuickJS fallback probes both failed");
 
 		const result = spawnSync("bash", [join(serviceRoot, "scripts/bootstrap.sh")], {
 			encoding: "utf8",

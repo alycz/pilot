@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const FREE_QUICKJS_PROFILE = "free-quickjs";
@@ -72,6 +72,7 @@ export function buildFreeQuickJsConfig(input) {
 		observability: { enabled: false },
 		upload_source_maps: false,
 		vars: {
+			HARBOR_DEPLOYMENT_PROFILE: FREE_QUICKJS_PROFILE,
 			HARBOR_SOURCE_TAG: "2610240",
 			HARBOR_PUBLIC_URL: origin,
 			EXEC_NETWORK: "testnet",
@@ -115,6 +116,15 @@ export function writeFreeQuickJsConfig(argv) {
 	const values = parseArguments(argv);
 	const output = resolve(values["--output"]);
 	const serviceRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
+	const repositoryRoot = resolve(serviceRoot, "../..");
+	const repositoryRelativeOutput = relative(repositoryRoot, output);
+	if (
+		repositoryRelativeOutput === "" ||
+		(!repositoryRelativeOutput.startsWith("..") &&
+			!isAbsolute(repositoryRelativeOutput))
+	) {
+		fail("output must be outside the repository checkout");
+	}
 	for (const protectedPath of ["wrangler.jsonc", "wrangler.free-quickjs.jsonc"]) {
 		if (output === resolve(serviceRoot, protectedPath)) fail(`refusing to overwrite ${protectedPath}`);
 	}

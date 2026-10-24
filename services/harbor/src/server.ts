@@ -434,6 +434,14 @@ export function createAp4mRuntimeFactory(
 	return (env) => createAp4mRuntimeServices(env, adapters);
 }
 
+export function restOperationsEnabledForDeployment(
+	env: Readonly<{ HARBOR_DEPLOYMENT_PROFILE?: string }>,
+): boolean {
+	const profile = env.HARBOR_DEPLOYMENT_PROFILE;
+	if (profile === undefined) return true;
+	return profile === "paid-dynamic";
+}
+
 export function createWorker(
 	registry?: OpRegistry,
 	localX402Service: LocalX402ServiceFactory = createLocalX402Service,
@@ -562,6 +570,20 @@ export function createWorker(
 				...(ap4mServices === undefined ? {} : { ap4mServices }),
 			};
 			if (url.pathname.startsWith("/api/ops/")) {
+				if (!restOperationsEnabledForDeployment(env)) {
+					return Response.json(
+						{
+							ok: false,
+							error: {
+								service: "rest",
+								kind: "error",
+								message: "REST operations are disabled for this deployment profile",
+								code: "DEPLOYMENT_PROFILE_DISABLED",
+							},
+						},
+						{ status: 403, headers: { "cache-control": "no-store" } },
+					);
+				}
 				const opName = url.pathname.slice("/api/ops/".length);
 				return handleRestOperation(request, opName, ctx, requestRegistry);
 			}

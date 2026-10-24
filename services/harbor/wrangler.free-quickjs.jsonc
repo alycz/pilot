@@ -28,6 +28,7 @@
   },
   "upload_source_maps": false,
   "vars": {
+    "HARBOR_DEPLOYMENT_PROFILE": "free-quickjs",
     "HARBOR_SOURCE_TAG": "2610240",
     "HARBOR_PUBLIC_URL": "https://replace.invalid",
     "EXEC_NETWORK": "testnet",

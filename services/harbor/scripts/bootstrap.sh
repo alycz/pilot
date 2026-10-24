@@ -34,6 +34,14 @@ die() {
   exit 1
 }
 
+case "${HARBOR_BOOTSTRAP_PROFILE:-paid-dynamic}" in
+	paid-dynamic) ;;
+	free-quickjs)
+		die "bootstrap is paid-dynamic only; use config:free:generate for the inert Free/QuickJS profile"
+		;;
+	*) die "HARBOR_BOOTSTRAP_PROFILE must be paid-dynamic or free-quickjs" ;;
+esac
+
 cleanup() {
   if [[ -n "$PROBE_PID" ]] && kill -0 "$PROBE_PID" 2>/dev/null; then
     kill "$PROBE_PID" 2>/dev/null || true

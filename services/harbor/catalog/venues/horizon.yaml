@@ -1,0 +1,19 @@
+id: horizon
+name: Horizon
+kind: discovery-venue
+layer: xrpl-l1
+category: [spot, liquidity, analytics]
+status:
+  mainnet: live
+reads:
+  - Live XRPL token prices, volume, market capitalization, and trends
+  - Token trade history and holder analytics
+  - XRPL AMM pool reserves, fees, volume, and liquidity positions
+risks:
+  - Official documentation describes a self-custody user interface but does not identify the XRPL transaction types used by swaps, copy trading, token sniping, or DCA orders; execution support is omitted
+  - No public API endpoint or machine-readable API contract was found, so reads describe user-interface data only
+  - Official material does not document Testnet or Devnet availability, so those network statuses are omitted
+  - Token and AMM analytics can be delayed or incomplete and should be checked against current on-ledger state before acting
+links:
+  site: https://horizonxrpl.com/
+  docs: https://horizonxrpl.com/documentation

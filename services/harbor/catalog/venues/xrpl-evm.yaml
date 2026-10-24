@@ -1,0 +1,20 @@
+id: xrpl-evm
+name: XRPL EVM Sidechain
+kind: discovery-venue
+layer: xrpl-evm
+category:
+  - bridge
+status:
+  mainnet: live
+reads:
+  - Blocks, transactions, receipts, logs, balances, and contract state through the public Ethereum JSON-RPC API
+  - Network status and Cosmos-side state through the public Tendermint RPC, Cosmos gRPC, and Cosmos API endpoints
+risks:
+  - "XRPL EVM is a standalone Layer 1 sidechain, not the XRP Ledger; it has a separate consensus system, accounts, transaction lifecycle, and smart-contract risk."
+  - "Cross-chain transfers add bridge, relayer, validator, finality, wrapped-asset, and liquidity risk; available routes include Axelar, IBC, and Wormhole."
+  - "Harbor treats XRPL EVM as a read-only discovery venue and does not sign or submit EVM transactions."
+  - "Testnet and Devnet status is omitted because the official API page exposes those networks in dynamic tabs without a static availability statement."
+links:
+  site: https://www.xrplevm.org/
+  docs: https://docs.xrplevm.org/pages/developers
+  api: https://docs.xrplevm.org/pages/developers/resources/public-apis

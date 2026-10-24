@@ -1,0 +1,15 @@
+id: orchestra-finance
+name: Orchestra Finance
+kind: discovery-venue
+layer: xrpl-l1
+category: [liquidity, analytics]
+status:
+  mainnet: unavailable
+reads: []
+risks:
+  - The official Orchestra Finance domain is currently parked and does not expose the former application
+  - No current official documentation or API could be verified, so reads and execution support are intentionally omitted
+  - Historical descriptions identify an XRPL AMM front end, but current network support and operating status cannot be confirmed from first-party material
+  - Testnet and Devnet availability are unknown, so those network statuses are omitted
+links:
+  site: https://orchestra.finance/

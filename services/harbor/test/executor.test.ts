@@ -6,6 +6,7 @@ import {
   type OpContext,
   type OpDef,
 } from "../src/catalog/registry";
+import { XrplRpcError } from "../src/adapters/xrpl-rpc";
 import { MAX_OUTPUT_BYTES } from "../src/guard";
 import { execute } from "../src/executor/run";
 import {
@@ -77,6 +78,108 @@ describe("registry-backed Harbor provider", () => {
         kind: "error",
         message: "Operation failed",
         code: "OPERATION_FAILED",
+      },
+    });
+  });
+
+  it("preserves only allowlisted XRPL transport metadata", async () => {
+    const provider = createHarborProvider(
+      new OpRegistry([
+        feeOp(() => {
+          throw new XrplRpcError(
+            "sentinel secret URL/body/request",
+            "XRPL_TRANSPORT_ERROR",
+            "error",
+            true,
+          );
+        }),
+      ]),
+      ctx,
+    );
+    const result = await provider.invoke("ledger.fee");
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        service: "xrpl",
+        kind: "error",
+        message: "XRPL request failed",
+        code: "XRPL_TRANSPORT_ERROR",
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain("sentinel");
+  });
+
+  it("preserves allowlisted XRPL soft-empty metadata", async () => {
+    const provider = createHarborProvider(
+      new OpRegistry([
+        feeOp(() => {
+          throw new XrplRpcError(
+            "upstream response must remain private",
+            "entryNotFound",
+            "soft-empty",
+          );
+        }),
+      ]),
+      ctx,
+    );
+    await expect(provider.invoke("ledger.fee")).resolves.toEqual({
+      ok: false,
+      error: {
+        service: "xrpl",
+        kind: "soft-empty",
+        message: "XRPL request failed",
+        code: "entryNotFound",
+      },
+    });
+  });
+
+  it("redacts unrecognized XRPL codes and soft-empty claims", async () => {
+    const provider = createHarborProvider(
+      new OpRegistry([
+        feeOp(() => {
+          throw new XrplRpcError(
+            "secret-message-sentinel",
+            "secret-code-sentinel",
+            "soft-empty",
+          );
+        }),
+      ]),
+      ctx,
+    );
+    const result = await provider.invoke("ledger.fee");
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        service: "xrpl",
+        kind: "error",
+        message: "XRPL request failed",
+        code: "XRPL_ERROR",
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain("sentinel");
+  });
+
+  it("downgrades forged soft-empty kinds on non-empty allowlisted codes", async () => {
+    const provider = createHarborProvider(
+      new OpRegistry([
+        feeOp(() => {
+          throw new XrplRpcError(
+            "upstream detail remains private",
+            "tooBusy",
+            "soft-empty",
+            true,
+          );
+        }),
+      ]),
+      ctx,
+    );
+    await expect(provider.invoke("ledger.fee")).resolves.toEqual({
+      ok: false,
+      error: {
+        service: "xrpl",
+        kind: "error",
+        message: "XRPL request failed",
+        code: "tooBusy",
       },
     });
   });

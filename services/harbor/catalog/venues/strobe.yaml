@@ -1,0 +1,18 @@
+id: strobe
+name: Strobe Finance
+kind: discovery-venue
+layer: xrpl-evm
+category:
+  - lending
+  - yield
+status:
+  mainnet: unavailable
+reads: []
+risks:
+  - "Strobe's official channel says the service is winding down and remains available only for orderly withdrawals; it is not cataloged as a live lending or borrowing venue."
+  - "Published product documentation describes permissionless supply, withdrawal, overcollateralized borrowing, repayment, and liquidation, but should be treated as historical until the venue documents a restart."
+  - "The documented architecture spans XRPL, Axelar, and XRPL EVM contracts, adding smart-contract, bridge, validator, oracle, cross-chain message, liquidity, and wrapped-asset risks."
+  - "Borrowers can be liquidated when their health factor falls below one, and Strobe documents additional restrictions for XRPL accounts using DepositAuth, DisallowXRP, or RequireDestTag."
+links:
+  site: https://strobe.finance/
+  docs: https://strobe-protocol.gitbook.io/strobe-protocol/money-market

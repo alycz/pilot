@@ -1,0 +1,19 @@
+id: securd
+name: Securd
+kind: discovery-venue
+layer: off-ledger
+category:
+  - liquidity
+  - yield
+  - lending
+status:
+  mainnet: unavailable
+reads: []
+risks:
+  - Official Securd documentation identifies Tezos as its deployed chain; no official source was found for an XRPL or XRPL EVM deployment, so XRPL Mainnet is marked unavailable.
+  - No official public API, contract addresses, current supported-asset list, or Testnet and Devnet support could be verified; reads and execution support are therefore omitted.
+  - Depositors and borrowers face smart-contract, variable-rate, collateral-price, liquidation, and principal-loss risk.
+  - The venue's leveraged-liquidity strategy uses DEX LP tokens as collateral, adding impermanent-loss and liquidity risk to ordinary borrowing risk.
+links:
+  site: https://www.securd.org/
+  docs: https://docs.securd.org/documentation

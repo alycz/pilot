@@ -1,0 +1,24 @@
+id: xpmarket
+name: XPMarket
+kind: discovery-venue
+layer: xrpl-l1
+category:
+  - spot
+  - liquidity
+  - yield
+  - analytics
+status:
+  mainnet: live
+reads:
+  - XRPL token price, price change, market capitalization, volume, trust-line, and holder analytics
+  - XRPL DEX order book, exchange history, open orders, and trade history
+  - XRPL AMM pool price, liquidity, 24-hour volume, transaction, swap, contributor, and fee metrics
+risks:
+  - XPMarket states that token prices and volumes can combine XRPL DEX and centralized-exchange data and that circulating supply uses internal estimation rules; these metrics are not authoritative ledger state.
+  - Basic project verification does not establish token legitimacy; issuer controls, transfer fees, market volatility, low liquidity, price impact, and slippage remain material risks.
+  - Liquidity providers face token-price fluctuation and impermanent-loss risk even though XRPL AMMs are protocol-native.
+  - The official site mentions an XPMarket API but no public machine-readable API contract for these venue reads was verified, so reads describe the user interface and execution support is omitted.
+  - Official material documents XRPL Mainnet but not Testnet or Devnet availability, so those network statuses are omitted.
+links:
+  site: https://xpmarket.com/
+  docs: https://xpmarket.com/amm/guide

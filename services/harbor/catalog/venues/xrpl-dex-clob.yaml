@@ -1,0 +1,27 @@
+id: xrpl-dex-clob
+name: XRPL DEX (CLOB)
+kind: execution-primitive
+layer: xrpl-l1
+category:
+  - spot
+  - liquidity
+status:
+  mainnet: live
+execution:
+  transactions:
+    - OfferCreate
+    - OfferCancel
+  builders:
+    - tx.swap
+    - tx.offer
+    - tx.offerCancel
+reads:
+  - book_offers
+risks:
+  - "Offers can execute partially, remain on-ledger, or become unfunded; use funded amounts from book_offers and enforce explicit price and fill constraints."
+  - "Issued-token trades remain subject to trust lines, issuer authorization and freeze settings, transfer fees, and the owner reserve for a resting Offer."
+  - "Testnet and Devnet status is omitted because the cited XRPL pages do not publish a static per-network availability matrix."
+links:
+  site: https://xrpl.org/docs/concepts/tokens/decentralized-exchange
+  docs: https://xrpl.org/docs/references/protocol/transactions/types/offercreate
+  api: https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/path-and-order-book-methods/book_offers

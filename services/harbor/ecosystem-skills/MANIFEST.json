@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "skills": [
+    {
+      "id": "xrpl-agent-wallet",
+      "name": "XRPL Agent Wallet",
+      "repositoryUrl": "https://github.com/XRPLF/xrpl-dev-portal",
+      "documentationUrl": "https://xrpl.org/docs/agents/xrpl-agent-wallet-skill",
+      "commit": "7e302d2781ae32be1b88485659e686e417f154c6",
+      "sourceUrl": "https://raw.githubusercontent.com/XRPLF/xrpl-dev-portal/7e302d2781ae32be1b88485659e686e417f154c6/.claude/skills/xrpl-skills/xrpl-agent-wallet/SKILL.md"
+    },
+    {
+      "id": "xrpl-payments",
+      "name": "XRPL Payments",
+      "repositoryUrl": "https://github.com/XRPLF/xrpl-dev-portal",
+      "documentationUrl": "https://xrpl.org/docs/agents/xrpl-payments-skill",
+      "commit": "7e302d2781ae32be1b88485659e686e417f154c6",
+      "sourceUrl": "https://raw.githubusercontent.com/XRPLF/xrpl-dev-portal/7e302d2781ae32be1b88485659e686e417f154c6/.claude/skills/xrpl-skills/xrpl-payments/SKILL.md"
+    },
+    {
+      "id": "xrpl-trading",
+      "name": "XRPL Trading",
+      "repositoryUrl": "https://github.com/XRPLF/xrpl-dev-portal",
+      "documentationUrl": "https://xrpl.org/docs/agents/xrpl-trading-skill",
+      "commit": "7e302d2781ae32be1b88485659e686e417f154c6",
+      "sourceUrl": "https://raw.githubusercontent.com/XRPLF/xrpl-dev-portal/7e302d2781ae32be1b88485659e686e417f154c6/.claude/skills/xrpl-skills/xrpl-trading/SKILL.md"
+    }
+  ]
+}

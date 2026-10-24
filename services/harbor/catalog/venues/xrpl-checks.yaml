@@ -1,0 +1,21 @@
+id: xrpl-checks
+name: XRPL Checks
+kind: execution-primitive
+layer: xrpl-l1
+category:
+  - payments
+status:
+  mainnet: live
+reads:
+  - account_objects
+  - account_tx
+risks:
+  - A Check does not reserve funds when it is created, so CheckCash can fail if the sender lacks funds or usable liquidity at cashing time.
+  - An expired Check remains on-ledger until canceled, and CheckCreate adds an owner-reserve obligation for the sender.
+  - Issuer authorization, freeze settings, transfer fees, and trust-line state can affect token-denominated Checks.
+  - Execution metadata is omitted because the fixed Harbor builder set has no dedicated CheckCreate, CheckCash, or CheckCancel builder; CheckCreate authorizes future value movement and is not delegated by Harbor policy.
+  - Testnet and Devnet status is omitted because the cited XRPL pages do not publish a static per-network availability matrix.
+links:
+  site: https://xrpl.org/
+  docs: https://xrpl.org/docs/concepts/payment-types/checks
+  api: https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/account-methods/account_objects

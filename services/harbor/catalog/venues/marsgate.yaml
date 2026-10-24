@@ -1,0 +1,16 @@
+id: marsgate
+name: MarsGate
+kind: discovery-venue
+layer: xrpl-evm
+category:
+  - spot
+  - liquidity
+status:
+  mainnet: unavailable
+reads: []
+risks:
+  - "The current official domain describes a general blockchain development house and does not publish a usable MarsGate DEX application, market API, contract addresses, or venue documentation."
+  - "Because current first-party venue documentation could not substantiate an active market, supported pools, fees, liquidity, and execution are intentionally omitted."
+  - "Any future concentrated-liquidity DEX deployment would carry smart-contract, price-range, slippage, liquidity, and impermanent-loss risk and must be reverified from first-party documentation before use."
+links:
+  site: https://www.marsgate.xyz/

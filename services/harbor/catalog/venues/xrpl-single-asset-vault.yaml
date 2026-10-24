@@ -1,0 +1,33 @@
+id: xrpl-single-asset-vault
+name: XRPL Single Asset Vault
+kind: execution-primitive
+layer: xrpl-l1
+category:
+  - liquidity
+  - lending
+status:
+  mainnet: voting
+  testnet: unavailable
+  devnet: devnet-only
+execution:
+  transactions:
+    - VaultCreate
+    - VaultSet
+    - VaultDelete
+    - VaultDeposit
+    - VaultWithdraw
+    - VaultClawback
+  builders:
+    - tx.vaultDeposit
+    - tx.vaultWithdraw
+reads:
+  - vault_info
+risks:
+  - Mainnet execution depends on the SingleAssetVault amendment reaching consensus and becoming enabled; confirm amendment status on the target network before building or submitting a transaction.
+  - Anyone can create a public vault, and the XRPL documentation warns that a malicious vault owner can drain deposited assets; verify the owner and settings before depositing.
+  - Private-vault deposits require valid Credentials, while freezes, MPT locks, and issuer clawback settings can restrict deposits, withdrawals, or share transfers.
+  - Closed-ended vaults can block deposits and withdrawals during the investment phase, and connected lending strategies add borrower, liquidity, and loss risk.
+links:
+  site: https://xrpl.org/
+  docs: https://xrpl.org/docs/concepts/tokens/single-asset-vaults
+  api: https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/vault-methods/vault_info

@@ -25,6 +25,30 @@ describe("resolveHarnessPageContext", () => {
     expect(resolveHarnessPageContext("/markets/")?.page.id).toBe("markets");
   });
 
+  it("exposes feature routes with fixed labels and no summary channel", () => {
+    expect(resolveHarnessPageContext("/agreements", {
+      agreement: "should not cross the context boundary",
+    })).toEqual({
+      kind: HARNESS_PAGE_CONTEXT_KIND,
+      trust: HARNESS_PAGE_CONTEXT_TRUST,
+      page: { id: "agreements", title: "Ledger work agreements" },
+    });
+    expect(resolveHarnessPageContext("/research/backtests", {
+      run_id: "should not cross the context boundary",
+    })).toEqual({
+      kind: HARNESS_PAGE_CONTEXT_KIND,
+      trust: HARNESS_PAGE_CONTEXT_TRUST,
+      page: { id: "backtests", title: "Backtests" },
+    });
+    expect(resolveHarnessPageContext("/strategy-research", {
+      strategy: "should not cross the context boundary",
+    })).toEqual({
+      kind: HARNESS_PAGE_CONTEXT_KIND,
+      trust: HARNESS_PAGE_CONTEXT_TRUST,
+      page: { id: "strategy_research", title: "Strategy research" },
+    });
+  });
+
   it("omits unknown keys and non-scalar values", () => {
     expect(resolveHarnessPageContext("/portfolio", {
       network: "testnet",
@@ -100,6 +124,18 @@ describe("parseHarnessPageContext", () => {
     });
     expect(parseHarnessPageContext(context)).toEqual(context);
     expect(parseHarnessPageContext(undefined)).toBeUndefined();
+  });
+
+  it("revalidates feature-route labels without accepting summaries", () => {
+    const context = resolveHarnessPageContext("/strategy-research");
+    expect(parseHarnessPageContext(context)).toEqual(context);
+    expect(() => parseHarnessPageContext({
+      ...context,
+      page: {
+        ...context?.page,
+        summary: { strategy: "untrusted" },
+      },
+    })).toThrow(/invalid/i);
   });
 
   it("rejects relabeled, extended, or unsanitized browser context", () => {

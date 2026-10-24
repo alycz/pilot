@@ -22,6 +22,21 @@ const routeSpecs = {
     title: "Conversation",
     summaryKeys: [],
   },
+  "/agreements": {
+    id: "agreements",
+    title: "Ledger work agreements",
+    summaryKeys: [],
+  },
+  "/research/backtests": {
+    id: "backtests",
+    title: "Backtests",
+    summaryKeys: [],
+  },
+  "/strategy-research": {
+    id: "strategy_research",
+    title: "Strategy research",
+    summaryKeys: [],
+  },
   "/markets": {
     id: "markets",
     title: "XRPL Market Analytics",

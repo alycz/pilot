@@ -3,12 +3,15 @@ import type { WalletSessionStatus } from "../../lib/harbor-browser";
 // The landing page has its own calls to action, so the Ask Pilot button stays off it.
 const HIDDEN_ROUTES = new Set(["/", "/onboarding", "/openrouter/finalize"]);
 const APP_SHELL_ROUTES = new Set([
+  "/agreements",
   "/chat",
   "/map",
   "/markets",
   "/memory",
   "/portfolio",
+  "/research/backtests",
   "/strategy",
+  "/strategy-research",
 ]);
 
 export type HarnessChatPresentation = Readonly<{

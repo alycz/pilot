@@ -76,6 +76,9 @@ describe("harnessChatUsesAppShell", () => {
   it("applies the desktop sidebar offset only to AppShell routes", () => {
     expect(harnessChatUsesAppShell("/portfolio")).toBe(true);
     expect(harnessChatUsesAppShell("/chat")).toBe(true);
+    expect(harnessChatUsesAppShell("/agreements")).toBe(true);
+    expect(harnessChatUsesAppShell("/research/backtests")).toBe(true);
+    expect(harnessChatUsesAppShell("/strategy-research")).toBe(true);
     expect(harnessChatUsesAppShell("/")).toBe(false);
     expect(harnessChatUsesAppShell("/onboarding")).toBe(false);
   });

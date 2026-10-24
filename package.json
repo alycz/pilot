@@ -5,7 +5,7 @@
   "description": "Pilot: an XRPL agent interface backed by Harbor",
   "packageManager": "pnpm@10.32.1",
   "engines": {
-    "node": ">=24"
+    "node": "24.14.0"
   },
   "scripts": {
     "dev": "pnpm --filter web dev",
@@ -18,6 +18,7 @@
     "typecheck:scripts": "tsc --noEmit --strict --skipLibCheck --target ES2022 --module ESNext --moduleResolution Bundler scripts/seed.ts scripts/mm-loop.ts scripts/seed.test.ts scripts/mm-loop.test.ts scripts/seed-injection.ts scripts/seed-injection.test.ts scripts/aws/b1-bedrock.ts scripts/aws/b1-bedrock.test.ts scripts/aws/d1-dataset.ts scripts/aws/d1-dataset.test.ts scripts/ap4m-demo/reset.ts scripts/ap4m-demo/run-headless.ts scripts/ap4m-demo/mo1.test.ts scripts/ap4m-demo/rogue.ts scripts/ap4m-demo/rogue.test.ts",
     "typecheck:e2e": "tsc -p tsconfig.e2e.json",
     "test": "pnpm -r --if-present test && pnpm test:scripts",
+    "repro:verify": "node scripts/integrity/verify.mjs",
     "test:scripts": "vitest run scripts/seed.test.ts scripts/mm-loop.test.ts scripts/seed-injection.test.ts scripts/aws/b1-bedrock.test.ts scripts/aws/d1-dataset.test.ts scripts/ap4m-demo/mo1.test.ts scripts/ap4m-demo/rogue.test.ts scripts/p-live-live.test.mjs scripts/dev-pilot-isolated-v1.test.mjs scripts/dev-pilot-isolated-x402-v1.test.mjs e2e/support/lanes.test.ts",
     "test:e2e": "pnpm test:e2e:fixture",
     "test:e2e:fixture": "PILOT_E2E_LANE=fixture playwright test --project=fixture",

@@ -208,7 +208,7 @@ start_process pilot /usr/bin/env -i \
 start_process merchants /usr/bin/env -i \
   PATH="$SAFE_PATH" HOME="$STATE_ROOT/home" TMPDIR="$STATE_ROOT/tmp" \
   AP4M_MERCHANT_MODE=mock EXEC_NETWORK=testnet \
-  "$UV_BIN" run --offline --project "$PILOT_REPO/services/ap4m-merchants" \
+  "$UV_BIN" run --offline --locked --project "$PILOT_REPO/services/ap4m-merchants" \
     uvicorn app.main:app --host "$MERCHANT_HOST" --port "$MERCHANT_PORT"
 
 # The mm-loop owns its existing Testnet key-loading contract. Only its required

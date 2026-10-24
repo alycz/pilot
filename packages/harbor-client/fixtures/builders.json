@@ -127,6 +127,90 @@
     "asOfBasis": "mock devnet autofill and simulate at ledger 7345210",
     "caveat": ["devnet-only"]
   },
+  "tx.escrowCreate": {
+    "ok": true,
+    "data": {
+      "build_id": "build-escrow-create-001",
+      "network": "testnet",
+      "tx_json": { "TransactionType": "EscrowCreate", "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "Amount": "1000000", "FinishAfter": 900000000, "CancelAfter": 900000600, "DestinationTag": 7, "Fee": "12", "Sequence": 42, "LastLedgerSequence": 9345230, "SourceTag": 20261017, "Memos": [{ "Memo": { "MemoType": "70696C6F742F696E74656E74", "MemoData": "666978747572652D657363726F772D637265617465" } }] },
+      "delegable": false,
+      "simulate": { "engine_result": "tesSUCCESS", "engine_result_message": "The simulated transaction would succeed.", "applied": false },
+      "preflight": [{ "check": "network", "pass": true }, { "check": "reserve", "pass": true }],
+      "summary": { "action": "Create escrow for 1000000 drops XRP", "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "amounts": ["1000000 drops XRP"], "fee_drops": "12", "reserve_delta_drops": "2000000", "usd_value": "0.512" }
+    },
+    "asOf": "2026-10-21T00:00:00.000Z",
+    "asOfBasis": "recorded Harbor testnet EscrowCreate autofill and dry-run simulation"
+  },
+  "tx.escrowFinish": {
+    "ok": true,
+    "data": {
+      "build_id": "build-escrow-finish-001",
+      "network": "testnet",
+      "tx_json": { "TransactionType": "EscrowFinish", "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "Owner": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "OfferSequence": 7, "Condition": "A0258020E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855810100", "Fulfillment": "A0028000", "Fee": "399", "Sequence": 42, "LastLedgerSequence": 9345230, "SourceTag": 20261017, "Memos": [{ "Memo": { "MemoType": "70696C6F742F696E74656E74", "MemoData": "666978747572652D657363726F772D66696E697368" } }] },
+      "delegable": true,
+      "simulate": { "engine_result": "tesSUCCESS", "engine_result_message": "The simulated transaction would succeed.", "applied": false },
+      "preflight": [{ "check": "network", "pass": true }, { "check": "reserve", "pass": true }],
+      "summary": { "action": "Finish escrow 7", "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "amounts": [], "fee_drops": "399", "reserve_delta_drops": "0", "usd_value": "0" }
+    },
+    "asOf": "2026-10-21T00:00:00.000Z",
+    "asOfBasis": "recorded Harbor testnet EscrowFinish autofill and dry-run simulation"
+  },
+  "tx.escrowCancel": {
+    "ok": true,
+    "data": {
+      "build_id": "build-escrow-cancel-001",
+      "network": "testnet",
+      "tx_json": { "TransactionType": "EscrowCancel", "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "Owner": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "OfferSequence": 7, "Fee": "12", "Sequence": 42, "LastLedgerSequence": 9345230, "SourceTag": 20261017, "Memos": [{ "Memo": { "MemoType": "70696C6F742F696E74656E74", "MemoData": "666978747572652D657363726F772D63616E63656C" } }] },
+      "delegable": false,
+      "simulate": { "engine_result": "tesSUCCESS", "engine_result_message": "The simulated transaction would succeed.", "applied": false },
+      "preflight": [{ "check": "network", "pass": true }, { "check": "reserve", "pass": true }],
+      "summary": { "action": "Cancel escrow 7", "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "amounts": [], "fee_drops": "12", "reserve_delta_drops": "0", "usd_value": "0" }
+    },
+    "asOf": "2026-10-21T00:00:00.000Z",
+    "asOfBasis": "recorded Harbor testnet EscrowCancel autofill and dry-run simulation"
+  },
+  "tx.checkCreate": {
+    "ok": true,
+    "data": {
+      "build_id": "build-check-create-001",
+      "network": "testnet",
+      "tx_json": { "TransactionType": "CheckCreate", "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "Destination": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "SendMax": "2000000", "Expiration": 900000600, "InvoiceID": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", "DestinationTag": 11, "Fee": "12", "Sequence": 42, "LastLedgerSequence": 9345230, "SourceTag": 20261017, "Memos": [{ "Memo": { "MemoType": "70696C6F742F696E74656E74", "MemoData": "666978747572652D636865636B2D637265617465" } }] },
+      "delegable": false,
+      "simulate": { "engine_result": "tesSUCCESS", "engine_result_message": "The simulated transaction would succeed.", "applied": false },
+      "preflight": [{ "check": "network", "pass": true }, { "check": "reserve", "pass": true }],
+      "summary": { "action": "Create Check for 2000000 drops XRP", "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "amounts": ["2000000 drops XRP"], "fee_drops": "12", "reserve_delta_drops": "2000000", "usd_value": "1.024" }
+    },
+    "asOf": "2026-10-21T00:00:00.000Z",
+    "asOfBasis": "recorded Harbor testnet CheckCreate autofill and dry-run simulation"
+  },
+  "tx.checkCash": {
+    "ok": true,
+    "data": {
+      "build_id": "build-check-cash-001",
+      "network": "testnet",
+      "tx_json": { "TransactionType": "CheckCash", "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "CheckID": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "Amount": "1500000", "Fee": "12", "Sequence": 42, "LastLedgerSequence": 9345230, "SourceTag": 20261017, "Memos": [{ "Memo": { "MemoType": "70696C6F742F696E74656E74", "MemoData": "666978747572652D636865636B2D63617368" } }] },
+      "delegable": true,
+      "simulate": { "engine_result": "tesSUCCESS", "engine_result_message": "The simulated transaction would succeed.", "applied": false },
+      "preflight": [{ "check": "network", "pass": true }, { "check": "reserve", "pass": true }],
+      "summary": { "action": "Cash Check", "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "amounts": ["1500000 drops XRP"], "fee_drops": "12", "reserve_delta_drops": "0", "usd_value": "0.768" }
+    },
+    "asOf": "2026-10-21T00:00:00.000Z",
+    "asOfBasis": "recorded Harbor testnet CheckCash autofill and dry-run simulation"
+  },
+  "tx.checkCancel": {
+    "ok": true,
+    "data": {
+      "build_id": "build-check-cancel-001",
+      "network": "testnet",
+      "tx_json": { "TransactionType": "CheckCancel", "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "CheckID": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "Fee": "12", "Sequence": 42, "LastLedgerSequence": 9345230, "SourceTag": 20261017, "Memos": [{ "Memo": { "MemoType": "70696C6F742F696E74656E74", "MemoData": "666978747572652D636865636B2D63616E63656C" } }] },
+      "delegable": false,
+      "simulate": { "engine_result": "tesSUCCESS", "engine_result_message": "The simulated transaction would succeed.", "applied": false },
+      "preflight": [{ "check": "network", "pass": true }, { "check": "reserve", "pass": true }],
+      "summary": { "action": "Cancel Check", "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "amounts": [], "fee_drops": "12", "reserve_delta_drops": "0", "usd_value": "0" }
+    },
+    "asOf": "2026-10-21T00:00:00.000Z",
+    "asOfBasis": "recorded Harbor testnet CheckCancel autofill and dry-run simulation"
+  },
   "tx.simulate": {
     "ok": true,
     "data": {

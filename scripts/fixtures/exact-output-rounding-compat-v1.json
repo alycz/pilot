@@ -1,0 +1,52 @@
+{
+  "reference": "xrpl-exact-output-rounding-v1",
+  "network": "testnet",
+  "destination_amount": {
+    "currency": "524C555344000000000000000000000000000000",
+    "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV",
+    "value": "75"
+  },
+  "max_slippage_bps": 100,
+  "provenance": {
+    "validated": true,
+    "full_reply": true,
+    "ledger_index": 90000000,
+    "ledger_hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "source_account": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    "destination_account": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    "destination_amount": {
+      "currency": "524C555344000000000000000000000000000000",
+      "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV",
+      "value": "75"
+    }
+  },
+  "freshness": {
+    "build_ledger_index": 90000001,
+    "maximum_directional_ledger_gap": 1,
+    "expired_execution_result": "QUOTE_EXPIRED"
+  },
+  "vectors": [
+    {
+      "name": "observed-exact-output",
+      "source_amount_drops": "268428007",
+      "maximum_input_drops": "271112288"
+    },
+    {
+      "name": "one-basis-point-remainder",
+      "source_amount_drops": "250000001",
+      "max_slippage_bps": 1,
+      "maximum_input_drops": "250025002"
+    },
+    {
+      "name": "exact-user-cap-boundary",
+      "source_amount_drops": "272277227",
+      "maximum_input_drops": "275000000"
+    },
+    {
+      "name": "one-drop-over-user-cap",
+      "source_amount_drops": "272277228",
+      "maximum_input_drops": "275000001",
+      "refused": true
+    }
+  ]
+}

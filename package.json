@@ -9,9 +9,20 @@
   },
   "scripts": {
     "dev": "pnpm --filter web dev",
-    "typecheck": "pnpm -r --if-present typecheck",
-    "test": "pnpm -r --if-present test",
-    "test:e2e": "playwright test"
+    "dev:isolated": "node scripts/dev-pilot-isolated-v1.mjs",
+    "dev:isolated:x402": "node scripts/dev-pilot-isolated-x402-v1.mjs",
+    "ledger:sim": "ELF=tools/ledger-sim/fixtures/xrp-2.8.2-nanox-api27.elf tools/ledger-sim/run-speculos.sh",
+    "ledger:conformance": "tsx tools/ledger-sim/conformance.mjs",
+    "test:ledger-sim": "TEST_LEDGER_SPECULOS=1 vitest run packages/wallet/test/ledger-speculos.test.ts",
+    "typecheck": "pnpm -r --if-present typecheck && pnpm typecheck:scripts && pnpm typecheck:e2e",
+    "typecheck:scripts": "tsc --noEmit --strict --skipLibCheck --target ES2022 --module ESNext --moduleResolution Bundler scripts/seed.ts scripts/mm-loop.ts scripts/seed.test.ts scripts/mm-loop.test.ts scripts/seed-injection.ts scripts/seed-injection.test.ts scripts/aws/b1-bedrock.ts scripts/aws/b1-bedrock.test.ts scripts/aws/d1-dataset.ts scripts/aws/d1-dataset.test.ts scripts/ap4m-demo/reset.ts scripts/ap4m-demo/run-headless.ts scripts/ap4m-demo/mo1.test.ts scripts/ap4m-demo/rogue.ts scripts/ap4m-demo/rogue.test.ts",
+    "typecheck:e2e": "tsc -p tsconfig.e2e.json",
+    "test": "pnpm -r --if-present test && pnpm test:scripts",
+    "test:scripts": "vitest run scripts/seed.test.ts scripts/mm-loop.test.ts scripts/seed-injection.test.ts scripts/aws/b1-bedrock.test.ts scripts/aws/d1-dataset.test.ts scripts/ap4m-demo/mo1.test.ts scripts/ap4m-demo/rogue.test.ts scripts/p-live-live.test.mjs scripts/dev-pilot-isolated-v1.test.mjs scripts/dev-pilot-isolated-x402-v1.test.mjs e2e/support/lanes.test.ts",
+    "test:e2e": "pnpm test:e2e:fixture",
+    "test:e2e:fixture": "PILOT_E2E_LANE=fixture playwright test --project=fixture",
+    "test:e2e:hosted-read": "PILOT_E2E_LANE=hosted-read playwright test --project=hosted-read",
+    "test:e2e:authenticated": "PILOT_E2E_LANE=authenticated-live playwright test --project=authenticated-live"
   },
   "dependencies": {
     "@pilot/contracts": "workspace:*",
@@ -19,10 +30,15 @@
     "xrpl": ">=4.3.0 <6.0.0"
   },
   "devDependencies": {
+    "@ledgerhq/device-management-kit": "1.11.0",
+    "@ledgerhq/device-signer-kit-xrp": "0.2.0",
+    "@ledgerhq/device-transport-kit-speculos": "1.3.0",
+    "@ledgerhq/device-transport-kit-web-hid": "1.2.4",
     "@playwright/test": "^1.55.1",
     "@types/node": "^24.7.2",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
+    "rxjs": "7.8.2",
     "vitest": "^3.2.4"
   }
 }

@@ -1,0 +1,29 @@
+{
+  "format": "sd-jwt-vc",
+  "generated_at": "2026-10-21T00:00:00.000Z",
+  "reference_commit": "1dc3d4189512041fb3d0f8348fe100dfe25ced91",
+  "l1": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImxKd1lnaWhUSXdzR0tRLUxvRlRnclZnZU5VMGxjbFNRdDFiTjA4bmdQQlEiLCJ0eXAiOiJzZCtqd3QifQ.eyJfc2QiOltdLCJfc2RfYWxnIjoic2hhLTI1NiIsImJ1ZGdldF9hY2NvdW50IjoicjljWkExbUxLNVI1QW0yNUFyZlhGbXFnTndqWmduZms1OSIsImNuZiI6eyJqd2siOnsia3R5IjoiRUMiLCJjcnYiOiJQLTI1NiIsIngiOiJxUFR6OE03cENHTm9HMXNMOWk2THNhTG41d3k4bUZldDB3cTlVSGcyMHBrIiwieSI6IndZb28xajdLNnF3bUlMR1pEMWkweEx1dW5iMkpvaWlyMTVtMHJyNkNfN28ifX0sImV4cCI6MTgyNDA3NjgwMCwiaWF0IjoxNzkyNTQwODAwLCJpc3MiOiJEZW1vIE5ldHdvcmsgKE1hc3RlcmNhcmQncyByb2xlIGluIHByb2R1Y3Rpb24pIiwicGlsb3RfaXNzdWVyX25hbWUiOiJEZW1vIE5ldHdvcmsgKE1hc3RlcmNhcmQncyByb2xlIGluIHByb2R1Y3Rpb24pIiwibmJmIjoxNzkyNTQwODAwLCJvZl9jdXN0b21lcl9yZWYiOiJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiIiwib2Zfb3duZXJfbmFtZV9oYXNoIjoiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSIsIm9mX3ZlcmlmaWVkIjp0cnVlLCJzdWIiOiJyOWNaQTFtTEs1UjVBbTI1QXJmWEZtcWdOd2paZ25mazU5IiwidmN0IjoiaHR0cHM6Ly9jcmVkZW50aWFscy5tYXN0ZXJjYXJkLmNvbS9jYXJkIn0.kbsA6iJaYu_-3Xr4Ppm3cazz5cngfbsCPRGI9fCDbR8irbQcCXsaPmtx1m2tU72pECtGwnyocs5so0Bg0RUm3Q~",
+  "issuer_public_jwk": {
+    "kty": "EC",
+    "crv": "P-256",
+    "x": "n7Dgg5p_r8hCgefhi4DMHYvRA01zbPtF2nCZfq9KTKE",
+    "y": "MgoDDtsD_w6zwjRIJhRsanVYoRb-AsOu1m7YLeHbZU4",
+    "alg": "ES256",
+    "kid": "lJwYgihTIwsGKQ-LoFTgrVgeNU0lclSQt1bN08ngPBQ",
+    "use": "sig"
+  },
+  "device_public_jwk": {
+    "kty": "EC",
+    "crv": "P-256",
+    "x": "qPTz8M7pCGNoG1sL9i6LsaLn5wy8mFet0wq9UHg20pk",
+    "y": "wYoo1j7K6qwmILGZD1i0xLuunb2Joiir15m0rr6C_7o"
+  },
+  "expected": {
+    "issuer": "Demo Network (Mastercard's role in production)",
+    "budget_account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
+    "owner_name_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "customer_ref_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "iat": 1792540800,
+    "exp": 1824076800
+  }
+}

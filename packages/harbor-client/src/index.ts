@@ -1,4 +1,7 @@
 export * from "./mcp.js";
 export * from "./mock.js";
 export * from "./rest.js";
+export * from "./request.js";
+export * from "./response.js";
 export * from "./types.js";
+export * from "./x402-endpoint.js";

@@ -1,0 +1,497 @@
+{
+  "merchants.list": {
+    "ok": true,
+    "data": [
+      {
+        "id": "venue-yield-desk",
+        "name": "Venue Yield Desk",
+        "network": "testnet",
+        "base_url": "http://127.0.0.1:8794/m/venue-yield-desk",
+        "xrpl_address": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+        "src_dpa_id": "demo-dpa-venue-yield-desk",
+        "schemes": ["exact", "xrpl-paychan"],
+        "settle_asset": {
+          "kind": "iou",
+          "currency": "RLUSD",
+          "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV"
+        },
+        "required_credential": {
+          "issuer": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+          "credential_type_hex": "4150344D2D4167656E74"
+        },
+        "products": [
+          {
+            "sku": "yield-report",
+            "name": "Venue yield report",
+            "description": "Typed venue yield and risk metrics.",
+            "price": {
+              "asset": {
+                "kind": "iou",
+                "currency": "RLUSD",
+                "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV"
+              },
+              "value": "1"
+            },
+            "response_schema_id": "yield_report_v1"
+          }
+        ],
+        "wba_required": true
+      },
+      {
+        "id": "risk-oracle",
+        "name": "Risk Oracle",
+        "network": "testnet",
+        "base_url": "http://127.0.0.1:8794/m/risk-oracle",
+        "xrpl_address": "rPEPPER7kfTD9w2To4CQk6UCfuHM9c6GDY",
+        "src_dpa_id": "demo-dpa-risk-oracle",
+        "schemes": ["xrpl-paychan"],
+        "settle_asset": { "kind": "xrp" },
+        "required_credential": {
+          "issuer": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+          "credential_type_hex": "4150344D2D4167656E74"
+        },
+        "products": [
+          {
+            "sku": "risk-score",
+            "name": "Venue risk score",
+            "description": "Typed venue risk score and factors.",
+            "price": { "asset": { "kind": "xrp" }, "value": "0.05" },
+            "response_schema_id": "risk_score_v1"
+          }
+        ],
+        "wba_required": true
+      }
+    ],
+    "asOf": "2026-10-21T12:00:00.000Z",
+    "asOfBasis": "mock AP4M merchant registry"
+  },
+  "merchants.get": {
+    "ok": true,
+    "data": {
+      "id": "venue-yield-desk",
+      "name": "Venue Yield Desk",
+      "network": "testnet",
+      "base_url": "http://127.0.0.1:8794/m/venue-yield-desk",
+      "xrpl_address": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+      "src_dpa_id": "demo-dpa-venue-yield-desk",
+      "schemes": ["exact", "xrpl-paychan"],
+      "settle_asset": {
+        "kind": "iou",
+        "currency": "RLUSD",
+        "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV"
+      },
+      "required_credential": {
+        "issuer": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+        "credential_type_hex": "4150344D2D4167656E74"
+      },
+      "products": [
+        {
+          "sku": "yield-report",
+          "name": "Venue yield report",
+          "description": "Typed venue yield and risk metrics.",
+          "price": {
+            "asset": {
+              "kind": "iou",
+              "currency": "RLUSD",
+              "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV"
+            },
+            "value": "1"
+          },
+          "response_schema_id": "yield_report_v1"
+        }
+      ],
+      "wba_required": true
+    },
+    "asOf": "2026-10-21T12:00:00.000Z",
+    "asOfBasis": "mock AP4M merchant registry"
+  },
+  "mandate.prepare": {
+    "ok": true,
+    "data": {
+      "mandate_id": "mandate-demo-001",
+      "agent_public_jwk": {
+        "kty": "EC",
+        "crv": "P-256",
+        "x": "mock-public-x-coordinate",
+        "y": "mock-public-y-coordinate"
+      },
+      "claim_public_keys": [
+        {
+          "merchant_id": "venue-yield-desk",
+          "public_key": "ED0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCD"
+        },
+        {
+          "merchant_id": "risk-oracle",
+          "public_key": "EDFEDCBA9876543210FEDCBA9876543210FEDCBA9876543210FEDCBA98765432"
+        }
+      ],
+      "unsigned_batch": {
+        "TransactionType": "Batch",
+        "Account": "rBudget11111111111111111111111111111",
+        "Flags": 65536,
+        "RawTransactions": [
+          {
+            "RawTransaction": {
+              "TransactionType": "CredentialAccept",
+              "Account": "rBudget11111111111111111111111111111",
+              "Issuer": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+              "CredentialType": "4150344D2D4167656E74",
+              "Fee": "0",
+              "SigningPubKey": "",
+              "Flags": 1073741824,
+              "Sequence": 101
+            }
+          },
+          {
+            "RawTransaction": {
+              "TransactionType": "PaymentChannelCreate",
+              "Account": "rBudget11111111111111111111111111111",
+              "Destination": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+              "Amount": "25000000",
+              "SettleDelay": 3600,
+              "PublicKey": "ED0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCD",
+              "Fee": "0",
+              "SigningPubKey": "",
+              "Flags": 1073741824,
+              "Sequence": 102
+            }
+          }
+        ],
+        "Memos": [
+          {
+            "Memo": {
+              "MemoType": "6170346D2F6C32",
+              "MemoData": ""
+            }
+          }
+        ]
+      }
+    },
+    "asOf": "2026-10-21T12:00:00.000Z",
+    "asOfBasis": "mock mandate preparation; no transaction submitted"
+  },
+  "mandate.register": {
+    "ok": true,
+    "data": {
+      "id": "mandate-demo-001",
+      "owner": "rBudget11111111111111111111111111111",
+      "network": "testnet",
+      "status": "ACTIVE",
+      "execution_type": "DEFERRED",
+      "not_before": "2026-10-21T12:00:00.000Z",
+      "expires_at": "2026-10-22T12:00:00.000Z",
+      "constraints": {
+        "currency": "USD",
+        "per_payment_max": "5",
+        "total_max": "25",
+        "daily_max": "10",
+        "payees": ["venue-yield-desk", "risk-oracle"],
+        "skus": ["yield-report", "risk-score"]
+      },
+      "agent_public_jwk": {
+        "kty": "EC",
+        "crv": "P-256",
+        "x": "mock-public-x-coordinate",
+        "y": "mock-public-y-coordinate"
+      },
+      "l1_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+      "l2_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+      "setup_batch_hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "channels": [
+        {
+          "merchant_id": "venue-yield-desk",
+          "channel_id": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+          "amount_drops": "25000000"
+        },
+        {
+          "merchant_id": "risk-oracle",
+          "channel_id": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+          "amount_drops": "25000000"
+        }
+      ],
+      "spent_usd": "0"
+    },
+    "asOf": "2026-10-21T12:01:00.000Z",
+    "asOfBasis": "mock validated testnet Batch"
+  },
+  "mandate.status": {
+    "ok": true,
+    "data": {
+      "id": "mandate-demo-001",
+      "owner": "rBudget11111111111111111111111111111",
+      "network": "testnet",
+      "status": "ACTIVE",
+      "execution_type": "DEFERRED",
+      "not_before": "2026-10-21T12:00:00.000Z",
+      "expires_at": "2026-10-22T12:00:00.000Z",
+      "constraints": {
+        "currency": "USD",
+        "per_payment_max": "5",
+        "total_max": "25",
+        "daily_max": "10",
+        "payees": ["venue-yield-desk", "risk-oracle"],
+        "skus": ["yield-report", "risk-score"]
+      },
+      "agent_public_jwk": {
+        "kty": "EC",
+        "crv": "P-256",
+        "x": "mock-public-x-coordinate",
+        "y": "mock-public-y-coordinate"
+      },
+      "l1_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+      "l2_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+      "setup_batch_hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "channels": [
+        {
+          "merchant_id": "venue-yield-desk",
+          "channel_id": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+          "amount_drops": "25000000"
+        },
+        {
+          "merchant_id": "risk-oracle",
+          "channel_id": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+          "amount_drops": "25000000"
+        }
+      ],
+      "spent_usd": "1"
+    },
+    "asOf": "2026-10-21T12:02:00.000Z",
+    "asOfBasis": "mock mandate state"
+  },
+  "mandate.revoke": {
+    "ok": true,
+    "data": {
+      "id": "mandate-demo-001",
+      "owner": "rBudget11111111111111111111111111111",
+      "network": "testnet",
+      "status": "REVOKED",
+      "execution_type": "DEFERRED",
+      "not_before": "2026-10-21T12:00:00.000Z",
+      "expires_at": "2026-10-22T12:00:00.000Z",
+      "constraints": {
+        "currency": "USD",
+        "per_payment_max": "5",
+        "total_max": "25",
+        "daily_max": "10",
+        "payees": ["venue-yield-desk", "risk-oracle"],
+        "skus": ["yield-report", "risk-score"]
+      },
+      "agent_public_jwk": {
+        "kty": "EC",
+        "crv": "P-256",
+        "x": "mock-public-x-coordinate",
+        "y": "mock-public-y-coordinate"
+      },
+      "l1_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+      "l2_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+      "setup_batch_hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "channels": [
+        {
+          "merchant_id": "venue-yield-desk",
+          "channel_id": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+          "amount_drops": "25000000"
+        },
+        {
+          "merchant_id": "risk-oracle",
+          "channel_id": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+          "amount_drops": "25000000"
+        }
+      ],
+      "spent_usd": "1"
+    },
+    "asOf": "2026-10-21T12:03:00.000Z",
+    "asOfBasis": "mock Harbor mandate revocation"
+  },
+  "credential.status": {
+    "ok": true,
+    "data": {
+      "account": "rBudget11111111111111111111111111111",
+      "network": "testnet",
+      "issuer": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+      "credential_type_hex": "4150344D2D4167656E74",
+      "credential_id": "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "accepted": true,
+      "expired": false,
+      "expiration": "2026-10-28T12:00:00.000Z"
+    },
+    "asOf": "2026-10-21T12:01:00.000Z",
+    "asOfBasis": "mock testnet Credential ledger entry"
+  },
+  "credential.payerAccept": {
+    "ok": true,
+    "data": {
+      "status": "validated",
+      "account": "rHarborPayer1111111111111111111111111",
+      "credential_id": "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE",
+      "hash": "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+      "engine_result": "tesSUCCESS"
+    },
+    "asOf": "2026-10-21T12:01:00.000Z",
+    "asOfBasis": "mock testnet validated CredentialAccept"
+  },
+  "credential.ids": {
+    "ok": true,
+    "data": {
+      "account": "rHarborPayer1111111111111111111111111",
+      "network": "testnet",
+      "credential_ids": [
+        "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"
+      ]
+    },
+    "asOf": "2026-10-21T12:01:00.000Z",
+    "asOfBasis": "mock accepted testnet credentials"
+  },
+  "ap4m.purchase": {
+    "ok": true,
+    "data": {
+      "receipt": {
+        "receipt_id": "receipt-demo-001",
+        "mandate_id": "mandate-demo-001",
+        "merchant_id": "venue-yield-desk",
+        "sku": "yield-report",
+        "intent_id": "demo-intent-001",
+        "l3a_digest": "3333333333333333333333333333333333333333333333333333333333333333",
+        "l3b_digest": "4444444444444444444444444444444444444444444444444444444444444444",
+        "scheme": "exact",
+        "amount": {
+          "asset": {
+            "kind": "iou",
+            "currency": "RLUSD",
+            "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV"
+          },
+          "value": "1"
+        },
+        "proof": {
+          "tx_hash": "5555555555555555555555555555555555555555555555555555555555555555"
+        },
+        "merchant_validation": {
+          "intentId": "demo-intent-001",
+          "validated": true,
+          "checks": {
+            "agent_identity": "pass",
+            "intent": "pass",
+            "payment": "pass",
+            "credential": "pass"
+          },
+          "validation_errors": []
+        },
+        "settlement": "validated",
+        "at": "2026-10-21T12:04:00.000Z"
+      },
+      "data": {
+        "venue_id": "xrpl-amm",
+        "annualized_yield_pct": 4.2,
+        "risk_band": "medium",
+        "as_of": "2026-10-21T12:04:00.000Z"
+      }
+    },
+    "asOf": "2026-10-21T12:04:00.000Z",
+    "asOfBasis": "mock merchant response and mock testnet settlement"
+  },
+  "channel.status": {
+    "ok": true,
+    "data": {
+      "channel_id": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "mandate_id": "mandate-demo-001",
+      "merchant_id": "venue-yield-desk",
+      "network": "testnet",
+      "amount_drops": "25000000",
+      "highest_claim_drops": "450000",
+      "remaining_drops": "24550000",
+      "status": "open",
+      "settle_delay": 3600
+    },
+    "asOf": "2026-10-21T12:05:00.000Z",
+    "asOfBasis": "mock testnet payment channel and local claim ledger"
+  },
+  "channel.list": {
+    "ok": true,
+    "data": [
+      {
+        "channel_id": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "mandate_id": "mandate-demo-001",
+        "merchant_id": "venue-yield-desk",
+        "network": "testnet",
+        "amount_drops": "25000000",
+        "highest_claim_drops": "450000",
+        "remaining_drops": "24550000",
+        "status": "open",
+        "settle_delay": 3600
+      },
+      {
+        "channel_id": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+        "mandate_id": "mandate-demo-001",
+        "merchant_id": "risk-oracle",
+        "network": "testnet",
+        "amount_drops": "25000000",
+        "highest_claim_drops": "0",
+        "remaining_drops": "25000000",
+        "status": "open",
+        "settle_delay": 3600
+      }
+    ],
+    "asOf": "2026-10-21T12:05:00.000Z",
+    "asOfBasis": "mock testnet payment channels and local claim ledger"
+  },
+  "mastercard.services": {
+    "ok": true,
+    "data": {
+      "source": "Mastercard Developers",
+      "services": [
+        {
+          "id": "open-finance-us",
+          "name": "Open Finance US",
+          "description": "Sandbox aggregation and account verification APIs.",
+          "docs_url": "https://developer.mastercard.com/open-finance-us/documentation/"
+        }
+      ]
+    },
+    "asOf": "2026-10-21T12:00:00.000Z",
+    "asOfBasis": "mock cached Mastercard Developers catalog"
+  },
+  "mastercard.docs": {
+    "ok": true,
+    "data": {
+      "source": "Mastercard Developers",
+      "service_id": "open-finance-us",
+      "pages": [
+        {
+          "title": "Open Finance US quick start",
+          "path": "/open-finance-us/documentation/quick-start-guide/",
+          "url": "https://developer.mastercard.com/open-finance-us/documentation/quick-start-guide/"
+        }
+      ]
+    },
+    "asOf": "2026-10-21T12:00:00.000Z",
+    "asOfBasis": "mock cached Mastercard Developers documentation index"
+  },
+  "mastercard.page": {
+    "ok": true,
+    "data": {
+      "source": "Mastercard Developers",
+      "path": "/open-finance-us/documentation/quick-start-guide/",
+      "title": "Open Finance US quick start",
+      "summary": "Use the sandbox to authenticate a partner, create a testing customer, and generate a Data Connect link.",
+      "url": "https://developer.mastercard.com/open-finance-us/documentation/quick-start-guide/"
+    },
+    "asOf": "2026-10-21T12:00:00.000Z",
+    "asOfBasis": "mock cached Mastercard Developers documentation page"
+  },
+  "mastercard.search": {
+    "ok": true,
+    "data": {
+      "source": "Mastercard Developers",
+      "query": "open finance",
+      "results": [
+        {
+          "service_id": "open-finance-us",
+          "title": "Open Finance US",
+          "summary": "Sandbox aggregation and account verification APIs.",
+          "url": "https://developer.mastercard.com/open-finance-us/documentation/"
+        }
+      ]
+    },
+    "asOf": "2026-10-21T12:00:00.000Z",
+    "asOfBasis": "mock cached Mastercard Developers search"
+  }
+}

@@ -38,16 +38,80 @@
     "asOf": "2026-10-18T00:00:01.000Z",
     "asOfBasis": "mock testnet submission result"
   },
+  "tx.approvalPreflight": {
+    "ok": true,
+    "data": {
+      "status": "ready",
+      "approval_id": "approval-swap-001",
+      "expires_at": "2026-10-18T00:01:30.000Z",
+      "validated_ledger": 9345256,
+      "remaining_ledgers": 8,
+      "execution_capability": {
+        "execution_contract": "xrpl_execution_v2",
+        "build_revision": 1,
+        "unsigned_tx_digest": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "unsigned_tx_digest_alg": "sha256-jcs-v1",
+        "economic_fingerprint": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "economic_fingerprint_alg": "sha256-jcs-economic-v1",
+        "build_ledger": 9345200,
+        "first_inclusion_ledger": 9345201,
+        "last_ledger_sequence": 9345264,
+        "minimum_remaining_ledgers": 8,
+        "approval_expires_in_seconds": 90
+      }
+    },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock durable owner approval preflight"
+  },
+  "tx.approvalReconcile": {
+    "ok": true,
+    "data": {
+      "status": "expired_nonincluded",
+      "approval_id": "approval-swap-001",
+      "execution_id": "execution-swap-001",
+      "validated_ledger": 9345265,
+      "first_inclusion_ledger": 9345201,
+      "last_ledger_sequence": 9345264,
+      "next_action": "request_fresh_build"
+    },
+    "asOf": "2026-10-18T00:02:00.000Z",
+    "asOfBasis": "mock atomic burned v2 approval recovery proof"
+  },
   "tx.submit": {
     "ok": true,
-    "data": { "status": "validated", "hash": "C100000000000000000000000000000000000000000000000000000000000002", "ledger_index": 9345212, "engine_result": "tesSUCCESS", "result": "success", "signed_by": "owner" },
+    "data": { "hash": "C100000000000000000000000000000000000000000000000000000000000002", "ledger_index": 9345212, "engine_result": "tesSUCCESS", "validated": true },
     "asOf": "2026-10-18T00:00:02.000Z",
     "asOfBasis": "mock testnet validated ledger 9345212"
   },
   "tx.status": {
     "ok": true,
-    "data": { "status": "validated", "hash": "C100000000000000000000000000000000000000000000000000000000000002", "ledger_index": 9345212, "engine_result": "tesSUCCESS", "result": "success" },
+    "data": { "hash": "C100000000000000000000000000000000000000000000000000000000000002", "network": "testnet", "validated": true, "ledger_index": 9345212, "engine_result": "tesSUCCESS" },
     "asOf": "2026-10-18T00:00:02.000Z",
     "asOfBasis": "mock testnet validated ledger 9345212"
+  },
+  "x402.pay": {
+    "ok": true,
+    "data": {
+      "status": "delivered",
+      "payment_id": "mock-x402-payment-001",
+      "idempotency_key": "mock-x402-operation-001",
+      "owner": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
+      "network": "testnet",
+      "resource": "compare",
+      "invoice_id": "mock-x402-invoice-001",
+      "amount_drops": "5000",
+      "fee_drops": "12",
+      "payer": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+      "pay_to": "rnSXTVWEhMKhECNUEENzUi9QuMFoFpKghr",
+      "tx_hash": "C100000000000000000000000000000000000000000000000000000000000003",
+      "validated_ledger_index": 9345213,
+      "merchant": {
+        "status": 200,
+        "content_type": "application/json",
+        "body": { "comparison": "Explicit local fixture only", "venues": [] }
+      }
+    },
+    "asOf": "2026-10-18T00:00:03.000Z",
+    "asOfBasis": "explicit mock x402 fixture; no payment was made"
   }
 }

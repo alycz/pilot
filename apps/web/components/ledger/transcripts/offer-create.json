@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "id": "offer-create",
+  "title": "Approve an owner-signed offer",
+  "simulated": true,
+  "screens": [
+    {
+      "lines": [
+        "Review transaction"
+      ]
+    },
+    {
+      "lines": [
+        "Transaction Type",
+        "Create Offer"
+      ]
+    },
+    {
+      "lines": [
+        "Account",
+        "ra7Zr8ddy9tB88RaXL8",
+        "B87YkqhEJG2vkAJ"
+      ]
+    },
+    {
+      "lines": [
+        "Flags",
+        "Fill or Kill"
+      ]
+    },
+    {
+      "lines": [
+        "Taker Pays",
+        "100"
+      ]
+    },
+    {
+      "lines": [
+        "Currency",
+        "RLUSD"
+      ]
+    },
+    {
+      "lines": [
+        "Issuer",
+        "rQhWct2fv4Vc4KRjRg",
+        "Mrxa8xPN9Zx9iLKV"
+      ]
+    },
+    {
+      "lines": [
+        "Taker Gets",
+        "XRP 75"
+      ]
+    },
+    {
+      "lines": [
+        "Fee",
+        "XRP 0.000012"
+      ]
+    },
+    {
+      "lines": [
+        "Sign transaction?"
+      ]
+    },
+    {
+      "lines": [
+        "Transaction signed"
+      ]
+    }
+  ]
+}

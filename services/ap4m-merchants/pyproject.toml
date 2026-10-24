@@ -1,0 +1,21 @@
+[project]
+name = "pilot-ap4m-merchants"
+version = "0.1.0"
+description = "Mock-first AP4M demo merchants for XRPL Testnet"
+requires-python = ">=3.12"
+dependencies = [
+  "cryptography==46.0.7",
+  "fastapi==0.119.1",
+  "pydantic==2.12.3",
+  "uvicorn==0.38.0",
+]
+
+[project.optional-dependencies]
+test = [
+  "httpx==0.28.1",
+  "pytest==8.4.2",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

@@ -1,0 +1,74 @@
+{
+  "merchant_body_limits": {
+    "max_bytes": 65536,
+    "max_depth": 16,
+    "max_nodes": 2000,
+    "max_string_bytes": 16384,
+    "max_key_bytes": 256
+  },
+  "t54_payment_signature": {
+    "x402Version": 2,
+    "resource": {
+      "url": "http://127.0.0.1:8000/api/x402/compare",
+      "description": "Local comparison",
+      "mimeType": "application/json",
+      "serviceName": "Pilot",
+      "tags": ["compare"],
+      "iconUrl": "https://example.test/icon.png"
+    },
+    "accepted": {
+      "scheme": "exact",
+      "network": "xrpl:1",
+      "asset": "XRP",
+      "payTo": "rnSXTVWEhMKhECNUEENzUi9QuMFoFpKghr",
+      "amount": "5000",
+      "maxTimeoutSeconds": 60,
+      "extra": {
+        "sourceTag": 314,
+        "invoiceId": "invoice-1",
+        "destinationTag": 7
+      }
+    },
+    "payload": { "signedTxBlob": "ABCD" }
+  },
+  "request": {
+    "owner": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    "network": "testnet",
+    "resource": "compare",
+    "max_price_drops": "5000",
+    "pay_to": "rnSXTVWEhMKhECNUEENzUi9QuMFoFpKghr",
+    "idempotency_key": "shared-wire-fixture"
+  },
+  "delivered": {
+    "status": "delivered",
+    "payment_id": "payment-shared-1",
+    "idempotency_key": "shared-wire-fixture",
+    "owner": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    "network": "testnet",
+    "resource": "compare",
+    "invoice_id": "invoice-shared-1",
+    "amount_drops": "5000",
+    "fee_drops": "100",
+    "payer": "rG1QQv2nh2gr7RCZ1P8YYcBUKCCN633jCn",
+    "pay_to": "rnSXTVWEhMKhECNUEENzUi9QuMFoFpKghr",
+    "tx_hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "validated_ledger_index": 123,
+    "merchant": {
+      "status": 200,
+      "content_type": "application/json",
+      "body": { "comparison": ["dex", "amm"] }
+    }
+  },
+  "settlement_unknown": {
+    "status": "settlement_unknown",
+    "payment_id": "payment-shared-1",
+    "idempotency_key": "shared-wire-fixture",
+    "network": "testnet",
+    "owner": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    "resource": "compare",
+    "request_fingerprint": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "tx_hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "last_ledger_sequence": 456,
+    "retry_after_seconds": 5
+  }
+}

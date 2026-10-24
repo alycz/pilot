@@ -8,6 +8,7 @@
 	},
 	"scripts": {
 		"aws-local": "node --experimental-transform-types tools/aws-local/src/index.ts",
+		"generate": "node scripts/build-catalog.mjs",
 		"qn-local": "node --experimental-transform-types tools/qn-local/src/index.ts",
 		"predev": "node scripts/build-catalog.mjs",
 		"dev": "wrangler dev",

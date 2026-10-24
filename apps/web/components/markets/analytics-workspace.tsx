@@ -46,7 +46,7 @@ export type AnalyticsWorkspaceProps = {
 };
 
 const pageInner = "mx-auto w-full max-w-[100rem] px-4 sm:px-6 lg:px-8";
-const label = "font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground";
+const label = "text-xs font-medium text-muted-foreground";
 
 /**
  * Presentational XRPL analytics workspace.
@@ -118,6 +118,7 @@ export function AnalyticsWorkspace({
         </div>
       ) : null}
 
+
       <div className={`${pageInner} py-5 sm:py-7`}>
         {state === "loading" ? <WorkspaceLoading /> : null}
         {state === "error" ? <WorkspaceError message={error ?? "Market analytics are unavailable."} onRefresh={onRefresh} /> : null}
@@ -135,7 +136,7 @@ export function AnalyticsWorkspace({
                 <div className="min-w-0 space-y-5">
                   <MarketIdentity snapshot={selected} />
                   <DataStateNotice snapshot={selected} />
-                  <div className="overflow-hidden border border-border bg-card">
+                  <div className="overflow-hidden border border-border bg-card rounded-xl">
                     <ProvenanceBar provenance={selected.provenance} base={selected.base} quote={selected.quote} />
                     <MetricStrip snapshot={selected} />
                   </div>
@@ -209,7 +210,7 @@ function MobileTerminalTabs({ activePanel, onChange }: { activePanel: AnalyticsT
     focusTab(next);
   };
   return (
-    <div className="grid grid-cols-4 border border-border bg-card xl:hidden" role="tablist" aria-label="Markets terminal panels">
+    <div className="grid grid-cols-4 border border-border bg-card xl:hidden rounded-xl" role="tablist" aria-label="Markets terminal panels">
       {terminalPanels.map((panel) => (
         <button
           key={panel.id}
@@ -226,7 +227,7 @@ function MobileTerminalTabs({ activePanel, onChange }: { activePanel: AnalyticsT
             if (event.key === "Home") { event.preventDefault(); onChange("overview"); focusTab("overview"); }
             if (event.key === "End") { event.preventDefault(); onChange("compare"); focusTab("compare"); }
           }}
-          className={`min-w-0 border-r border-border px-2 py-3 font-mono text-[10px] uppercase tracking-[0.06em] last:border-r-0 ${activePanel === panel.id ? "bg-primary/[0.08] text-primary" : "text-muted-foreground hover:bg-white/[0.03] hover:text-foreground"}`}
+          className={`min-w-0 border-r border-border px-2 py-3 text-xs last:border-r-0 ${activePanel === panel.id ? "bg-primary-soft text-primary" : "text-muted-foreground hover:bg-white/[0.03] hover:text-foreground"}`}
         >
           <span className="block truncate">{panel.label}</span>
         </button>
@@ -247,16 +248,16 @@ function WorkspaceHeader({
       <div className={`${pageInner} grid gap-5 py-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end`}>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 border border-primary/35 bg-primary/[0.06] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-primary">
+            <span className="inline-flex items-center gap-1.5 border border-primary/35 bg-primary-soft px-2 py-1 text-xs text-primary rounded">
               <Activity className="h-3 w-3" aria-hidden="true" /> Analytics
             </span>
             {selected ? (
-              <span className="border border-border px-2 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+              <span className="border border-border px-2 py-1 text-xs text-muted-foreground rounded">
                 {selected.provenance.network} · {selected.provenance.mode}
               </span>
             ) : null}
           </div>
-          <h1 className="mt-3 text-balance text-2xl font-semibold tracking-[-0.035em] sm:text-3xl">XRPL market workspace</h1>
+          <h1 className="mt-3 text-balance text-2xl font-semibold tracking-[-0.035em] sm:text-3xl font-display">XRPL market workspace</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
             Inspect real DEX and AMM observations, executable-liquidity estimates, and bounded peer comparisons. Every panel keeps its network, issuer identity, source, units, and observation time attached.
           </p>
@@ -270,7 +271,7 @@ function WorkspaceHeader({
               value={query}
               onChange={(event) => onQueryChange?.(event.currentTarget.value)}
               placeholder="Search pair, issuer, network"
-              className="h-10 w-full border border-input bg-background pl-9 pr-3 font-mono text-[11px] text-foreground outline-none placeholder:text-muted-foreground focus:border-primary disabled:opacity-50"
+              className="h-10 w-full border border-input bg-background pl-9 pr-3 font-mono text-[11px] text-foreground outline-none placeholder:text-muted-foreground focus:border-primary disabled:opacity-50 rounded-md"
               disabled={!onQueryChange}
             />
           </label>
@@ -278,7 +279,7 @@ function WorkspaceHeader({
             type="button"
             onClick={onRefresh}
             disabled={!onRefresh || refreshing}
-            className="bracket bracket-light inline-flex h-10 items-center justify-center gap-2 border border-border bg-card px-4 font-mono text-[10px] uppercase tracking-[0.08em] text-foreground transition hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
+            className="bracket bracket-light inline-flex h-10 items-center justify-center gap-2 border border-border bg-card px-4 text-xs text-foreground transition hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-50 rounded-md"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
             {refreshing ? "Refreshing" : "Refresh reads"}
@@ -291,7 +292,7 @@ function WorkspaceHeader({
 
 function MarketRail({ snapshots, selectedId, query, onSelect }: { snapshots: AnalyticsSnapshot[]; selectedId?: string; query: string; onSelect?: (id: string) => void }) {
   return (
-    <aside className="min-w-0 self-start border border-border bg-card xl:sticky xl:top-4" aria-label="Market pairs">
+    <aside className="min-w-0 self-start border border-border bg-card xl:sticky xl:top-4 rounded-xl" aria-label="Market pairs">
       <div className="flex items-center justify-between gap-3 border-b border-border bg-sidebar/40 px-4 py-3">
         <div>
           <p className={label}>Observed universe</p>
@@ -311,7 +312,7 @@ function MarketRail({ snapshots, selectedId, query, onSelect }: { snapshots: Ana
                 aria-selected={selected}
                 onClick={() => onSelect?.(snapshot.id)}
                 disabled={!onSelect}
-                className={`min-w-[14rem] snap-start bg-card px-4 py-3 text-left transition xl:block xl:w-full xl:min-w-0 ${selected ? "bracket bracket-accent bg-primary/[0.05]" : "hover:bg-white/[0.04]"} disabled:cursor-default`}
+                className={`min-w-[14rem] snap-start bg-card px-4 py-3 text-left transition xl:block xl:w-full xl:min-w-0 ${selected ? "bracket bracket-accent bg-primary-soft" : "hover:bg-white/[0.04]"} disabled:cursor-default`}
               >
                 <div className="flex min-w-0 items-center justify-between gap-3">
                   <span className="truncate text-sm font-medium text-foreground">{snapshot.label}</span>
@@ -336,13 +337,13 @@ function MarketRail({ snapshots, selectedId, query, onSelect }: { snapshots: Ana
 function MarketIdentity({ snapshot }: { snapshot: AnalyticsSnapshot }) {
   const last = snapshot.history.points.at(-2)?.price ?? null;
   return (
-    <section className="bracket bracket-light border border-border bg-card px-4 py-4 sm:px-5" aria-labelledby="selected-market-title">
+    <section className="bracket bracket-light border border-border bg-card px-4 py-4 sm:px-5 rounded-xl overflow-hidden" aria-labelledby="selected-market-title">
       <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0">
           <p className={label}>Selected market</p>
           <div className="mt-1 flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-            <h2 id="selected-market-title" className="truncate text-xl font-semibold tracking-[-0.025em] sm:text-2xl">{snapshot.label}</h2>
-            <span className="font-mono text-xs uppercase tracking-wide text-muted-foreground">{snapshot.base.symbol} / {snapshot.quote.symbol}</span>
+            <h2 id="selected-market-title" className="truncate text-xl font-semibold tracking-[-0.025em] sm:text-2xl font-display">{snapshot.label}</h2>
+            <span className="text-xs text-muted-foreground">{snapshot.base.symbol} / {snapshot.quote.symbol}</span>
           </div>
           <div className="mt-2"><PriceDirection current={snapshot.price} previous={last} /></div>
         </div>
@@ -364,28 +365,28 @@ function StateDot({ status }: { status: AnalyticsSnapshot["status"] }) {
 function WorkspaceLoading() {
   return (
     <div aria-live="polite" aria-busy="true" aria-label="Loading market analytics" className="grid gap-5 xl:grid-cols-[13rem_minmax(0,1fr)_18rem]">
-      <div className="h-72 animate-pulse border border-border bg-card motion-reduce:animate-none" />
+      <div className="h-72 animate-pulse border border-border bg-card motion-reduce:animate-none rounded-xl" />
       <div className="space-y-5">
-        <div className="h-28 animate-pulse border border-border bg-card motion-reduce:animate-none" />
-        <div className="grid grid-cols-2 gap-px border border-border bg-border sm:grid-cols-3 xl:grid-cols-6">
+        <div className="h-28 animate-pulse border border-border bg-card motion-reduce:animate-none rounded-xl" />
+        <div className="grid grid-cols-2 gap-px border border-border bg-border sm:grid-cols-3 xl:grid-cols-6 rounded-xl overflow-hidden">
           {Array.from({ length: 6 }).map((_, index) => <div key={index} className="h-20 animate-pulse bg-card motion-reduce:animate-none" />)}
         </div>
-        <div className="h-80 animate-pulse border border-border bg-card motion-reduce:animate-none" />
+        <div className="h-80 animate-pulse border border-border bg-card motion-reduce:animate-none rounded-xl" />
       </div>
-      <div className="hidden h-[34rem] animate-pulse border border-border bg-card motion-reduce:animate-none xl:block" />
+      <div className="hidden h-[34rem] animate-pulse border border-border bg-card motion-reduce:animate-none xl:block rounded-xl" />
     </div>
   );
 }
 
 function WorkspaceError({ message, onRefresh }: { message: string; onRefresh?: () => void }) {
   return (
-    <div className="flex min-h-[26rem] items-center justify-center border border-destructive/35 bg-card px-6 py-12 text-center" role="alert">
+    <div className="flex min-h-[26rem] items-center justify-center border border-destructive/35 bg-card px-6 py-12 text-center rounded-xl" role="alert">
       <div className="max-w-lg">
         <AlertTriangle className="mx-auto h-6 w-6 text-destructive" aria-hidden="true" />
         <p className="mt-4 text-lg font-semibold">Market reads unavailable</p>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">{message}</p>
         {onRefresh ? (
-          <button type="button" onClick={onRefresh} className="bracket bracket-light mt-5 inline-flex h-10 items-center gap-2 border border-border bg-background px-4 font-mono text-[10px] uppercase tracking-wide">
+          <button type="button" onClick={onRefresh} className="bracket bracket-light mt-5 inline-flex h-10 items-center gap-2 border border-border bg-background px-4 text-xs rounded-md">
             <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /> Retry reads
           </button>
         ) : null}
@@ -396,7 +397,7 @@ function WorkspaceError({ message, onRefresh }: { message: string; onRefresh?: (
 
 function WorkspaceEmpty() {
   return (
-    <div className="flex min-h-[26rem] items-center justify-center border border-border bg-card px-6 py-12 text-center">
+    <div className="flex min-h-[26rem] items-center justify-center border border-border bg-card px-6 py-12 text-center rounded-xl">
       <div className="max-w-lg">
         <CircleDot className="mx-auto h-6 w-6 text-muted-foreground" aria-hidden="true" />
         <p className="mt-4 text-lg font-semibold">No market observations</p>
@@ -408,7 +409,7 @@ function WorkspaceEmpty() {
 
 function FilteredEmpty({ query, compact = false }: { query: string; compact?: boolean }) {
   return (
-    <div className={`${compact ? "px-4 py-8" : "border border-border bg-card px-6 py-16"} text-center`}>
+    <div className={`${compact ? "px-4 py-8" : "border border-border bg-card px-6 py-16 rounded-xl"} text-center`}>
       <Search className="mx-auto h-5 w-5 text-muted-foreground" aria-hidden="true" />
       <p className="mt-3 text-sm font-medium">No matching markets</p>
       <p className="mt-1 text-xs leading-5 text-muted-foreground">No observed pair matches “{query}”.</p>
@@ -418,12 +419,12 @@ function FilteredEmpty({ query, compact = false }: { query: string; compact?: bo
 
 function ReadOnlyFootnote() {
   return (
-    <footer className="flex flex-col gap-3 border border-border bg-sidebar/35 px-4 py-4 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-5">
+    <footer className="flex flex-col gap-3 border border-border bg-sidebar/35 px-4 py-4 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-5 rounded-xl">
       <div className="flex items-start gap-2">
         <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-executed" aria-hidden="true" />
         <p className="leading-6"><span className="font-medium text-foreground">Read-only analytics.</span> Access to these observations does not grant signing or execution authority.</p>
       </div>
-      <span className="inline-flex shrink-0 items-center gap-1 font-mono text-[10px] uppercase tracking-wide">
+      <span className="inline-flex shrink-0 items-center gap-1 text-xs">
         Harbor reads <ArrowRight className="h-3 w-3" aria-hidden="true" /> typed UI
       </span>
     </footer>

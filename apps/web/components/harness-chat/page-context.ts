@@ -132,9 +132,11 @@ const MARKET_FRESHNESS = new Set([
 function normalizedPathname(pathname: string): keyof typeof routeSpecs | undefined {
   if (typeof pathname !== "string" || pathname.length === 0 || pathname.length > 128) return undefined;
   if (pathname.includes("?") || pathname.includes("#") || pathname.includes("\\")) return undefined;
-  const normalized = pathname.length > 1 && pathname.endsWith("/")
+  const trimmed = pathname.length > 1 && pathname.endsWith("/")
     ? pathname.slice(0, -1)
     : pathname;
+  // Each market's own page shares the Markets context and its sanitized keys.
+  const normalized = /^\/markets\/[a-z0-9-]{1,48}$/.test(trimmed) ? "/markets" : trimmed;
   return Object.prototype.hasOwnProperty.call(routeSpecs, normalized)
     ? normalized as keyof typeof routeSpecs
     : undefined;

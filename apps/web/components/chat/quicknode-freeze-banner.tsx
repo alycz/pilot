@@ -19,11 +19,11 @@ export function QuickNodeFreezeBanner({
   return (
     <section
       aria-label="QuickNode Streams freeze notice"
-      className="border border-destructive/30 bg-destructive/[0.06] px-4 py-3 text-foreground"
+      className="border border-destructive/30 bg-destructive/[0.06] px-4 py-3 text-foreground rounded-xl overflow-hidden"
       role="alert"
     >
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center border border-destructive/30 bg-destructive/10 text-destructive">
+        <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center border border-destructive/30 bg-destructive/10 text-destructive rounded-md">
           <ShieldAlert aria-hidden="true" className="h-3.5 w-3.5" />
         </span>
         <div className="min-w-0 flex-1">
@@ -35,13 +35,13 @@ export function QuickNodeFreezeBanner({
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Link
-              className="inline-flex h-9 items-center justify-center border border-destructive/40 px-3 font-mono text-[11px] font-medium uppercase tracking-wide text-destructive transition hover:bg-destructive/10 pointer-coarse:h-11 pointer-coarse:min-w-11"
+              className="inline-flex h-9 items-center justify-center border border-destructive/40 px-3 text-[13px] font-medium text-destructive transition hover:bg-destructive/10 pointer-coarse:h-11 pointer-coarse:min-w-11 rounded-md"
               href="/onboarding?action=revoke"
             >
               Revoke on-ledger
             </Link>
             {explorerUrl ? <a
-              className="inline-flex h-9 items-center justify-center gap-1.5 border border-border-strong px-3 font-mono text-[11px] font-medium uppercase tracking-wide text-foreground transition hover:bg-surface pointer-coarse:h-11 pointer-coarse:min-w-11"
+              className="inline-flex h-9 items-center justify-center gap-1.5 border border-border-strong px-3 text-[13px] font-medium text-foreground transition hover:bg-surface pointer-coarse:h-11 pointer-coarse:min-w-11 rounded-md"
               href={explorerUrl}
               rel="noreferrer"
               target="_blank"

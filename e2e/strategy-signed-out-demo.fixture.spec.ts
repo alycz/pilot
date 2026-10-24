@@ -109,11 +109,10 @@ test("signed-out visitors can explore deterministic bounded decisions without co
 
   const response = await page.goto("/strategy");
   expect(response?.ok()).toBe(true);
-  await expect(page.getByRole("heading", { name: "Explore bounded autonomous strategies" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Set the rules once. Pilot trades inside them." })).toBeVisible();
   await expect(page.getByText(/illustrative simulation.*client only/i)).toBeVisible();
-  await expect(page.getByText(/simulator itself uses no wallet.*network-dependent/i)).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Sample assumptions" })).toBeAttached();
-  await expect(page.getByText(/prices are fixed examples/i)).toBeVisible();
+  await expect(page.getByText(/client-only simulation never connects a wallet.*grants a mandate/i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Rebalance XRP and RLUSD" })).toBeAttached();
   await expect(page.getByRole("link", { name: "Connect account for Testnet setup" })).toHaveAttribute("href", "/onboarding");
   await expect(page.getByText(/public test-network config unavailable/i)).toHaveCount(0);
   await expect(page.getByRole("button", { name: /check wallet session/i })).toHaveCount(0);
@@ -125,14 +124,14 @@ test("signed-out visitors can explore deterministic bounded decisions without co
     expect(rendered.contrast).toBeGreaterThanOrEqual(4.5);
   }
 
-  const decision = page.getByRole("status", { name: /simulation decision/i });
+  const decision = page.getByRole("status", { name: /^decision:/i });
   await expect(decision).toContainText(/hold/i);
   const initialDecision = await decision.textContent();
 
-  const step = page.getByRole("button", { name: /step|next market event/i });
+  const step = page.getByRole("button", { name: "Next event" });
   await step.click();
   await expect(decision).not.toHaveText(initialDecision ?? "");
-  await expect(decision).toContainText(/rebalance|blocked/i);
+  await expect(decision).toContainText(/trade|blocked/i);
 
   const target = page.getByRole("slider", { name: /target.*xrp/i });
   const drift = page.getByRole("slider", { name: /drift|band/i });
@@ -142,17 +141,17 @@ test("signed-out visitors can explore deterministic bounded decisions without co
   await drift.fill("3");
   await expect(target).toHaveValue("40");
   await expect(drift).toHaveValue("3");
-  await expect(decision).toContainText(/rebalance/i);
+  await expect(decision).toContainText(/trade/i);
 
   await target.fill("50");
   await drift.fill("5");
 
-  const reset = page.getByRole("button", { name: /reset simulation/i });
+  const reset = page.getByRole("button", { name: "Reset" });
   await reset.click();
   await expect(decision).toContainText(/hold/i);
 
   await step.click();
-  await expect(decision).toContainText(/rebalance/i);
+  await expect(decision).toContainText(/trade/i);
   await page.reload();
   await expect(decision).toContainText(/hold/i);
   await expect(page.getByText(`1 / ${7}`, { exact: true })).toBeVisible();
@@ -161,9 +160,9 @@ test("signed-out visitors can explore deterministic bounded decisions without co
     session: Object.keys(window.sessionStorage).filter((key) => /strategy.*demo|demo.*strategy/i.test(key)),
   }))).toEqual({ local: [], session: [] });
 
-  const play = page.getByRole("button", { name: /play simulation/i });
+  const play = page.getByRole("button", { name: "Play" });
   await play.click();
-  const pause = page.getByRole("button", { name: /pause simulation/i });
+  const pause = page.getByRole("button", { name: "Pause" });
   await expect(pause).toBeVisible();
   await expect.poll(async () => decision.textContent()).not.toBe(initialDecision);
   await pause.click();
@@ -201,19 +200,19 @@ test("mobile reduced-motion demo remains manual, keyboard operable, and containe
   const boundary = await installSignedOutNoConfigBoundary(page, lane.baseURL);
 
   await page.goto("/strategy");
-  await expect(page.getByRole("heading", { name: "Explore bounded autonomous strategies" })).toBeVisible();
-  const decision = page.getByRole("status", { name: /simulation decision/i });
+  await expect(page.getByRole("heading", { name: "Set the rules once. Pilot trades inside them." })).toBeVisible();
+  const decision = page.getByRole("status", { name: /^decision:/i });
   const before = await decision.textContent();
   await page.waitForTimeout(1_500);
   await expect(decision).toHaveText(before ?? "");
 
-  const step = page.getByRole("button", { name: /step|next market event/i });
+  const step = page.getByRole("button", { name: "Next event" });
   await step.focus();
   await expect(step).toBeFocused();
   await step.press("Enter");
   await expect(decision).not.toHaveText(before ?? "");
 
-  const reset = page.getByRole("button", { name: /reset simulation/i });
+  const reset = page.getByRole("button", { name: "Reset" });
   await reset.focus();
   await reset.press("Space");
   await expect(decision).toContainText(/hold/i);

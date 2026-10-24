@@ -27,11 +27,25 @@ export class ConversationSessionController {
   private request: AbortController | undefined;
   private expiryTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   private disposed = false;
+  private published = false;
+  private provisionalTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
 
+  /**
+   * `provisionalDelayMs`: when the very first session check takes longer than
+   * this, show the signed-out (demo) conversation instead of a loading screen.
+   * Signed out grants nothing, and the real answer still replaces it when it
+   * arrives.
+   */
   constructor(
     private readonly load: SessionLoader,
-    private readonly publish: SessionListener,
+    private readonly publishSession: SessionListener,
+    private readonly provisionalDelayMs?: number,
   ) {}
+
+  private publish(session: ConversationSession | undefined): void {
+    if (session !== undefined) this.published = true;
+    this.publishSession(session);
+  }
 
   refresh(): void {
     this.startRefresh(false);
@@ -47,6 +61,13 @@ export class ConversationSessionController {
     this.request?.abort();
     this.request = undefined;
     this.clearExpiryTimer();
+    this.clearProvisionalTimer();
+  }
+
+  private clearProvisionalTimer(): void {
+    if (this.provisionalTimer === undefined) return;
+    globalThis.clearTimeout(this.provisionalTimer);
+    this.provisionalTimer = undefined;
   }
 
   private startRefresh(clearWhilePending: boolean): void {
@@ -55,13 +76,24 @@ export class ConversationSessionController {
     this.request?.abort();
     const request = new AbortController();
     this.request = request;
-    if (clearWhilePending) this.publish(undefined);
+    if (clearWhilePending) {
+      this.published = false;
+      this.publish(undefined);
+    }
+    if (!this.published && this.provisionalDelayMs !== undefined && this.provisionalTimer === undefined) {
+      this.provisionalTimer = globalThis.setTimeout(() => {
+        this.provisionalTimer = undefined;
+        if (this.disposed || this.published) return;
+        this.publish({ scope: "signed-out", session: { authenticated: false } });
+      }, this.provisionalDelayMs);
+    }
 
     void this.load(request.signal)
       .then((session) => {
         if (this.disposed || current !== this.generation) return;
         this.request = undefined;
         this.clearExpiryTimer();
+        this.clearProvisionalTimer();
         const acceptedAt = Date.now();
         const scope = walletConversationScope(session, acceptedAt);
         const expiryDelay = walletSessionExpiryDelay(session, acceptedAt);
@@ -88,6 +120,7 @@ export class ConversationSessionController {
         if (this.disposed || current !== this.generation || isAbortError(cause)) return;
         this.request = undefined;
         this.clearExpiryTimer();
+        this.clearProvisionalTimer();
         this.publish({ scope: "unavailable", session: null });
       });
   }

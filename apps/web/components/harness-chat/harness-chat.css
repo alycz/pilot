@@ -1,36 +1,40 @@
 .harness-chat-toggle {
   position: fixed;
-  left: 0;
-  top: 46%;
+  left: 1.25rem;
+  bottom: 1.25rem;
   z-index: 35;
   display: inline-flex;
-  min-height: 44px;
+  min-height: 3rem;
   align-items: center;
-  gap: 0.45rem;
-  border: 1px solid var(--border-strong);
-  border-left: 0;
-  background: color-mix(in srgb, var(--card) 94%, transparent);
-  padding: 0.65rem 0.75rem;
-  color: var(--foreground);
-  box-shadow: 0 12px 30px rgb(22 22 21 / 10%);
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
-  font-size: 0.625rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  backdrop-filter: blur(12px);
-  transition: left 180ms ease, background-color 180ms ease, color 180ms ease;
+  gap: 0.6rem;
+  border: 0;
+  border-radius: 0.375rem;
+  background: var(--primary);
+  padding: 0 1.25rem;
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgb(23 25 31 / 10%), 0 8px 24px color-mix(in srgb, var(--primary) 18%, transparent);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: left 180ms ease, background-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
 }
 
 .harness-chat-toggle:hover,
 .harness-chat-toggle:focus-visible {
-  background: var(--foreground);
-  color: var(--background);
+  background: color-mix(in srgb, var(--primary) 86%, black);
+  transform: translateY(-1px);
+  box-shadow: 0 18px 40px color-mix(in srgb, var(--primary) 36%, transparent), 0 2px 6px rgb(22 22 21 / 14%);
 }
 
 .harness-chat-toggle svg {
-  width: 1rem;
-  height: 1rem;
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+/* Open: the button follows the drawer's right edge, still at the bottom. */
+.harness-chat-toggle--open {
+  left: calc(min(92vw, 30rem) + 1rem);
+  z-index: 55;
 }
 
 .harness-chat-backdrop {
@@ -167,28 +171,53 @@
   height: 100%;
   place-items: center;
   color: var(--muted-foreground);
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
-  font-size: 0.6875rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
 }
 
 @media (min-width: 1024px) {
+  /* Inside the sidebar's bottom-right corner, so it never covers page content. */
   .harness-chat-host--app-shell .harness-chat-toggle {
-    left: 16rem;
+    left: calc(16rem - 1rem);
+    bottom: 1rem;
+    min-height: 2.5rem;
+    padding: 0 1rem;
+    transform: translateX(-100%);
+    box-shadow: 0 6px 16px color-mix(in srgb, var(--primary) 22%, transparent);
   }
 
-  .harness-chat-host--app-shell .harness-chat-toggle--open {
-    left: calc(16rem + 30rem);
+  .harness-chat-host--app-shell .harness-chat-toggle:hover,
+  .harness-chat-host--app-shell .harness-chat-toggle:focus-visible {
+    transform: translate(-100%, -1px);
+  }
+
+  .harness-chat-host--app-shell .harness-chat-toggle--open,
+  .harness-chat-host--app-shell .harness-chat-toggle--open:hover,
+  .harness-chat-host--app-shell .harness-chat-toggle--open:focus-visible {
+    left: calc(16rem + 30rem + 1rem);
+    transform: none;
     z-index: 55;
+  }
+
+  /* Beside the app sidebar the drawer unfolds from the sidebar's edge instead
+     of sliding over it, so the sidebar never disappears while it closes. */
+  .harness-chat-host--app-shell .harness-chat-panel--drawer {
+    left: 16rem;
+    transition: clip-path 220ms cubic-bezier(0.2, 0.7, 0.2, 1), opacity 160ms ease, box-shadow 220ms ease, visibility 220ms linear;
   }
 
   .harness-chat-host--app-shell .harness-chat-panel--drawer.harness-chat-panel--open {
     left: 16rem;
+    clip-path: inset(0 -4rem 0 0);
+    opacity: 1;
   }
 
+  /* Fades out faster than it folds, so no sliver of the header is left behind. */
   .harness-chat-host--app-shell .harness-chat-panel--drawer.harness-chat-panel--closed {
-    left: calc(16rem - 30rem);
+    left: 16rem;
+    clip-path: inset(0 100% 0 0);
+    opacity: 0;
+    box-shadow: none;
   }
 
   .harness-chat-host--app-shell .harness-chat-panel--full {

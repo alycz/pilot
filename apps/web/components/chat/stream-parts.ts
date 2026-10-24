@@ -215,7 +215,13 @@ type PilotStreamCallbacks = {
   onPreference: (event: PreferenceProposalEvent) => void;
   onX402?: (event: X402PaymentEvent) => void;
   onAp4m?: (event: Ap4mExactEvidenceEvent) => void;
+  /** Model tool lifecycle, used only to render read-only strategy proposal cards. */
+  onToolInputStart?: (toolCallId: string, toolName: string) => void;
+  onToolOutput?: (toolCallId: string, output: unknown) => void;
+  onToolError?: (toolCallId: string, errorText: string) => void;
 };
+
+const SAFE_TOOL_ERROR_TEXT = "The requested tool could not complete.";
 
 const CARD_TRANSITIONS: Readonly<Record<CardState, readonly CardState[]>> = {
   drafting: ["planned", "failed"],
@@ -304,7 +310,20 @@ export function parsePilotStreamLine(
       value?: unknown;
       delta?: unknown;
       textDelta?: unknown;
+      toolCallId?: unknown;
+      toolName?: unknown;
+      output?: unknown;
+      errorText?: unknown;
     };
+    if (typeof payload.toolCallId === "string") {
+      if ((payload.type === "tool-input-start" || payload.type === "tool-input-available") && typeof payload.toolName === "string") {
+        callbacks.onToolInputStart?.(payload.toolCallId, payload.toolName);
+      }
+      if (payload.type === "tool-output-available") callbacks.onToolOutput?.(payload.toolCallId, payload.output);
+      if ((payload.type === "tool-output-error" || payload.type === "tool-input-error") && typeof payload.errorText === "string") {
+        callbacks.onToolError?.(payload.toolCallId, SAFE_TOOL_ERROR_TEXT);
+      }
+    }
     if (payload.type === "data-card") {
       const parsed = CardEventSchema.safeParse(payload.data ?? payload.value);
       if (parsed.success) callbacks.onCard(parsed.data);

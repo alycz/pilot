@@ -24,7 +24,7 @@ describe("MP6 AP4M demo page", () => {
   it("exposes the projector split screen and all operator controls accessibly", () => {
     const html = markup();
 
-    expect(html).toContain("Workspace");
+    expect(html).toContain("Pilot");
     expect(html).toContain("Merchant console");
     expect(html).toContain("Ledger feed");
     expect(html).toContain("Payments");

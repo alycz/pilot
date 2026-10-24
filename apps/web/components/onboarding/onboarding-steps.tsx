@@ -4,8 +4,8 @@ import { Check } from "lucide-react";
 
 export const ONBOARDING_STEPS = [
   { id: "wallet", label: "Wallet" },
-  { id: "ai", label: "AI optional" },
-  { id: "access", label: "Access" },
+  { id: "ai", label: "AI model" },
+  { id: "access", label: "Done" },
   { id: "fund", label: "Fund" },
   { id: "acquire", label: "Acquire" },
   { id: "delegate", label: "Delegate" },
@@ -68,7 +68,7 @@ export function OnboardingSteps({
               aria-current={active ? "step" : undefined}
               className={`h-[3px] ${active ? "bg-primary" : done ? "bg-foreground/55" : "bg-border-strong"}`}
             />
-            <span className={`mt-2.5 flex items-start gap-1 font-mono text-[10px] uppercase leading-tight tracking-[0.04em] sm:text-[11px] sm:tracking-[0.06em] lg:text-[10px] lg:tracking-[0.02em] xl:text-[11px] xl:tracking-[0.06em] ${active ? "text-foreground" : "text-muted-foreground"}`}>
+            <span className={`mt-2.5 flex items-start gap-1 text-xs leading-tight sm:text-[13px] lg:text-xs xl:text-[13px] ${active ? "text-foreground" : "text-muted-foreground"}`}>
               {done ? <Check className="mt-px hidden size-3 shrink-0 text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))] sm:block" aria-hidden="true" /> : null}
               <span>{step.label}</span>{done ? <span className="sr-only"> (complete)</span> : null}
             </span>

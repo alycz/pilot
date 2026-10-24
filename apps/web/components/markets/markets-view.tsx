@@ -1,10 +1,10 @@
 "use client";
 
-import { DEFAULT_POLICY, type Venue } from "@pilot/contracts";
-import { createMockHarborClient } from "@pilot/harbor-client";
+import { DEFAULT_POLICY } from "@pilot/contracts";
 import {
   AlertTriangle,
   ArrowDownRight,
+  MessageCircle,
   ArrowUpRight,
   Droplets,
   CandlestickChart,
@@ -15,6 +15,8 @@ import {
   Terminal,
   Waves,
 } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { loadWalletSessionStatus } from "@/lib/harbor-browser";
@@ -40,13 +42,13 @@ import {
   type LedgerServerInfo,
   type PairSnapshot,
 } from "./ledger-markets";
-import { MarketDialog } from "./market-dialog";
+import { SelectMenu } from "../ui/select-menu";
+
+import { demoMarketSnapshots, DEMO_MARKET_NETWORK } from "./markets-demo";
 import { MarketIndexTable } from "./market-index-table";
 import {
-  catalogMarketRows,
   filterAndSortMarkets,
   ledgerMarketRows,
-  type MarketFilter,
   type MarketRow,
   type MarketSort,
   type MarketSortKey,
@@ -74,7 +76,7 @@ import {
   marketPair,
   type DepthLevel,
 } from "./markets-data";
-import { FIXTURE_AS_OF, FIXTURE_LEDGER_INDEX, fixtureAmm, fixtureDepth } from "./markets-fixtures";
+import { FIXTURE_AS_OF, FIXTURE_LEDGER_INDEX } from "./markets-fixtures";
 import { marketParam, policyStrip, type PolicyStrip } from "./policy-strip";
 import { handleRadioKeys } from "./radio-keys";
 
@@ -107,7 +109,7 @@ const OTHERS_EVERY_N_LEDGERS = 5;
 const LADDER_ROWS = 6;
 const NETWORKS: LedgerNetwork[] = ["mainnet", "testnet"];
 
-const chip = "inline-flex items-center gap-1.5 border px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wide";
+const chip = "inline-flex items-center gap-1.5 border px-1.5 py-0.5 text-xs font-medium rounded capitalize";
 const tone = {
   neutral: "border-border text-muted-foreground",
   executed: "border-executed/30 bg-executed/10 text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))]",
@@ -116,13 +118,12 @@ const tone = {
   info: "border-info/30 bg-info/10 text-info",
 };
 const bandInner = "mx-auto w-full max-w-[96rem] px-4 sm:px-6 lg:px-8";
-const dialogInner = "w-full px-4 sm:px-6";
-/** One grid for the pop-up's policy and metric strips so all twelve cells line up and match in size. */
-const statGrid = "grid grid-cols-2 gap-px border-b border-border bg-border sm:grid-cols-3 lg:grid-cols-6";
-const statCell = "flex min-h-[4.5rem] min-w-0 flex-col justify-center gap-1.5 bg-background px-4 py-3 sm:px-6";
-const statLabel = "label-mono truncate text-[10px]";
+/** One grid for the market page's policy and metric strips so all twelve cells line up and match in size. */
+const statGrid = "grid grid-cols-2 gap-px bg-border sm:grid-cols-3 lg:grid-cols-6";
+const statCell = "flex min-h-[4.5rem] min-w-0 flex-col justify-center gap-1.5 bg-card px-4 py-3 sm:px-5";
+const statLabel = "label-mono truncate";
 const statValue = "flex h-5 min-w-0 items-center gap-2 font-mono text-[13px] tabular-nums text-foreground";
-const secondaryButton = "bracket bracket-light inline-flex h-9 pointer-coarse:h-11 items-center gap-2 border border-border bg-white/[0.03] px-3 font-mono text-[11px] uppercase tracking-wide text-foreground transition hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-45";
+const secondaryButton = "bracket bracket-light inline-flex h-9 pointer-coarse:h-11 items-center gap-2 border border-border bg-white/[0.03] px-3 text-[13px] text-foreground transition hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-45 rounded-md";
 
 function assetLabel(asset: unknown, pairs: readonly CatalogPair[]): string {
   const value = asset as { currency?: string; issuer?: string } | undefined;
@@ -135,33 +136,29 @@ function assetLabel(asset: unknown, pairs: readonly CatalogPair[]): string {
   return value.currency.slice(0, 6);
 }
 
-/** Demo snapshot built from the bundled fixtures, used only when no ledger node is reachable. */
-function demoSnapshot(): { pair: CatalogPair; snapshot: PairSnapshot } {
-  const pair = MARKET_CATALOG.testnet[0]!;
-  const legacy = marketPair("testnet", { currency: RLUSD_CURRENCY, issuer: pair.quote.asset.issuer! });
-  const bids = depthSide(fixtureDepth(legacy, "bid"), "bid");
-  const asks = depthSide(fixtureDepth(legacy, "ask"), "ask");
-  return {
-    pair,
-    snapshot: {
-      bids,
-      asks,
-      book: bookSummary(bids, asks),
-      amm: ammSummary(fixtureAmm(legacy), legacy.base, legacy.quote),
-      ledgerIndex: FIXTURE_LEDGER_INDEX,
-    },
-  };
+/** Market page address for a row key (`network:pair:route`). */
+export function marketHref(key: string): string {
+  const [network, pair, route] = key.split(":");
+  return `/markets/${pair}?network=${network}${route && route !== "order-book" ? `&route=${route}` : ""}`;
 }
 
 function prefersReducedMotion(): boolean {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-export function MarketsView() {
-  const [network, setNetwork] = useState<LedgerNetwork>("mainnet");
+/**
+ * Without `marketKey`: the market index. With it (`network:pair:route`): that
+ * market's own page — best execution, AMM pool, depth, ladder, assets and the
+ * ledger inspector.
+ */
+export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
+  const router = useRouter();
+  const initialKey = marketParam(marketKey ?? null);
+  const initialNetwork = (initialKey?.split(":")[0] as LedgerNetwork | undefined) ?? "mainnet";
+  const [network, setNetwork] = useState<LedgerNetwork>(NETWORKS.includes(initialNetwork) ? initialNetwork : "mainnet");
   const [demo, setDemo] = useState(false);
-  const pairs = useMemo<readonly CatalogPair[]>(() => (demo ? [demoSnapshot().pair] : MARKET_CATALOG[network]), [demo, network]);
-  const [selectedKey, setSelectedKey] = useState<string>(`${MARKET_CATALOG.mainnet[0]!.id}:order-book`);
+  const pairs = useMemo<readonly CatalogPair[]>(() => (demo ? MARKET_CATALOG[DEMO_MARKET_NETWORK] : MARKET_CATALOG[network]), [demo, network]);
+  const [selectedKey, setSelectedKey] = useState<string>(initialKey ?? `${MARKET_CATALOG.mainnet[0]!.id}:order-book`);
   const [sizeIndex, setSizeIndex] = useState(1);
   const [pairStates, setPairStates] = useState<Record<string, PairState>>({});
   const [issuers, setIssuers] = useState<Record<string, IssuerState>>({});
@@ -169,12 +166,10 @@ export function MarketsView() {
   const [connection, setConnection] = useState<{ status: LedgerStatus; endpoint: string | null }>({ status: "idle", endpoint: null });
   const [ledgerIndex, setLedgerIndex] = useState<number | null>(null);
   const [calls, setCalls] = useState<LedgerCall[]>([]);
-  const [venues, setVenues] = useState<{ status: "loading" | "ok" | "error"; data?: Venue[]; message?: string }>({ status: "loading" });
-  const [marketFilter, setMarketFilter] = useState<MarketFilter>("all");
   const [marketType, setMarketType] = useState<MarketType | "all">("all");
   const [marketQuery, setMarketQuery] = useState("");
   const [marketSort, setMarketSort] = useState<MarketSort>({ key: "default", direction: "asc" });
-  const [openKey, setOpenKey] = useState<string | null>(null);
+  const openKey = initialKey;
   const [walletSignedIn, setWalletSignedIn] = useState<boolean | null>(null);
 
   const clientRef = useRef<LedgerClient | null>(null);
@@ -207,39 +202,12 @@ export function MarketsView() {
     return () => controller.abort();
   }, []);
 
-  // Deep links: ?market=<pairId:route> opens that market; back/forward keep the pop-up in sync.
+  // Old `?market=` links open the market's own page.
   useEffect(() => {
-    const syncFromUrl = () => {
-      const key = marketParam(new URLSearchParams(window.location.search).get("market"));
-      const pairId = key ? key.slice(0, key.lastIndexOf(":")) : null;
-      const pairNetwork = pairId ? (NETWORKS.find((option) => MARKET_CATALOG[option].some((pair) => pair.id === pairId)) ?? null) : null;
-      if (key && pairNetwork) {
-        setNetwork(pairNetwork);
-        setSelectedKey(key);
-        setOpenKey(key);
-      } else {
-        setOpenKey(null);
-      }
-    };
-    syncFromUrl();
-    window.addEventListener("popstate", syncFromUrl);
-    return () => window.removeEventListener("popstate", syncFromUrl);
-  }, []);
-
-  // Bundled venue catalog (in-browser, no network): lists venues Pilot doesn't quote.
-  useEffect(() => {
-    let active = true;
-    void createMockHarborClient()
-      .op("venues.list", {})
-      .then((result) => {
-        if (!active) return;
-        setVenues(result.ok ? { status: "ok", data: result.data } : { status: "error", message: result.error.message });
-      })
-      .catch((cause: unknown) => active && setVenues({ status: "error", message: cause instanceof Error ? cause.message : "Catalog unavailable" }));
-    return () => {
-      active = false;
-    };
-  }, []);
+    if (initialKey) return;
+    const legacy = marketParam(new URLSearchParams(window.location.search).get("market"));
+    if (legacy) router.replace(marketHref(legacy));
+  }, [initialKey, router]);
 
   const read = useCallback(async (command: LedgerCommand, params: Record<string, unknown>): Promise<Record<string, unknown>> => {
     const client = clientRef.current;
@@ -422,7 +390,6 @@ export function MarketsView() {
     if (demo || connection.status !== "open") return;
     void fetchPair(selectedPair, true);
     // Only on selection change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPair.id]);
 
   const switchNetwork = (next: LedgerNetwork) => {
@@ -433,13 +400,26 @@ export function MarketsView() {
   };
 
   const enterDemo = () => {
-    const { pair, snapshot } = demoSnapshot();
+    const snapshots = demoMarketSnapshots();
+    const updatedAt = Date.parse(FIXTURE_AS_OF);
     setDemo(true);
-    setPairStates({ [pair.id]: { status: "ready", snapshot, updatedAt: Date.parse(FIXTURE_AS_OF) } });
-    setSelectedKey(`${pair.id}:order-book`);
+    setPairStates(Object.fromEntries(Object.entries(snapshots).map(([id, snapshot]) => [id, { status: "ready" as const, snapshot, updatedAt }])));
+    setSelectedKey((current) => {
+      const pairId = current.slice(0, current.lastIndexOf(":"));
+      const route = current.slice(current.lastIndexOf(":") + 1);
+      const demoPair = MARKET_CATALOG[DEMO_MARKET_NETWORK].find((pair) => pair.id.split(":")[1] === pairId.split(":")[1]) ?? MARKET_CATALOG[DEMO_MARKET_NETWORK][0]!;
+      return `${demoPair.id}:${route}`;
+    });
     setCalls([]);
     setConnection({ status: "idle", endpoint: null });
   };
+
+  // A demo never shows a dead end: if no public XRPL node answers, switch to
+  // the bundled fixture, which remains explicitly labelled as illustrative.
+  useEffect(() => {
+    if (!demo && connection.status === "failed") enterDemo();
+    // enterDemo only sets state, so it is left out of the dependencies.
+  }, [connection.status, demo]);
 
   // ---------- derived view data ----------
   const selectedState = pairStates[selectedPair.id];
@@ -466,36 +446,17 @@ export function MarketsView() {
       };
     }),
   );
-  const catalogNetwork = demo ? "testnet" : network;
-  const catalogRows = venues.status === "ok" && venues.data ? catalogMarketRows(venues.data, catalogNetwork) : [];
-  const allRows: MarketRow[] = [...quotedRows, ...catalogRows];
-  const visibleRows = filterAndSortMarkets(allRows, { filter: marketFilter, type: marketType, query: marketQuery, sort: marketSort });
+  // Only markets Pilot actually prices are listed; venues it can't quote yet
+  // live on Map instead of showing as empty "—" rows here.
+  const allRows: MarketRow[] = quotedRows;
+  const visibleRows = filterAndSortMarkets(allRows, { filter: "quoted", type: marketType, query: marketQuery, sort: marketSort });
   const availableTypes = Array.from(new Set(allRows.map((row) => row.type)));
   const sortBy = (key: MarketSortKey) =>
     setMarketSort((current) =>
       current.key !== key ? { key, direction: "asc" } : current.direction === "asc" ? { key, direction: "desc" } : { key: "default", direction: "asc" },
     );
   const selectMarket = (row: QuotedMarketRow) => {
-    setSelectedKey(row.key);
-    if (row.pairId !== selectedPair.id) setSizeIndex(1);
-    setOpenKey(row.key);
-    if (!demo && marketParam(row.key)) {
-      const url = new URL(window.location.href);
-      url.searchParams.set("market", row.key);
-      window.history.pushState({ pilotMarket: row.key }, "", url);
-    }
-  };
-
-  const closeMarket = () => {
-    setOpenKey(null);
-    const url = new URL(window.location.href);
-    if (!url.searchParams.has("market")) return;
-    if ((window.history.state as { pilotMarket?: string } | null)?.pilotMarket) {
-      window.history.back();
-    } else {
-      url.searchParams.delete("market");
-      window.history.replaceState(window.history.state, "", url);
-    }
+    if (marketParam(row.key)) router.push(marketHref(row.key));
   };
 
   const live = !demo && connection.status === "open";
@@ -515,7 +476,7 @@ export function MarketsView() {
               ? "error"
               : "empty";
   usePublishHarnessPageSummary({
-    network: demo ? "testnet" : network,
+    network: demo ? DEMO_MARKET_NETWORK : network,
     pair: selectedPair.label,
     base_asset: base,
     quote_asset: quote,
@@ -534,7 +495,7 @@ export function MarketsView() {
             ? { label: "Reconnecting", tone: tone.approval }
             : { label: "Connecting", tone: tone.neutral };
   const announcement = demo
-    ? "Showing the demo snapshot."
+    ? "Showing a bundled illustrative demo fixture, not current ledger data."
     : connection.status === "open"
         ? `Connected to the XRP Ledger ${NETWORK_LABELS[network]}. Prices update every ledger.`
         : connection.status === "failed"
@@ -544,158 +505,63 @@ export function MarketsView() {
             : "Connecting to the XRP Ledger.";
 
   const xrpUsd = (() => {
-    if (demo) return null;
-    const rlusdPair = MARKET_CATALOG[network].find((pair) => pair.base.symbol === "XRP" && pair.quote.symbol === "RLUSD");
+    const rlusdPair = MARKET_CATALOG[demo ? DEMO_MARKET_NETWORK : network].find((pair) => pair.base.symbol === "XRP" && pair.quote.symbol === "RLUSD");
     return rlusdPair ? pairStates[rlusdPair.id]?.snapshot?.book.mid ?? null : null;
   })();
 
-  return (
-    <div className="min-w-0">
-      <p className="sr-only" aria-live="polite">{announcement}</p>
-
-      {/* Page header: same pattern as the ecosystem map */}
-      <header className="relative min-w-0 overflow-hidden border-b border-border">
-        <div aria-hidden="true" className="bg-rules pointer-events-none absolute inset-0" />
+  if (openKey) {
+    return (
+      <div className="min-w-0">
+        <p className="sr-only" aria-live="polite">{announcement}</p>
+      {/* Market page header: same pattern as the other app pages. Not clipped, so the market picker can open over the page. */}
+      <header className="relative z-10 min-w-0 border-b border-border">
         <div className={`${bandInner} relative grid min-w-0 gap-6 py-8 sm:py-10 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end`}>
           <div className="min-w-0">
             <p className="label-mono flex items-center gap-2">
               <CandlestickChart aria-hidden="true" className="size-3.5 text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))]" />
-              XRPL markets
+              XRPL market
             </p>
-            <h1 id="markets-title" className="mt-3 max-w-3xl text-balance text-[1.75rem] font-normal leading-tight tracking-[-0.02em] text-foreground">
-              Read the market before you trade.
+            <h1 id="market-title" className="mt-3 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-balance text-[1.75rem] font-semibold leading-tight tracking-[-0.02em] text-foreground font-display">
+              <SelectMenu
+                size="title"
+                label="Choose a market"
+                value={selectedKey}
+                display={selectedPair.label}
+                onChange={(key) => router.push(marketHref(key))}
+                options={quotedRows.map((row) => ({ value: row.key, label: `${row.pairLabel ?? row.venueName} · ${row.route === "amm" ? "AMM pool" : "Order book"}` }))}
+              />
+              <span className="font-mono text-xl tabular-nums text-foreground/90">
+                {book.mid !== null ? formatPrice(book.mid, priceDigits(book.mid)) : "—"}
+                <span className="ml-1.5 text-xs text-muted-foreground">{quote}</span>
+              </span>
             </h1>
-            <p className="label-mono mt-3 max-w-2xl leading-6">
-              {demo
-                ? `Demo snapshot from ${formatUtc(FIXTURE_AS_OF)}. Values are fixed and not read from the ledger.`
-                : "Compare order books, AMM pools and the best route for each pair, read live from public XRPL nodes in your browser."}
+            <p className="label-mono mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 leading-6">
+              <span>{selectedRoute === "amm" ? "AMM pool" : "Order book"}</span>
+              <span aria-hidden="true">·</span>
+              <span>XRPL {NETWORK_LABELS[demo ? DEMO_MARKET_NETWORK : network]}</span>
+              <span aria-hidden="true">·</span>
+              <span>Ledger #{(demo ? FIXTURE_LEDGER_INDEX : ledgerIndex)?.toLocaleString("en-US") ?? "—"}</span>
+              <span aria-hidden="true">·</span>
+              <span className="inline-flex items-center gap-1.5">
+                <span aria-hidden="true" className={`size-1.5 rounded-full ${demo ? "bg-info" : live ? "bg-executed motion-safe:animate-pulse" : failed ? "bg-destructive" : "bg-muted-foreground"}`} />
+                {statusChip.label}
+              </span>
             </p>
           </div>
-
-          <dl className="flex min-w-0 flex-wrap items-center gap-y-2">
-            <div className="flex items-baseline gap-2.5 pr-5">
-              <dt className="label-mono">Markets</dt>
-              <dd className="font-mono text-sm text-foreground">{quotedRows.length}</dd>
-            </div>
-            <div className="flex items-baseline gap-2.5 border-l border-border px-5">
-              <dt className="label-mono flex items-center gap-1.5">
-                <span aria-hidden="true" className={`size-1.5 shrink-0 ${demo ? "bg-info" : failed ? "bg-destructive" : liveCount === 0 ? "bg-muted-foreground" : "bg-executed"}`} />
-                {demo ? "Demo" : failed ? "Offline" : liveCount === 0 ? "Connecting" : "Live"}
-              </dt>
-              <dd className={`font-mono text-sm ${demo ? "text-info" : failed ? "text-destructive" : liveCount === 0 ? "text-muted-foreground" : "text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))]"}`}>
-                {failed || (!demo && liveCount === 0) ? "—" : liveCount}
-              </dd>
-            </div>
-            <div className="flex items-baseline gap-2.5 border-l border-border pl-5">
-              <dt className="label-mono" title="Trading venues in Harbor's catalog that Markets does not price yet. The full catalog, including payments and bridges, is on Map.">Other venues</dt>
-              <dd className="font-mono text-sm text-foreground">{venues.status === "loading" ? "—" : catalogRows.length}</dd>
-            </div>
-          </dl>
+          <Link href="/chat" className="bracket bracket-light inline-flex h-10 items-center gap-2 self-start bg-primary px-4 text-[13px] text-primary-foreground transition hover:bg-primary/90 xl:self-auto rounded-md">
+            <MessageCircle aria-hidden="true" className="size-3.5" />
+            Trade in chat
+          </Link>
         </div>
       </header>
 
-      {failed ? (
-        <div className={`${bandInner} pt-6 sm:pt-8`}>
-          <EmptyBox
-            icon={<AlertTriangle className="h-4 w-4" aria-hidden="true" />}
-            title="Can't reach the XRP Ledger"
-            message={`Your browser couldn't open a WebSocket to any public ${NETWORK_LABELS[network]} node (${LEDGER_ENDPOINTS[network].map((url) => endpointHost(url)).join(", ")}). A network filter or firewall may be blocking it. Pilot keeps retrying in the background.`}
-            action={
-              <div className="flex flex-wrap gap-2">
-                <button type="button" className={secondaryButton} onClick={() => void start()}>
-                  <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />Retry
-                </button>
-                <button type="button" className="link-dashed inline-flex h-9 pointer-coarse:h-11 items-center font-mono text-[11px] uppercase tracking-wide text-foreground" onClick={enterDemo}>
-                  Show demo snapshot
-                </button>
-              </div>
-            }
-          />
-        </div>
-      ) : null}
-
-      <div className={`${bandInner} py-6 sm:py-8`}>
-        <MarketIndexTable
-          rows={visibleRows}
-          totals={{ quoted: quotedRows.length, catalog: catalogRows.length }}
-          filter={marketFilter}
-          onFilter={setMarketFilter}
-          type={marketType}
-          types={availableTypes}
-          onType={setMarketType}
-          query={marketQuery}
-          onQuery={setMarketQuery}
-          sort={marketSort}
-          onSort={sortBy}
-          selectedKey={openKey ?? ""}
-          onSelect={selectMarket}
-          pairLabel={selectedPair.label}
-          sourceLabel={demo ? "" : "Live"}
-          offline={failed}
-          sourceTone={demo ? "info" : "executed"}
-          networkLabel={demo ? "Testnet" : NETWORK_LABELS[network]}
-          networkControl={
-            demo ? null : (
-              <div role="radiogroup" aria-label="Ledger network" className="flex border border-border">
-                {NETWORKS.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    role="radio"
-                    aria-checked={network === option}
-                    tabIndex={network === option ? 0 : -1}
-                    onKeyDown={(event) => handleRadioKeys(event, NETWORKS, network, switchNetwork)}
-                    onClick={() => switchNetwork(option)}
-                    className={`h-8 pointer-coarse:h-11 border-r border-border px-3 font-mono text-[10px] uppercase tracking-wide transition last:border-r-0 ${
-                      network === option ? "bg-white/[0.08] text-foreground" : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {NETWORK_LABELS[option]}
-                  </button>
-                ))}
-              </div>
-            )
-          }
-          quotedGroupLabel={demo ? "Demo snapshot · XRPL Testnet" : failed ? `XRP Ledger ${NETWORK_LABELS[network]} · offline` : `Live from the XRP Ledger · ${NETWORK_LABELS[network]}`}
-          footnote={demo ? "Demo values · not read from the ledger" : "Prices read live from public XRPL nodes in your browser · catalogued venues show “—”"}
-          catalogState={venues.status === "error" ? { status: "error", message: venues.message ?? "" } : { status: venues.status }}
-          onRetryCatalog={() => window.location.reload()}
-        />
-      </div>
-
-      {openKey && selectedPair ? (
-        <MarketDialog
-          labelledBy="market-dialog-title"
-          onClose={closeMarket}
-          header={
-            <div className="min-w-0">
-              <h2 id="market-dialog-title" className="min-w-0 text-2xl font-normal tracking-[-0.02em] sm:text-[1.875rem]">
-                {selectedPair.label}
-              </h2>
-              <p className="label-mono mt-1.5">
-                {demo
-                  ? `Ledger #${FIXTURE_LEDGER_INDEX.toLocaleString("en-US")}`
-                  : `Ledger ${ledgerIndex ? `#${ledgerIndex.toLocaleString("en-US")}` : "—"}`}
-                {demo ? null : <span className="sm:hidden"> · {statusChip.label} · XRPL {NETWORK_LABELS[network]}</span>}
-              </p>
-            </div>
-          }
-          headerAside={
-            demo ? null : <div className="hidden flex-wrap items-center justify-end gap-2 sm:flex">
-              <span className={`${chip} ${statusChip.tone}`}>
-                <span aria-hidden="true" className={`h-1.5 w-1.5 ${live ? "animate-pulse bg-executed motion-reduce:animate-none" : demo ? "bg-info" : failed ? "bg-destructive" : "bg-muted-foreground"}`} />
-                {statusChip.label}
-              </span>
-              <span className={`${chip} ${tone.neutral}`}>XRPL {demo ? "Testnet" : NETWORK_LABELS[network]}</span>
-            </div>
-          }
-        >
+      {/* Limits and metrics: one card, the same width as the panels below */}
+      <div className={`${bandInner} pt-6 sm:pt-8`}>
+        <div className="border border-border rounded-xl overflow-hidden">
           <PolicyBand
-            strip={policyStrip(DEFAULT_POLICY, demo ? "testnet" : network)}
+            strip={policyStrip(DEFAULT_POLICY, demo ? DEMO_MARKET_NETWORK : network)}
             signedIn={walletSignedIn}
           />
-
-      {/* Metrics strip */}
       <section aria-label="Market summary">
         <dl className={statGrid}>
           <Metric label="Mid price" value={book.mid} display={formatPrice(book.mid, priceDigits(book.mid))} unit={quote} loading={loadingSelected} />
@@ -712,34 +578,32 @@ export function MarketsView() {
           <Metric label="Book depth" value={book.bidDepth + book.askDepth} display={`${formatCompact(book.bidDepth)} / ${formatCompact(book.askDepth)}`} unit={base} loading={loadingSelected} neutralFlash />
         </dl>
       </section>
+        </div>
+      </div>
 
       {offline ? (
-        <div className={`${dialogInner} py-6 sm:py-8`}>
+        <div className={`${bandInner} py-6 sm:py-8`}>
           <EmptyBox
             title="Waiting for a ledger connection"
             message="Quotes, depth, the pool and issuer details appear here as soon as a public XRPL node answers."
             action={
               <button
                 type="button"
-                className="link-dashed inline-flex h-9 pointer-coarse:h-11 items-center font-mono text-[11px] uppercase tracking-wide text-foreground"
-                onClick={() => {
-                  enterDemo();
-                  setOpenKey(`${demoSnapshot().pair.id}:order-book`);
-                }}
+                className="link-dashed inline-flex h-9 pointer-coarse:h-11 items-center text-[13px] text-foreground"
+                onClick={enterDemo}
               >
-                Show demo snapshot
+                Show bundled demo fixture
               </button>
             }
           />
         </div>
       ) : (
-      <div className={`${dialogInner} space-y-6 py-6 sm:py-8`}>
+      <div className={`${bandInner} space-y-6 py-6 sm:py-8`}>
         {/* Best execution + AMM pool */}
         <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(18rem,1fr)]">
           <Panel
             id="execution-title"
             title="Best execution"
-            className="lg:self-start"
             icon={<Route className="h-4 w-4" />}
 
             action={
@@ -760,9 +624,9 @@ export function MarketsView() {
                       )
                     }
                     onClick={() => setSizeIndex(index)}
-                    className={`h-7 pointer-coarse:h-11 border px-2 font-mono text-[10px] uppercase tracking-wide transition ${
+                    className={`h-7 pointer-coarse:h-11 border px-2 text-xs transition rounded-md ${
                       sizeIndex === index
-                        ? "bracket bracket-accent border-border-strong bg-primary/[0.06] text-foreground"
+                        ? "bracket bracket-accent border-border-strong bg-primary-soft text-foreground"
                         : "border-border text-muted-foreground hover:text-foreground"
                     }`}
                   >
@@ -774,15 +638,15 @@ export function MarketsView() {
           >
             <p className="border-b border-border px-4 py-3 text-xs leading-5 text-muted-foreground">
               Sell <span className="font-mono text-foreground">{formatAmount(size, 0)} {base}</span> for {quote}. Walks the live bid book and prices the AMM pool after its fee —{" "}
-              {demo ? "on demo values." : "computed in your browser from live ledger data."} Harbor serves the same comparison to agents as <code className="font-mono">venues.compare</code>.
+              {demo ? "from a bundled illustrative fixture, not current ledger data." : "computed in your browser from live ledger data."} Harbor serves the same comparison to agents as <code className="font-mono">venues.compare</code>.
             </p>
             {loadingSelected ? (
               <SkeletonRows rows={2} />
             ) : routes && routes.routes.length ? (
-              <>
+              <div className="flex flex-1 flex-col">
                 <RouteBars routes={routes.routes} quoteSymbol={quote} focusRoute={selectedRoute} />
                 {routes.unavailable.map((route) => (
-                  <div key={route.route} className="flex items-center justify-between gap-3 border-t border-dashed border-border px-4 py-3 font-mono text-[11px] uppercase tracking-wide text-muted-foreground">
+                  <div key={route.route} className="flex items-center justify-between gap-3 border-t border-dashed border-border px-4 py-3 text-[13px] text-muted-foreground">
                     <span>{route.route === "amm" ? "AMM pool" : "Order book"}</span>
                     <span className="normal-case">{route.detail ?? "Unavailable"}</span>
                   </div>
@@ -796,7 +660,7 @@ export function MarketsView() {
                     </p>
                   </div>
                 ) : null}
-              </>
+              </div>
             ) : (
               <div className="p-4">
                 <EmptyBox title="No route for this size" message={routes?.unavailable.map((route) => route.detail).filter(Boolean).join(" ") || "The book and pool read can't fill this size."} />
@@ -826,13 +690,13 @@ export function MarketsView() {
                 </dl>
                 {amm.account ? (
                   <p className="truncate border-t border-border px-4 py-3 font-mono text-[10px] text-muted-foreground" title={amm.account}>
-                    <span className="label-mono mr-2 text-[10px]">Pool account</span>{amm.account}
+                    <span className="label-mono mr-2">Pool account</span>{amm.account}
                   </p>
                 ) : null}
               </div>
             ) : (
               <div className="p-4">
-                <EmptyBox title="No AMM pool" message={`The ledger has no ${base} / ${quote} AMM pool on ${demo ? "the demo snapshot" : NETWORK_LABELS[network]}.`} />
+                <EmptyBox title="No AMM pool" message={`The ledger has no ${base} / ${quote} AMM pool on ${NETWORK_LABELS[demo ? DEMO_MARKET_NETWORK : network]}.`} />
               </div>
             )}
           </Panel>
@@ -876,7 +740,7 @@ export function MarketsView() {
               entry.asset.issuer ? (
                 <IssuerCard key={entry.symbol} entry={entry} state={demo ? undefined : issuers[entry.asset.issuer]} demo={demo} onRetry={() => void loadIssuer(entry)} />
               ) : (
-                <XrpCard key="xrp" usd={xrpUsd} network={demo ? "testnet" : network} />
+                <XrpCard key="xrp" usd={xrpUsd} network={demo ? DEMO_MARKET_NETWORK : network} />
               ),
             )}
             <LedgerCard server={demo ? null : server} endpoint={connection.endpoint} ledgerIndex={demo ? FIXTURE_LEDGER_INDEX : ledgerIndex} demo={demo} />
@@ -885,34 +749,129 @@ export function MarketsView() {
       </div>
       )}
 
-      {/* Ledger inspector band */}
-      <section aria-labelledby="inspector-title" className="border-t border-border bg-sidebar/40">
-        <div className={`${dialogInner} py-6 sm:py-8`}>
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <h2 id="inspector-title" className="flex items-center gap-2 text-sm font-medium">
-                <Terminal className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                Ledger inspector
-              </h2>
-              <p className="label-mono mt-1.5 leading-5">
-                Your browser → public XRPL node over WebSocket · no Pilot server, no API key
-              </p>
-              <p className="label-mono mt-1 text-[10px] leading-5">
-                Agents get this same data through Harbor: <span className="text-foreground">dex.depth · amm.info · venues.compare</span>
-              </p>
-            </div>
-            <InspectorTotals calls={calls} demo={demo} />
-          </div>
+      {/* Ledger inspector: same panel style as Best execution and AMM pool */}
+      <div className={`${bandInner} pb-6 sm:pb-8`}>
+        <Panel id="inspector-title" title="Ledger inspector" icon={<Terminal className="h-4 w-4" />} action={<InspectorTotals calls={calls} demo={demo} />}>
           <Inspector calls={calls} demo={demo} />
-          <p className="label-mono mt-4 text-[10px]">
-            {demo
-              ? null
-              : `Selected market refreshes every validated ledger (≥${SELECTED_MIN_INTERVAL_MS / 1000}s apart); other markets every ${OTHERS_EVERY_N_LEDGERS} ledgers; reads stop while this tab is hidden`}
-          </p>
+          {demo ? null : (
+            <p className="label-mono border-t border-border px-4 py-3">
+              Selected market refreshes every validated ledger (≥{SELECTED_MIN_INTERVAL_MS / 1000}s apart); other markets every {OTHERS_EVERY_N_LEDGERS} ledgers; reads stop while this tab is hidden
+            </p>
+          )}
+        </Panel>
+      </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-w-0">
+      <p className="sr-only" aria-live="polite">{announcement}</p>
+
+      {/* Page header: same pattern as the ecosystem map */}
+      <header className="relative min-w-0 overflow-hidden border-b border-border">
+        <div className={`${bandInner} relative grid min-w-0 gap-6 py-8 sm:py-10 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end`}>
+          <div className="min-w-0">
+            <p className="label-mono flex items-center gap-2">
+              <CandlestickChart aria-hidden="true" className="size-3.5 text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))]" />
+              XRPL markets
+            </p>
+            <h1 id="markets-title" className="mt-3 max-w-3xl text-balance text-[1.75rem] font-semibold leading-tight tracking-[-0.02em] text-foreground font-display">
+              Read the market before you trade.
+            </h1>
+            <p className="label-mono mt-3 max-w-2xl leading-6">
+              Compare order books, AMM pools and the best route for each pair on the XRP Ledger.
+            </p>
+          </div>
+
+          <dl className="flex min-w-0 flex-wrap items-center gap-y-2">
+            <div className="flex items-baseline gap-2.5 pr-5">
+              <dt className="label-mono">Markets</dt>
+              <dd className="font-mono text-sm text-foreground">{quotedRows.length}</dd>
+            </div>
+            <div className="flex items-baseline gap-2.5 border-l border-border px-5">
+              <dt className="label-mono flex items-center gap-1.5">
+                <span aria-hidden="true" className={`size-1.5 shrink-0 ${demo ? "bg-info" : failed ? "bg-destructive" : liveCount === 0 ? "bg-muted-foreground" : "bg-executed"}`} />
+                {demo ? "Demo fixture" : failed ? "Offline" : liveCount === 0 ? "Connecting" : "Live"}
+              </dt>
+              <dd className={`font-mono text-sm ${demo ? "text-info" : failed ? "text-destructive" : liveCount === 0 ? "text-muted-foreground" : "text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))]"}`}>
+                {failed || (!demo && liveCount === 0) ? "—" : liveCount}
+              </dd>
+            </div>
+          </dl>
         </div>
-      </section>
-        </MarketDialog>
+      </header>
+
+      {failed ? (
+        <div className={`${bandInner} pt-6 sm:pt-8`}>
+          <EmptyBox
+            icon={<AlertTriangle className="h-4 w-4" aria-hidden="true" />}
+            title="Can't reach the XRP Ledger"
+            message={`Your browser couldn't open a WebSocket to any public ${NETWORK_LABELS[network]} node (${LEDGER_ENDPOINTS[network].map((url) => endpointHost(url)).join(", ")}). A network filter or firewall may be blocking it. Pilot keeps retrying in the background.`}
+            action={
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className={secondaryButton} onClick={() => void start()}>
+                  <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />Retry
+                </button>
+                <button type="button" className="link-dashed inline-flex h-9 pointer-coarse:h-11 items-center text-[13px] text-foreground" onClick={enterDemo}>
+                  Show bundled demo fixture
+                </button>
+              </div>
+            }
+          />
+        </div>
       ) : null}
+
+      <div className={`${bandInner} py-6 sm:py-8`}>
+        <MarketIndexTable
+          rows={visibleRows}
+          totals={{ quoted: quotedRows.length, catalog: 0 }}
+          filter="quoted"
+          onFilter={() => undefined}
+          showCatalog={false}
+          type={marketType}
+          types={availableTypes}
+          onType={setMarketType}
+          query={marketQuery}
+          onQuery={setMarketQuery}
+          sort={marketSort}
+          onSort={sortBy}
+          selectedKey={openKey ?? ""}
+          onSelect={selectMarket}
+          pairLabel={selectedPair.label}
+          sourceLabel={demo ? "Demo fixture" : "Live"}
+          offline={failed}
+          sourceTone={demo ? "info" : "executed"}
+          networkLabel={NETWORK_LABELS[demo ? DEMO_MARKET_NETWORK : network]}
+          networkControl={
+            demo ? null : (
+              <div role="radiogroup" aria-label="Ledger network" className="flex border border-border rounded-xl overflow-hidden">
+                {NETWORKS.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    role="radio"
+                    aria-checked={network === option}
+                    tabIndex={network === option ? 0 : -1}
+                    onKeyDown={(event) => handleRadioKeys(event, NETWORKS, network, switchNetwork)}
+                    onClick={() => switchNetwork(option)}
+                    className={`h-8 pointer-coarse:h-11 border-r border-border px-3 text-xs transition last:border-r-0 ${
+                      network === option ? "bg-white/[0.08] text-foreground" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {NETWORK_LABELS[option]}
+                  </button>
+                ))}
+              </div>
+            )
+          }
+          quotedGroupLabel={demo ? `XRP Ledger · ${NETWORK_LABELS[DEMO_MARKET_NETWORK]} snapshot` : failed ? `XRP Ledger ${NETWORK_LABELS[network]} · offline` : `Live from the XRP Ledger · ${NETWORK_LABELS[network]}`}
+          footnote={demo ? `Snapshot from ${formatUtc(FIXTURE_AS_OF)}` : "Prices read live from public XRPL nodes in your browser"}
+          catalogState={{ status: "ok" }}
+          onRetryCatalog={() => undefined}
+        />
+      </div>
+
     </div>
   );
 }
@@ -961,7 +920,7 @@ function PolicyBand({ strip, signedIn }: { strip: PolicyStrip; signedIn: boolean
   // Signed-in users manage their own policy in Memory; the pop-up shows the default limits only to visitors.
   if (signedIn) return null;
   return (
-    <section aria-label="Execution policy limits">
+    <section aria-label="Execution policy limits" className="border-b border-border">
       <dl className={statGrid}>
         {strip.cells.map((cell) => (
           <div key={cell.label} className={statCell}>
@@ -976,7 +935,7 @@ function PolicyBand({ strip, signedIn }: { strip: PolicyStrip; signedIn: boolean
 
 function Panel({ id, title, icon, action, className = "", children }: { id: string; title: string; icon: ReactNode; action?: ReactNode; className?: string; children: ReactNode }) {
   return (
-    <section aria-labelledby={id} className={`min-w-0 border border-border bg-card ${className}`}>
+    <section aria-labelledby={id} className={`flex min-w-0 flex-col border border-border bg-card rounded-xl ${className} overflow-hidden`}>
       <header className="flex min-h-12 flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2.5">
         <div className="flex min-w-0 flex-wrap items-center gap-2.5">
           <span className="text-muted-foreground" aria-hidden="true">{icon}</span>
@@ -1041,7 +1000,7 @@ function DeltaChip({ bps, label }: { bps: number; label: string }) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-card px-4 py-3">
-      <dt className="label-mono text-[10px]">{label}</dt>
+      <dt className="label-mono">{label}</dt>
       <dd className="mt-1 font-mono text-sm tabular-nums">{value}</dd>
     </div>
   );
@@ -1062,8 +1021,8 @@ function SkeletonRows({ rows }: { rows: number }) {
 
 function EmptyBox({ icon, title, message, action }: { icon?: ReactNode; title: string; message: string; action?: ReactNode }) {
   return (
-    <div className="flex flex-col items-start gap-3 border border-dashed border-border-strong bg-card px-4 py-5">
-      <p className="flex items-center gap-2 font-mono text-[11px] font-medium uppercase tracking-wide text-foreground">{icon}{title}</p>
+    <div className="flex flex-col items-start gap-3 border border-dashed border-border-strong bg-card px-4 py-5 rounded-xl overflow-hidden">
+      <p className="flex items-center gap-2 text-[13px] font-medium text-foreground">{icon}{title}</p>
       <p className="max-w-3xl text-xs leading-5 text-muted-foreground">{message}</p>
       {action}
     </div>
@@ -1104,15 +1063,15 @@ function Ladder({ bids, asks, spreadBps, baseSymbol, quoteSymbol }: { bids: Dept
         <caption className="sr-only">Best {LADDER_ROWS} ask and bid levels, price in {quoteSymbol} per {baseSymbol}, size and cumulative size in {baseSymbol}.</caption>
         <thead className="bg-white/[0.02]">
           <tr className="border-b border-border">
-            <th scope="col" className="label-mono px-4 py-2 text-[10px] font-medium">Price · {quoteSymbol}</th>
-            <th scope="col" className="label-mono px-4 py-2 text-right text-[10px] font-medium">Size · {baseSymbol}</th>
-            <th scope="col" className="label-mono px-4 py-2 text-right text-[10px] font-medium">Total</th>
+            <th scope="col" className="label-mono px-4 py-2 font-medium">Price · {quoteSymbol}</th>
+            <th scope="col" className="label-mono px-4 py-2 text-right font-medium">Size · {baseSymbol}</th>
+            <th scope="col" className="label-mono px-4 py-2 text-right font-medium">Total</th>
           </tr>
         </thead>
         <tbody>
           {topAsks.map((level) => row(level, "ask"))}
           <tr className="border-y border-border bg-white/[0.03]">
-            <td colSpan={3} className="px-4 py-2 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+            <td colSpan={3} className="px-4 py-2 text-xs text-muted-foreground">
               Spread <span className="text-foreground">{formatBps(spreadBps)}</span>
             </td>
           </tr>
@@ -1123,124 +1082,118 @@ function Ladder({ bids, asks, spreadBps, baseSymbol, quoteSymbol }: { bids: Dept
   );
 }
 
-function IssuerCard({ entry, state, demo, onRetry }: { entry: CatalogAsset; state: IssuerState | undefined; demo: boolean; onRetry: () => void }) {
-  const header = (
-    <div className="flex items-start justify-between gap-3">
-      <div className="min-w-0">
-        <p className="text-sm font-medium">{entry.symbol}</p>
-        <p className="truncate text-xs text-muted-foreground">{entry.name}</p>
+type CardStat = { label: string; value: ReactNode };
+
+/** One layout for every asset and ledger card: header, four stats, flags, footer. */
+function InfoCard({ title, subtitle, badge, stats, chips, footer }: { title: string; subtitle: string; badge: ReactNode; stats: CardStat[]; chips: ReactNode; footer: ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-col bg-card p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium">{title}</p>
+          <p className="truncate text-xs text-muted-foreground">{subtitle}</p>
+        </div>
+        {badge}
       </div>
-      <span className={`${chip} ${tone.neutral}`}>Issued</span>
+      <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
+        {stats.map((stat) => (
+          <div key={stat.label} className="min-w-0">
+            <dt className="label-mono">{stat.label}</dt>
+            <dd className="mt-1 truncate font-mono text-xs tabular-nums">{stat.value}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="mt-4 flex min-h-[1.375rem] flex-wrap gap-1.5">{chips}</div>
+      <div aria-hidden="true" className="min-h-4 flex-1" />
+      <p className="border-t border-border pt-3 font-mono text-[10px] leading-4 text-muted-foreground">{footer}</p>
     </div>
   );
-  if (demo) {
+}
+
+function IssuerCard({ entry, state, demo, onRetry }: { entry: CatalogAsset; state: IssuerState | undefined; demo: boolean; onRetry: () => void }) {
+  const badge = <span className={`${chip} ${tone.neutral}`}>Issued</span>;
+  const code = entry.asset.currency.length > 3 ? `${entry.asset.currency.slice(0, 10)}…` : entry.asset.currency;
+  const issuerFooter = (domain?: string | null) => (
+    <>
+      <span className="label-mono mr-1.5">Issuer</span>
+      <span className="break-all">{entry.asset.issuer}</span>
+      {domain ? <span> · {domain}</span> : null}
+      {entry.source ? <>{" · "}<a href={entry.source} target="_blank" rel="noreferrer" className="link-dashed hover:text-foreground">source</a></> : null}
+    </>
+  );
+  if (!demo && (!state || state.status === "loading")) return <div className="bg-card"><SkeletonRows rows={4} /></div>;
+  if (!demo && (state?.status === "error" || !state?.info)) {
     return (
       <div className="min-w-0 bg-card p-4">
-        {header}
-        <p className="mt-4 text-xs leading-5 text-muted-foreground">Issuer flags and supply are read live from the ledger; unavailable in the demo snapshot.</p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium">{entry.symbol}</p>
+            <p className="truncate text-xs text-muted-foreground">{entry.name}</p>
+          </div>
+          {badge}
+        </div>
+        <div className="mt-4"><EmptyBox title="Issuer unavailable" message={state?.error ?? "The issuer account could not be read."} action={<RetryButton onClick={onRetry} />} /></div>
       </div>
     );
   }
-  if (!state || state.status === "loading") return <div className="bg-card"><SkeletonRows rows={4} /></div>;
-  if (state.status === "error" || !state.info) {
-    return (
-      <div className="min-w-0 bg-card p-4">
-        {header}
-        <div className="mt-4"><EmptyBox title="Issuer unavailable" message={state.error ?? "The issuer account could not be read."} action={<RetryButton onClick={onRetry} />} /></div>
-      </div>
-    );
-  }
-  const info = state.info;
-  const flags: Array<[string, boolean, keyof typeof tone]> = [
+  const info = demo ? null : state!.info!;
+  const flags: Array<[string, boolean, keyof typeof tone]> = info ? [
     ["RequireAuth", info.requireAuth, "approval"],
     ["Global freeze", info.globalFreeze, "destructive"],
     ["Clawback enabled", info.clawback, "approval"],
     ["No freeze", info.noFreeze, "info"],
-  ];
+  ] : [];
   const raised = flags.filter(([, on]) => on);
   return (
-    <div className="min-w-0 bg-card p-4">
-      {header}
-      <dl className="mt-4 grid grid-cols-2 gap-3">
-        <div>
-          <dt className="label-mono text-[10px]">On-ledger supply</dt>
-          <dd className="mt-1 font-mono text-xs tabular-nums">{info.circulating !== null ? formatCompact(info.circulating) : "—"}</dd>
-        </div>
-        <div>
-          <dt className="label-mono text-[10px]">Transfer fee</dt>
-          <dd className="mt-1 font-mono text-xs tabular-nums">{info.transferFeePercent ? `${info.transferFeePercent.toFixed(3)}%` : "None"}</dd>
-        </div>
-      </dl>
-      <div className="mt-4 flex flex-wrap gap-1.5" aria-label="Issuer flags">
-        {raised.length ? raised.map(([label, , flagTone]) => <span key={label} className={`${chip} ${tone[flagTone]}`}>{label}</span>) : <span className={`${chip} ${tone.executed}`}>No issuer restrictions</span>}
-      </div>
-      <p className="mt-4 border-t border-border pt-3 font-mono text-[10px] leading-4 text-muted-foreground">
-        <span className="label-mono mr-1.5 text-[10px]">Issuer</span>
-        <span className="break-all">{info.account}</span>
-        {info.domain ? <span> · {info.domain}</span> : null}
-        {entry.source ? (
-          <>
-            {" · "}
-            <a href={entry.source} target="_blank" rel="noreferrer" className="link-dashed hover:text-foreground">source</a>
-          </>
-        ) : null}
-      </p>
-    </div>
+    <InfoCard
+      title={entry.symbol}
+      subtitle={entry.name}
+      badge={badge}
+      stats={[
+        { label: "On-ledger supply", value: info?.circulating != null ? formatCompact(info.circulating) : "—" },
+        { label: "Transfer fee", value: info ? (info.transferFeePercent ? `${info.transferFeePercent.toFixed(3)}%` : "None") : "—" },
+        { label: "Currency code", value: code },
+        { label: "Domain", value: info?.domain ?? "—" },
+      ]}
+      chips={raised.length ? raised.map(([label, , flagTone]) => <span key={label} className={`${chip} ${tone[flagTone]}`}>{label}</span>) : info ? <span className={`${chip} ${tone.executed}`}>No issuer restrictions</span> : null}
+      footer={issuerFooter(info?.domain)}
+    />
   );
 }
 
 function XrpCard({ usd, network }: { usd: number | null; network: LedgerNetwork }) {
   return (
-    <div className="min-w-0 bg-card p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm font-medium">XRP</p>
-          <p className="truncate text-xs text-muted-foreground">Native asset · no issuer</p>
-        </div>
-        <p className="font-mono text-base tabular-nums">{usd !== null ? <FlashText value={usd}>≈ ${formatPrice(usd, 4)}</FlashText> : "—"}</p>
-      </div>
-      <p className="mt-4 text-xs leading-5 text-muted-foreground">
-        {usd !== null
-          ? `USD value implied from the live XRP / RLUSD mid on ${NETWORK_LABELS[network]} (RLUSD ≈ $1).`
-          : "USD value appears once the XRP / RLUSD book has been read."}
-      </p>
-      <div className="mt-4 flex flex-wrap gap-1.5">
-        <span className={`${chip} ${tone.executed}`}>No issuer restrictions</span>
-      </div>
-    </div>
+    <InfoCard
+      title="XRP"
+      subtitle="Native asset · no issuer"
+      badge={<span className={`${chip} ${tone.neutral}`}>Native</span>}
+      stats={[
+        { label: "USD value", value: usd !== null ? <FlashText value={usd}>≈ ${formatPrice(usd, 4)}</FlashText> : "—" },
+        { label: "Transfer fee", value: "None" },
+        { label: "Issuer", value: "None" },
+        { label: "Network", value: NETWORK_LABELS[network] },
+      ]}
+      chips={<span className={`${chip} ${tone.executed}`}>No issuer restrictions</span>}
+      footer={usd !== null ? "Priced from the XRP / RLUSD mid" : "Priced once the XRP / RLUSD book is read"}
+    />
   );
 }
 
 function LedgerCard({ server, endpoint, ledgerIndex, demo }: { server: LedgerServerInfo | null; endpoint: string | null; ledgerIndex: number | null; demo: boolean }) {
   return (
-    <div className="min-w-0 bg-card p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm font-medium">Ledger</p>
-          <p className="truncate text-xs text-muted-foreground">{demo ? "Demo snapshot" : `Connected via ${endpointHost(endpoint)}`}</p>
-        </div>
-        {demo ? <span className={`${chip} ${tone.info}`}>Demo</span> : null}
-      </div>
-      <dl className="mt-4 grid grid-cols-2 gap-3">
-        <div>
-          <dt className="label-mono text-[10px]">Validated ledger</dt>
-          <dd className="mt-1 font-mono text-xs tabular-nums">{ledgerIndex ? `#${ledgerIndex.toLocaleString("en-US")}` : "—"}</dd>
-        </div>
-        <div>
-          <dt className="label-mono text-[10px]">Base fee</dt>
-          <dd className="mt-1 font-mono text-xs tabular-nums">{server?.baseFeeXrp !== null && server?.baseFeeXrp !== undefined ? `${Math.round(server.baseFeeXrp * 1_000_000)} drops` : "—"}</dd>
-        </div>
-        <div>
-          <dt className="label-mono text-[10px]">Account reserve</dt>
-          <dd className="mt-1 font-mono text-xs tabular-nums">{server?.reserveBaseXrp !== null && server?.reserveBaseXrp !== undefined ? `${server.reserveBaseXrp} XRP` : "—"}</dd>
-        </div>
-        <div>
-          <dt className="label-mono text-[10px]">Owner reserve</dt>
-          <dd className="mt-1 font-mono text-xs tabular-nums">{server?.reserveIncXrp !== null && server?.reserveIncXrp !== undefined ? `${server.reserveIncXrp} XRP / object` : "—"}</dd>
-        </div>
-      </dl>
-      {server?.buildVersion ? <p className="mt-4 border-t border-border pt-3 font-mono text-[10px] text-muted-foreground">rippled {server.buildVersion}</p> : null}
-    </div>
+    <InfoCard
+      title="Ledger"
+      subtitle={demo ? `Bundled fixture dated ${formatUtc(FIXTURE_AS_OF)}` : `Connected via ${endpointHost(endpoint)}`}
+      badge={<span className={`${chip} ${demo ? tone.info : tone.executed}`}>{demo ? "Demo fixture" : "Live"}</span>}
+      stats={[
+        { label: "Validated ledger", value: ledgerIndex ? `#${ledgerIndex.toLocaleString("en-US")}` : "—" },
+        { label: "Base fee", value: server?.baseFeeXrp != null ? `${Math.round(server.baseFeeXrp * 1_000_000)} drops` : "—" },
+        { label: "Account reserve", value: server?.reserveBaseXrp != null ? `${server.reserveBaseXrp} XRP` : "—" },
+        { label: "Owner reserve", value: server?.reserveIncXrp != null ? `${server.reserveIncXrp} XRP / object` : "—" },
+      ]}
+      chips={<span className={`${chip} ${tone.neutral}`}>XRPL {demo ? "Mainnet" : "validated reads"}</span>}
+      footer={server?.buildVersion ? `rippled ${server.buildVersion}` : demo ? "Illustrative fixture; not a live observation" : "Reading server info…"}
+    />
   );
 }
 
@@ -1251,7 +1204,7 @@ function InspectorTotals({ calls, demo }: { calls: LedgerCall[]; demo: boolean }
   const timed = calls.filter((call) => call.ms !== undefined);
   const average = timed.length ? Math.round(timed.reduce((sum, call) => sum + (call.ms ?? 0), 0) / timed.length) : null;
   return (
-    <p className="font-mono text-[11px] uppercase tracking-wide text-muted-foreground">
+    <p className="text-[13px] text-muted-foreground">
       Last {calls.length} reads
       {ok ? <> · <span className="text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))]">{ok} ok</span></> : null}
       {errors ? <> · <span className="text-destructive">{errors} error</span></> : null}
@@ -1263,32 +1216,33 @@ function InspectorTotals({ calls, demo }: { calls: LedgerCall[]; demo: boolean }
 function Inspector({ calls, demo }: { calls: LedgerCall[]; demo: boolean }) {
   const recent = [...calls].reverse().slice(0, 12);
   return (
-    <div className="mt-4 overflow-x-auto border border-border bg-card" role="region" aria-label="Ledger requests table" tabIndex={0}>
-      <table className="w-full min-w-[44rem] text-left">
+    <div className="overflow-x-auto" role="region" aria-label="Ledger requests table" tabIndex={0}>
+      <table className="w-full min-w-[48rem] table-fixed text-left">
+        <colgroup>{Array.from({ length: 6 }, (_, index) => <col key={index} className="w-1/6" />)}</colgroup>
         <caption className="sr-only">Most recent ledger requests made by this page, newest first.</caption>
         <thead className="bg-white/[0.02]">
           <tr className="border-b border-border">
-            {["Command", "Request", "Node", "Ledger", "Status", "Latency"].map((heading, index) => (
-              <th key={heading} scope="col" className={`label-mono px-4 py-2 text-[10px] font-medium ${index >= 3 && index !== 4 ? "text-right" : ""}`}>{heading}</th>
+            {["Command", "Request", "Node", "Ledger", "Status", "Latency"].map((heading) => (
+              <th key={heading} scope="col" className="label-mono truncate px-4 py-2 text-left font-medium">{heading}</th>
             ))}
           </tr>
         </thead>
         <tbody>
           {recent.length === 0 ? (
-            <tr><td colSpan={6} className="px-4 py-4 font-mono text-[11px] text-muted-foreground">{demo ? "The demo snapshot makes no ledger requests." : "No reads yet."}</td></tr>
+            <tr><td colSpan={6} className="px-4 py-4 font-mono text-[11px] text-muted-foreground">{demo ? "Showing a bundled illustrative fixture. Live reads start when a public node answers." : "No reads yet."}</td></tr>
           ) : (
             recent.map((call) => (
               <tr key={call.id} className="border-b border-border last:border-b-0">
-                <td className="px-4 py-2 font-mono text-xs text-foreground">{call.command}</td>
-                <td className="px-4 py-2 font-mono text-[11px] text-muted-foreground">{call.request}</td>
-                <td className="px-4 py-2 font-mono text-[11px] text-muted-foreground">{call.host}</td>
-                <td className="px-4 py-2 text-right font-mono text-[11px] tabular-nums text-muted-foreground">{call.ledger ? `#${call.ledger.toLocaleString("en-US")}` : "—"}</td>
+                <td className="truncate px-4 py-2 font-mono text-xs text-foreground">{call.command}</td>
+                <td className="truncate px-4 py-2 font-mono text-[11px] text-muted-foreground" title={call.request}>{call.request}</td>
+                <td className="truncate px-4 py-2 font-mono text-[11px] text-muted-foreground">{call.host}</td>
+                <td className="truncate px-4 py-2 font-mono text-[11px] tabular-nums text-muted-foreground">{call.ledger ? `#${call.ledger.toLocaleString("en-US")}` : "—"}</td>
                 <td className="px-4 py-2">
                   <span className={`${chip} ${call.status === "ok" ? tone.executed : call.status === "error" ? tone.destructive : tone.neutral}`}>
                     {call.status === "pending" ? "Pending" : call.status === "ok" ? "OK" : call.code ?? "Error"}
                   </span>
                 </td>
-                <td className="px-4 py-2 text-right font-mono text-[11px] tabular-nums text-muted-foreground">{call.ms !== undefined ? `${call.ms} ms` : "…"}</td>
+                <td className="truncate px-4 py-2 font-mono text-[11px] tabular-nums text-muted-foreground">{call.ms !== undefined ? `${call.ms} ms` : "…"}</td>
               </tr>
             ))
           )}

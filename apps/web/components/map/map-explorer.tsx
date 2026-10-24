@@ -5,7 +5,6 @@ import { createMockHarborClient } from "@pilot/harbor-client";
 import {
   Activity,
   Database,
-  Layers3,
   Map as MapIcon,
   RadioTower,
   RefreshCw,
@@ -16,6 +15,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { VenueCard } from "@/components/map/venue-card";
+import { SelectMenu } from "../ui/select-menu";
 import {
   createLatestRequestGuard,
   fetchVenueCatalog,
@@ -63,10 +63,9 @@ function shortAccount(account: string): string {
 }
 
 const secondaryButton =
-  "bracket bracket-light inline-flex h-9 pointer-coarse:h-11 items-center gap-2 border border-border bg-white/[0.03] px-3 font-mono text-[11px] font-medium uppercase tracking-wide text-foreground transition hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-45";
+  "bracket bracket-light inline-flex h-9 pointer-coarse:h-11 items-center gap-2 border border-border bg-white/[0.03] px-3 text-[13px] font-medium text-foreground transition hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-45 rounded-md";
 const fieldBase =
-  "h-10 w-full min-w-0 border border-input bg-background/60 text-sm text-foreground placeholder:text-muted-foreground focus:border-border-strong disabled:cursor-not-allowed disabled:opacity-60 pointer-coarse:h-11 pointer-coarse:text-base";
-const selectBase = `${fieldBase} px-3 font-mono text-[12px] uppercase tracking-wide pointer-coarse:text-base`;
+  "h-10 w-full min-w-0 border border-input bg-background/60 text-sm text-foreground placeholder:text-muted-foreground focus:border-border-strong disabled:cursor-not-allowed disabled:opacity-60 pointer-coarse:h-11 pointer-coarse:text-base rounded-md";
 
 export function MapExplorer() {
   const liveHarbor = useMemo(() => createBrowserHarborClient(), []);
@@ -214,14 +213,13 @@ export function MapExplorer() {
   return (
     <div className="min-h-[calc(100dvh-4rem)] w-full min-w-0">
       <header className="relative min-w-0 overflow-hidden border-b border-border">
-        <div aria-hidden="true" className="bg-rules pointer-events-none absolute inset-0" />
         <div className="relative grid min-w-0 gap-6 px-4 py-8 sm:px-6 sm:py-10 lg:px-8 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
           <div className="min-w-0">
             <p className="label-mono flex items-center gap-2">
               <MapIcon aria-hidden="true" className="size-3.5 text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))]" />
               XRPL ecosystem map
             </p>
-            <h1 className="mt-3 max-w-3xl text-balance text-[1.75rem] font-normal leading-tight tracking-[-0.02em] text-foreground">
+            <h1 className="mt-3 max-w-3xl text-balance text-[1.75rem] font-semibold leading-tight tracking-[-0.02em] text-foreground font-display">
               Find the right venue before you move.
             </h1>
             <p className="label-mono mt-3 max-w-2xl leading-6">
@@ -246,11 +244,13 @@ export function MapExplorer() {
         </div>
       </header>
 
+      {/* The demo fallback needs no status bar: the map simply shows the demo catalog. */}
+      {runtime.kind === "demo-fallback" && catalog.kind !== "error" ? null : (
       <section aria-label="Map data status" className={`border-b px-4 py-3 text-sm sm:px-6 lg:px-8 ${runtime.kind === "configuration-error" || catalog.kind === "error" ? "border-destructive/35 bg-destructive/10" : "border-border"}`}>
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-sm font-medium text-foreground">{runtime.modeLabel}</p>
-            <p className="mt-1 break-words font-mono text-[11px] uppercase leading-5 tracking-[0.04em] text-muted-foreground">
+            <p className="mt-1 break-words text-[13px] leading-5 text-muted-foreground">
               {runtime.owner ? `${shortAccount(runtime.owner)} · ` : ""}{runtime.detail}
             </p>
           </div>
@@ -268,6 +268,7 @@ export function MapExplorer() {
           </div>
         </div>
       </section>
+      )}
 
       <section aria-labelledby="map-controls-heading" className="min-w-0 border-b border-border">
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-4 sm:px-6 lg:px-8">
@@ -279,7 +280,7 @@ export function MapExplorer() {
             <p className="label-mono">Availability focus: {labelToken(network)}</p>
           </div>
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-            <span className="inline-flex items-center gap-1.5 border border-border px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5 border border-border px-2 py-1 text-[13px] text-muted-foreground rounded-xl">
               <Database aria-hidden="true" className="size-3.5" />
               {snapshot ? snapshotLabel(snapshot.asOf) : catalog.kind === "loading" ? "Loading catalog" : "No catalog snapshot"}
             </span>
@@ -293,35 +294,38 @@ export function MapExplorer() {
             {query ? <button type="button" onClick={() => setQuery("")} aria-label="Clear venue search" className="absolute right-1 top-1 grid size-8 place-items-center text-muted-foreground transition hover:bg-white/[0.06] hover:text-foreground"><X aria-hidden="true" className="size-4" /></button> : null}
           </label>
 
-          <label className="bracket bracket-focus min-w-0">
-            <span className="sr-only">Network focus</span>
-            <select value={network} disabled={controlsDisabled} onChange={(event) => setNetwork(event.target.value as Network)} className={selectBase}>
-              {NETWORKS.map((value) => <option key={value} value={value}>Network · {labelToken(value)}</option>)}
-            </select>
-          </label>
-
-          <label className="bracket bracket-focus min-w-0">
-            <span className="sr-only">Category</span>
-            <select value={category} disabled={controlsDisabled} onChange={(event) => setCategory(event.target.value as CategoryFilter)} className={selectBase}>
-              <option value="all">All categories</option>
-              {CATEGORIES.map((value) => <option key={value} value={value}>{labelToken(value)}</option>)}
-            </select>
-          </label>
-
-          <label className="bracket bracket-focus min-w-0">
-            <span className="sr-only">Layer</span>
-            <select value={layer} disabled={controlsDisabled} onChange={(event) => setLayer(event.target.value as LayerFilter)} className={selectBase}>
-              <option value="all">All layers</option>
-              {LAYERS.map((value) => <option key={value} value={value}>{labelToken(value)}</option>)}
-            </select>
-          </label>
+          <SelectMenu
+            className="bracket bracket-focus"
+            label="Network focus"
+            value={network}
+            disabled={controlsDisabled}
+            onChange={(value) => setNetwork(value)}
+            display={`Network · ${labelToken(network)}`}
+            options={NETWORKS.map((value) => ({ value, label: labelToken(value) }))}
+          />
+          <SelectMenu
+            className="bracket bracket-focus"
+            label="Category"
+            value={category}
+            disabled={controlsDisabled}
+            onChange={(value) => setCategory(value)}
+            options={[{ value: "all" as CategoryFilter, label: "All categories" }, ...CATEGORIES.map((value) => ({ value: value as CategoryFilter, label: labelToken(value) }))]}
+          />
+          <SelectMenu
+            className="bracket bracket-focus"
+            label="Layer"
+            value={layer}
+            disabled={controlsDisabled}
+            onChange={(value) => setLayer(value)}
+            options={[{ value: "all" as LayerFilter, label: "All layers" }, ...LAYERS.map((value) => ({ value: value as LayerFilter, label: labelToken(value) }))]}
+          />
         </div>
 
         {snapshot && snapshot.caveats.length > 0 ? (
           <div className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-3 text-xs text-[color-mix(in_oklab,var(--approval)_80%,var(--foreground))] sm:px-6 lg:px-8">
             <Activity aria-hidden="true" className="size-4" />
-            <span className="font-mono text-[11px] uppercase tracking-wide">Snapshot caveats:</span>
-            {snapshot.caveats.map((caveat: Caveat) => <span key={caveat} className="border border-approval/30 bg-approval/10 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wide">{labelToken(caveat)}</span>)}
+            <span className="text-[13px]">Snapshot caveats:</span>
+            {snapshot.caveats.map((caveat: Caveat) => <span key={caveat} className="border border-approval/30 bg-approval/10 px-1.5 py-0.5 text-[13px] rounded">{labelToken(caveat)}</span>)}
           </div>
         ) : null}
       </section>
@@ -339,35 +343,31 @@ export function MapExplorer() {
         </div>
 
         {catalog.kind === "loading" || catalog.kind === "idle" ? (
-          <div className="mt-4 flex min-h-64 flex-col items-center justify-center border border-dashed border-border-strong bg-card px-5 py-10 text-center">
+          <div className="mt-4 flex min-h-64 flex-col items-center justify-center border border-dashed border-border-strong bg-card px-5 py-10 text-center rounded-xl">
             <RefreshCw aria-hidden="true" className={`size-6 text-muted-foreground ${catalog.kind === "loading" ? "animate-spin" : ""}`} />
             <h3 className="mt-4 text-sm font-medium text-foreground">{catalog.kind === "loading" ? "Loading Harbor venues" : "Venue catalog not loaded"}</h3>
             <p className="label-mono mt-2 max-w-md leading-5">{runtime.detail}</p>
           </div>
         ) : catalog.kind === "error" ? (
-          <div className="mt-4 flex min-h-64 flex-col items-center justify-center border border-destructive/35 bg-destructive/10 px-5 py-10 text-center">
+          <div className="mt-4 flex min-h-64 flex-col items-center justify-center border border-destructive/35 bg-destructive/10 px-5 py-10 text-center rounded-xl">
             <RadioTower aria-hidden="true" className="size-6 text-destructive" />
             <h3 className="mt-4 text-sm font-medium text-foreground">Harbor venue catalog unavailable</h3>
-            <p className="mt-2 max-w-md break-words font-mono text-[11px] uppercase leading-5 tracking-wide text-muted-foreground">{catalog.message}</p>
+            <p className="mt-2 max-w-md break-words text-[13px] leading-5 text-muted-foreground">{catalog.message}</p>
           </div>
         ) : filteredVenues.length > 0 ? (
           <div className="mt-4 grid min-w-0 border-l border-t border-border sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {filteredVenues.map((venue) => <VenueCard key={venue.id} venue={venue} network={network} onSelect={(selected) => setSelectedVenueId(selected.id)} />)}
           </div>
         ) : (
-          <div className="mt-4 flex min-h-64 flex-col items-center justify-center border border-dashed border-border-strong bg-card px-5 py-10 text-center">
+          <div className="mt-4 flex min-h-64 flex-col items-center justify-center border border-dashed border-border-strong bg-card px-5 py-10 text-center rounded-xl">
             <RadioTower aria-hidden="true" className="size-6 text-muted-foreground" />
             <h3 className="mt-4 text-sm font-medium text-foreground">No venues match these filters</h3>
             <p className="label-mono mt-2 max-w-md leading-5">Try another category, layer, or search term. Changing the network focus only changes status and ordering.</p>
-            <button type="button" onClick={resetFilters} className="mt-5 inline-flex h-9 items-center bg-foreground px-4 font-mono text-[11px] font-medium uppercase tracking-wide text-background transition hover:bg-foreground/90">Show all venues</button>
+            <button type="button" onClick={resetFilters} className="mt-5 inline-flex h-9 items-center bg-primary px-4 text-[13px] font-medium text-primary-foreground transition hover:bg-primary/90 rounded-md">Show all venues</button>
           </div>
         )}
       </section>
 
-      <footer className="mt-8 flex min-w-0 flex-col gap-2 border-t border-border py-5 font-mono text-[11px] uppercase leading-5 tracking-[0.04em] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-        <p className="flex min-w-0 items-center gap-2"><Layers3 aria-hidden="true" className="size-3.5 shrink-0" />Read through venues.list / venues.get</p>
-        <p className="sm:max-w-[55%] sm:text-right">Catalog statuses are public metadata, not live health, liquidity, execution, or owner-position evidence.</p>
-      </footer>
       </div>
 
       <VenueDetailDialog

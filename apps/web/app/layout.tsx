@@ -8,17 +8,24 @@ import { DelegationLifecycleGuard } from "@/components/shell/delegation-lifecycl
 import "./globals.css";
 import "../components/harness-chat/harness-chat.css";
 
-const geistSans = localFont({
-  src: "./fonts/Geist-Variable.woff2",
-  variable: "--font-geist-sans",
+const inter = localFont({
+  src: "./fonts/Inter-Variable.woff2",
+  variable: "--font-inter",
   weight: "100 900",
   display: "swap",
 });
 
-const geistMono = localFont({
-  src: "./fonts/GeistMono-Variable.woff2",
-  variable: "--font-geist-mono",
-  weight: "100 900",
+const newsreader = localFont({
+  src: "./fonts/Newsreader-Variable.woff2",
+  variable: "--font-newsreader",
+  weight: "400 600",
+  display: "swap",
+});
+
+const fragmentMono = localFont({
+  src: "./fonts/FragmentMono-400.woff2",
+  variable: "--font-fragment-mono",
+  weight: "400",
   display: "swap",
 });
 
@@ -27,23 +34,23 @@ export const maxDuration = 300;
 
 export const metadata: Metadata = {
   title: {
-    default: "Workspace",
-    template: "%s | Workspace",
+    default: "Pilot",
+    template: "%s | Pilot",
   },
-  description: "A keyless XRPL workspace for planning, approvals, and execution.",
-  applicationName: "Workspace",
+  description: "A keyless XRPL copilot for planning, approvals, and execution.",
+  applicationName: "Pilot",
 };
 
 export const viewport: Viewport = {
   colorScheme: "light",
-  themeColor: "#f4f3ef",
+  themeColor: "#f3f1eb",
   width: "device-width",
   initialScale: 1,
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${inter.variable} ${newsreader.variable} ${fragmentMono.variable}`} suppressHydrationWarning>
       <body className="min-h-dvh bg-background font-sans text-foreground antialiased">
         <HarnessChatHost>{children}</HarnessChatHost>
         <DelegationLifecycleGuard />

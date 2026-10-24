@@ -122,12 +122,12 @@ function safeExplorerUrl(event: LedgerDemoEvent): string | undefined {
 
 function Stage({ label, state }: { label: string; state: "pass" | "fail" | "pending" }) {
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.08em]">
+    <span className="inline-flex items-center gap-1 text-xs font-semibold">
       <span
         aria-label={`${label}: ${state}`}
         className={state === "pass" ? "grid size-4 place-items-center bg-emerald-700 text-white" :
           state === "fail" ? "grid size-4 place-items-center bg-rose-700 text-white" :
-            "grid size-4 place-items-center border border-slate-400 text-slate-500"}
+            "grid size-4 place-items-center border border-slate-400 text-slate-500 rounded-xl"}
       >
         {state === "pass" ? <Check aria-hidden className="size-3" /> : state === "fail" ? "!" : "·"}
       </span>
@@ -147,16 +147,16 @@ export function MerchantConsole({
     <section aria-labelledby="merchant-console-title" className="min-h-0 overflow-hidden bg-[#f7f5ee] p-4">
       <header className="flex items-start justify-between gap-3 border-b border-slate-300 pb-3">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#59645c]">Merchant console</p>
+          <p className="text-xs font-bold text-[#59645c]">Merchant console</p>
           <h2 id="merchant-console-title" className="mt-1 text-lg font-semibold">Level 3 validation</h2>
         </div>
-        <span className="inline-flex items-center gap-1.5 border border-slate-300 bg-white px-2 py-1 text-[10px] font-semibold uppercase">
+        <span className="inline-flex items-center gap-1.5 border border-slate-300 bg-white px-2 py-1 text-xs font-semibold rounded">
           <Radio aria-hidden className="size-3" /> {connection === "live" ? "local SSE" : connection}
         </span>
       </header>
       <div className="mt-3 max-h-[13.5rem] space-y-2 overflow-y-auto" aria-live="polite">
         {events.map((event) => (
-          <article className="border border-slate-300 bg-white p-3" key={event.id}>
+          <article className="border border-slate-300 bg-white p-3 rounded-xl overflow-hidden" key={event.id}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="truncate text-xs font-semibold">{event.merchant}</p>
@@ -184,12 +184,12 @@ export function LedgerFeed({ events }: { events: readonly LedgerDemoEvent[] }) {
     <section aria-labelledby="ledger-feed-title" className="min-h-0 overflow-hidden bg-[#efede5] p-4">
       <header className="flex items-end justify-between gap-3 border-b border-slate-300 pb-3">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#59645c]">XRPL Testnet</p>
+          <p className="text-xs font-bold text-[#59645c]">XRPL Testnet</p>
           <h2 id="ledger-feed-title" className="mt-1 text-lg font-semibold">Ledger feed</h2>
         </div>
         <dl className="flex gap-4 text-right">
-          <div><dt className="text-[9px] font-bold uppercase text-slate-500">Payments</dt><dd className="font-mono text-xl font-semibold">{summary.payments}</dd></div>
-          <div><dt className="text-[9px] font-bold uppercase text-slate-500">Ledger transactions</dt><dd className="font-mono text-xl font-semibold">{summary.ledgerTransactions}</dd></div>
+          <div><dt className="text-xs font-bold text-slate-500">Payments</dt><dd className="font-mono text-xl font-semibold">{summary.payments}</dd></div>
+          <div><dt className="text-xs font-bold text-slate-500">Ledger transactions</dt><dd className="font-mono text-xl font-semibold">{summary.ledgerTransactions}</dd></div>
         </dl>
       </header>
       <p className="mt-2 text-[10px] leading-4 text-slate-600">Claims increment payments only. A ledger transaction is counted only when XRPL records one.</p>
@@ -197,7 +197,7 @@ export function LedgerFeed({ events }: { events: readonly LedgerDemoEvent[] }) {
         {events.slice(0, 4).map((event) => {
           const href = safeExplorerUrl(event);
           return (
-            <li className="flex items-center justify-between gap-3 border border-slate-300 bg-white px-3 py-2 text-xs" key={event.id}>
+            <li className="flex items-center justify-between gap-3 border border-slate-300 bg-white px-3 py-2 text-xs rounded-xl" key={event.id}>
               <span className="min-w-0 truncate">{event.label}</span>
               {href ? (
                 <a
@@ -221,13 +221,13 @@ export function LedgerFeed({ events }: { events: readonly LedgerDemoEvent[] }) {
 export function PilotDemoPanel() {
   return (
     <section aria-labelledby="pilot-demo-title" className="min-h-0 overflow-y-auto bg-white p-5">
-      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#235a52]">Workspace</p>
+      <p className="text-xs font-bold text-[#235a52]">Pilot</p>
       <h2 id="pilot-demo-title" className="mt-1 text-xl font-semibold">Authorize once. Buy within bounds.</h2>
       <div className="mt-4 space-y-3 text-sm">
         <p className="ml-auto max-w-[88%] bg-[#e9eee8] p-3">Buy nine $0.05 reports from the approved merchants.</p>
         <p className="max-w-[92%] border-l-2 border-[#235a52] bg-[#f5f3ec] p-3">I found two credential-gated Testnet merchants. Your mandate caps every payment, day, and lifetime total.</p>
       </div>
-      <article className="mt-4 border-2 border-[#235a52] bg-[#f9faf7] p-4" aria-label="Mandate approval preview">
+      <article className="mt-4 border-2 border-[#235a52] bg-[#f9faf7] p-4 rounded-xl overflow-hidden" aria-label="Mandate approval preview">
         <div className="flex items-center justify-between gap-3"><h3 className="font-semibold">One mandate approval</h3><ShieldCheck aria-hidden className="size-5 text-[#235a52]" /></div>
         <dl className="mt-3 grid grid-cols-3 gap-px bg-slate-300 text-xs">
           <div className="bg-white p-2"><dt className="text-slate-500">Per payment</dt><dd className="mt-1 font-mono font-semibold">$0.05</dd></div>
@@ -236,8 +236,8 @@ export function PilotDemoPanel() {
         </dl>
         <p className="mt-3 inline-flex items-center gap-2 text-xs text-slate-600"><LockKeyhole aria-hidden className="size-4" /> Preview fixture · no wallet action</p>
       </article>
-      <article className="mt-4 border border-slate-300 bg-white p-4" aria-label="Latest AP4M receipt preview">
-        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-800">claim_accepted · mock evidence</p>
+      <article className="mt-4 border border-slate-300 bg-white p-4 rounded-xl overflow-hidden" aria-label="Latest AP4M receipt preview">
+        <p className="text-xs font-bold text-emerald-800">claim_accepted · mock evidence</p>
         <h3 className="mt-1 font-semibold">Receipt · Mandate → Intent → L3 → Payment → Ledger</h3>
         <p className="mt-2 text-xs leading-5 text-slate-600">Payment 9 used an off-ledger cumulative claim. No new ledger transaction is claimed.</p>
       </article>
@@ -270,7 +270,7 @@ export function DemoControls({ onLedgerEvent }: { onLedgerEvent?: (event: Ledger
         {(Object.keys(AP4M_DEMO_ACTIONS) as ActionName[]).map((name) => {
           const definition = AP4M_DEMO_ACTIONS[name];
           const working = action.status === "working" && action.name === name;
-          return <button className={name === "revoke" ? "border border-rose-700 bg-white px-3 py-2 text-xs font-semibold text-rose-800 disabled:opacity-50" : "border border-slate-800 bg-white px-3 py-2 text-xs font-semibold disabled:opacity-50"} disabled={action.status === "working"} key={name} onClick={() => void run(name)} type="button">{working ? <LoaderCircle aria-hidden className="mr-1 inline size-3 animate-spin" /> : name === "rogue" ? <AlertTriangle aria-hidden className="mr-1 inline size-3" /> : <RotateCcw aria-hidden className="mr-1 inline size-3" />}{definition.label}</button>;
+          return <button className={name === "revoke" ? "border border-rose-700 bg-white px-3 py-2 text-xs font-semibold text-rose-800 disabled:opacity-50 rounded-md" : "border border-slate-800 bg-white px-3 py-2 text-xs font-semibold disabled:opacity-50 rounded-md"} disabled={action.status === "working"} key={name} onClick={() => void run(name)} type="button">{working ? <LoaderCircle aria-hidden className="mr-1 inline size-3 animate-spin" /> : name === "rogue" ? <AlertTriangle aria-hidden className="mr-1 inline size-3" /> : <RotateCcw aria-hidden className="mr-1 inline size-3" />}{definition.label}</button>;
         })}
       </div>
       <p aria-live="polite" className={action.status === "error" ? "mt-2 text-xs text-rose-800" : "mt-2 text-xs text-slate-600"}>{action.message ?? "Buttons call local, fail-closed demo routes only. No action runs automatically."}</p>
@@ -304,7 +304,7 @@ export function Ap4mDemoWorkspace({
 
   const stableLedgerEvents = useMemo(() => ledgerEvents.slice(0, 24), [ledgerEvents]);
   return (
-    <div className="grid min-h-[38rem] gap-px border border-slate-400 bg-slate-400 lg:h-[calc(100dvh-11rem)] lg:min-h-[39rem] lg:grid-cols-[1.04fr_0.96fr]">
+    <div className="grid min-h-[38rem] gap-px border border-slate-400 bg-slate-400 lg:h-[calc(100dvh-11rem)] lg:min-h-[39rem] lg:grid-cols-[1.04fr_0.96fr] rounded-xl">
       <PilotDemoPanel />
       <div className="grid min-h-0 grid-rows-[1fr_1fr_auto] gap-px bg-slate-400">
         <MerchantConsole events={merchantEvents} connection={connection} />

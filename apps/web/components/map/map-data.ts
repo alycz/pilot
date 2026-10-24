@@ -13,6 +13,7 @@ export type MapRuntimeContext = {
   kind:
     | "checking"
     | "configuration-error"
+    | "demo-fallback"
     | "public"
     | "session-error"
     | "session-mismatch"
@@ -37,9 +38,10 @@ export type MapHarborClients = {
 };
 
 /**
- * Select the catalog source only after the public config endpoint has returned
- * a schema-validated configuration. A missing/invalid configuration has no
- * client, and a live client failure must never fall back to mock fixtures.
+ * Select the catalog source once the public config request has settled.
+ * While it is loading, or if it returns an invalid shape, there is no client.
+ * Missing or invalid configuration never selects a client. A live client
+ * failure also never falls back to mock fixtures: it surfaces as an error.
  */
 export function selectMapHarborClient(
   config: PublicPilotConfig | null | undefined,
@@ -76,7 +78,7 @@ export function resolveMapRuntimeContext(
   if (config === null) {
     return {
       canLoadCatalog: false,
-      detail: "Pilot's public test-network configuration is unavailable. No venue data was loaded.",
+      detail: "Pilot's public configuration could not be verified.",
       key: "configuration-error",
       kind: "configuration-error",
       modeLabel: "Configuration unavailable",

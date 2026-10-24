@@ -211,14 +211,14 @@ export function SimulatedDevice({
   return (
     <section
       aria-label="Simulated Ledger"
-      className="border border-slate-300 bg-[#fafaf7] p-4 text-slate-950"
+      className="border border-slate-300 bg-[#fafaf7] p-4 text-slate-950 rounded-xl overflow-hidden"
     >
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold">Simulated Ledger</p>
           <p className="mt-1 text-xs text-slate-600">{transcript.title}</p>
         </div>
-        <span className="border border-slate-300 bg-[#f8fafc] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-slate-600">
+        <span className="border border-slate-300 bg-[#f8fafc] px-2 py-1 text-xs text-slate-600 rounded">
           Recorded demo · no signing
         </span>
       </div>

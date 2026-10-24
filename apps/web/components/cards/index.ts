@@ -18,6 +18,7 @@ export type { LedgerOwnerSigner } from "./owner-signer";
 export {
   AwaitingApprovalCard,
   BlockedCard,
+  DeclinedCard,
   DraftingCard,
   ExecutingCard,
   FailedCard,

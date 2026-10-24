@@ -102,10 +102,11 @@ test("desktop wallet guidance is ordered, official, keyboard reachable, and seed
   await page.setViewportSize({ width: 1_440, height: 900 });
   await page.goto(pilotRoutes.onboarding);
 
-  await expect(page.getByRole("heading", { name: /Authenticate your budget wallet/i })).toBeVisible();
-  await expect(page.getByText("I already have a wallet", { exact: true })).toBeVisible();
-  await expect(page.getByText("I need a wallet", { exact: true })).toBeVisible();
-  await expect(page.getByText(/Pilot never asks for a seed phrase/i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Connect your wallet$/i })).toBeVisible();
+  const walletGuide = page.getByRole("region", { name: "Don’t have a wallet yet?" });
+  await expect(walletGuide).toBeVisible();
+  await expect(walletGuide.getByRole("heading", { name: "Don’t have a wallet yet?" })).toHaveCount(1);
+  await expect(walletGuide.getByRole("note")).toContainText(/never asks for a seed phrase/i);
 
   const gemWallet = page.getByRole("button", { name: /GemWallet/i });
   const crossmark = page.getByRole("button", { name: /Crossmark/i });
@@ -141,9 +142,8 @@ test("desktop wallet guidance is ordered, official, keyboard reachable, and seed
     'textarea[name*="private" i]',
   ].join(", ")).count()).toBe(0);
 
-  const xaman = page.getByRole("button", { name: /Xaman/i });
-  await expect(xaman).toBeDisabled();
-  await expect(page.getByText(/non-broadcast wallet-auth proof safely/i)).toBeVisible();
+  await expect(page.getByRole("button", { name: /Xaman/i })).toHaveCount(0);
+  await expect(page.getByText(/Xaman remains unavailable for this non-broadcast wallet-auth proof/i)).toBeVisible();
   await expect(page.getByRole("link", { name: /read-only Pilot/i })).toBeVisible();
   expect(boundary.modelRequests).toEqual([]);
   expect(boundary.tradingRequests).toEqual([]);
@@ -168,12 +168,13 @@ test("mobile context states the extension limitation and preserves read-only acc
 
   try {
     await mobilePage.goto(pilotRoutes.onboarding);
-    await expect(mobilePage.getByText(/requires a desktop extension/i)).toBeVisible();
+    await expect(mobilePage.getByText(/Connect your wallet from a computer/i)).toBeVisible();
     await expect(mobilePage.getByText(/Mobile wallet actions are not available yet/i)).toBeVisible();
     await expect(mobilePage.getByRole("button", { name: /Desktop wallet required/i })).toBeDisabled();
     await expect(mobilePage.getByRole("button", { name: /GemWallet/i })).toBeDisabled();
     await expect(mobilePage.getByRole("button", { name: /Crossmark/i })).toBeDisabled();
-    await expect(mobilePage.getByRole("button", { name: /Xaman/i })).toBeDisabled();
+    await expect(mobilePage.getByRole("button", { name: /Xaman/i })).toHaveCount(0);
+    await expect(mobilePage.getByRole("link", { name: /Look around Pilot/i })).toBeVisible();
     await expect(mobilePage.getByRole("link", { name: /Continue to read-only Pilot/i })).toBeVisible();
     const overflow = await mobilePage.evaluate(() =>
       document.documentElement.scrollWidth - document.documentElement.clientWidth
@@ -215,7 +216,7 @@ test("server-rendered wallet controls fail closed before viewport resolution", a
     await expect(page.getByRole("button", { name: /Checking wallet availability/i })).toBeDisabled();
     await expect(page.getByRole("button", { name: /GemWallet/i })).toBeDisabled();
     await expect(page.getByRole("button", { name: /Crossmark/i })).toBeDisabled();
-    await expect(page.getByRole("link", { name: /Explore the read-only demo/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Exit setup/i })).toBeVisible();
   } finally {
     await context.close();
   }
@@ -229,7 +230,7 @@ test("missing GemWallet fails before Pilot issues a wallet challenge", async ({ 
 
   await page.goto(pilotRoutes.onboarding);
   await page.getByRole("button", { name: /GemWallet/i }).click();
-  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Find my wallet/i }).click();
 
   await expect(page.getByRole("alert").filter({
     hasText: /install|not installed|unavailable/i,
@@ -251,7 +252,7 @@ test("a Mainnet GemWallet fails closed before Pilot issues a Testnet challenge",
 
   await page.goto(pilotRoutes.onboarding);
   await page.getByRole("button", { name: /GemWallet/i }).click();
-  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Find my wallet/i }).click();
   await page.getByRole("button", { name: /Connect account/i }).click();
 
   await expect(page.getByRole("alert").filter({
@@ -273,7 +274,7 @@ test("a rejected GemWallet connection stays before every Pilot authority boundar
 
   await page.goto(pilotRoutes.onboarding);
   await page.getByRole("button", { name: /GemWallet/i }).click();
-  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Find my wallet/i }).click();
   await page.getByRole("button", { name: /Connect account/i }).click();
 
   await expect(page.getByRole("alert").filter({
@@ -297,21 +298,21 @@ test("a rejected GemWallet authentication proof stays unauthenticated and retrie
 
   await page.goto(pilotRoutes.onboarding);
   await page.getByRole("button", { name: /GemWallet/i }).click();
-  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Find my wallet/i }).click();
   await page.getByRole("button", { name: /Connect account/i }).click();
-  await page.getByRole("button", { name: /Sign authentication proof/i }).click();
+  await page.getByRole("button", { name: /Sign in with wallet/i }).click();
 
   await expect(page.getByRole("alert").filter({
     hasText: /signing.*rejected|cancelled|canceled/i,
   }).first()).toBeVisible();
-  await expect(page.getByRole("button", { name: /Sign authentication proof/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Sign in with wallet/i })).toBeVisible();
   expect(boundary.walletChallengeRequests).toEqual(["POST /api/auth/wallet/challenge"]);
   expect(boundary.walletSessionMethods.filter((method) => method === "POST")).toEqual([]);
   expect(boundary.modelRequests).toEqual([]);
   expect(boundary.tradingRequests).toEqual([]);
 
-  await page.getByRole("button", { name: /Sign authentication proof/i }).click();
-  await expect(page.getByRole("heading", { name: /Choose model access/i })).toBeVisible();
+  await page.getByRole("button", { name: /Sign in with wallet/i }).click();
+  await expect(page.getByRole("heading", { name: /Choose an AI model/i })).toBeVisible();
   expect(boundary.walletChallengeRequests).toEqual([
     "POST /api/auth/wallet/challenge",
     "POST /api/auth/wallet/challenge",
@@ -330,7 +331,7 @@ test("missing Crossmark fails during the prompt-free availability check", async 
 
   await page.goto(pilotRoutes.onboarding);
   await page.getByRole("button", { name: /Crossmark/i }).click();
-  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Find my wallet/i }).click();
 
   await expect(page.getByRole("alert").filter({
     hasText: /install|not installed|unavailable/i,
@@ -353,7 +354,7 @@ test("a Mainnet Crossmark account fails closed before Pilot issues a Testnet cha
 
   await page.goto(pilotRoutes.onboarding);
   await page.getByRole("button", { name: /Crossmark/i }).click();
-  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Find my wallet/i }).click();
   await page.getByRole("button", { name: /Connect account/i }).click();
 
   await expect(page.getByRole("alert").filter({
@@ -379,15 +380,15 @@ test("a rejected Crossmark account connection stays before every Pilot authority
 
     await page.goto(pilotRoutes.onboarding);
     await page.getByRole("button", { name: /Crossmark/i }).click();
-    await page.getByRole("button", { name: /Check extension/i }).click();
+    await page.getByRole("button", { name: /Find my wallet/i }).click();
     await page.getByRole("button", { name: /Connect account/i }).click();
 
     await expect(page.getByRole("alert").filter({
       hasText: /connection.*rejected|cancelled|canceled/i,
     }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: /Connect account/i })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /Choose model access/i })).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: /Wallet and model ready/i })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: /Choose an AI model/i })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: /You’re all set/i })).toHaveCount(0);
     expect(await readSyntheticCrossmarkCalls(page)).toContain("sign:SignIn");
     expect(await readSyntheticCrossmarkCalls(page)).not.toContain("sign:AccountSet");
     expect(boundary.walletChallengeRequests).toEqual([]);
@@ -409,16 +410,16 @@ test("a rejected Crossmark authentication proof stays unauthenticated and retrie
 
     await page.goto(pilotRoutes.onboarding);
     await page.getByRole("button", { name: /Crossmark/i }).click();
-    await page.getByRole("button", { name: /Check extension/i }).click();
+    await page.getByRole("button", { name: /Find my wallet/i }).click();
     await page.getByRole("button", { name: /Connect account/i }).click();
-    await page.getByRole("button", { name: /Sign authentication proof/i }).click();
+    await page.getByRole("button", { name: /Sign in with wallet/i }).click();
 
     await expect(page.getByRole("alert").filter({
       hasText: /signing.*rejected|cancelled|canceled/i,
     }).first()).toBeVisible();
-    await expect(page.getByRole("button", { name: /Sign authentication proof/i })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /Choose model access/i })).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: /Wallet and model ready/i })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Sign in with wallet/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Choose an AI model/i })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: /You’re all set/i })).toHaveCount(0);
     expect(boundary.walletChallengeRequests).toEqual(["POST /api/auth/wallet/challenge"]);
     expect(boundary.walletSessionMethods.filter((method) => method === "POST")).toEqual([]);
     expect(boundary.modelRequests).toEqual([]);
@@ -429,8 +430,8 @@ test("a rejected Crossmark authentication proof stays unauthenticated and retrie
       (call) => call === "sign:AccountSet",
     )).toHaveLength(1);
 
-    await page.getByRole("button", { name: /Sign authentication proof/i }).click();
-    await expect(page.getByRole("heading", { name: /Choose model access/i })).toBeVisible();
+    await page.getByRole("button", { name: /Sign in with wallet/i }).click();
+    await expect(page.getByRole("heading", { name: /Choose an AI model/i })).toBeVisible();
     expect(boundary.walletChallengeRequests).toEqual([
       "POST /api/auth/wallet/challenge",
       "POST /api/auth/wallet/challenge",
@@ -453,9 +454,9 @@ test("reloading during an in-flight Crossmark proof creates no wallet or model a
 
   await page.goto(pilotRoutes.onboarding);
   await page.getByRole("button", { name: /Crossmark/i }).click();
-  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Find my wallet/i }).click();
   await page.getByRole("button", { name: /Connect account/i }).click();
-  await page.getByRole("button", { name: /Sign authentication proof/i }).click();
+  await page.getByRole("button", { name: /Sign in with wallet/i }).click();
   await expect.poll(() => boundary.walletChallengeRequests.length).toBe(1);
   await expect.poll(async () => (
     await readSyntheticCrossmarkCalls(page)
@@ -463,8 +464,8 @@ test("reloading during an in-flight Crossmark proof creates no wallet or model a
 
   await page.reload();
 
-  await expect(page.getByRole("heading", { name: /Choose model access/i })).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: /Wallet and model ready/i })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /Choose an AI model/i })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /You’re all set/i })).toHaveCount(0);
   expect(boundary.walletSessionMethods.filter((method) => method === "POST")).toEqual([]);
   expect(boundary.modelRequests).toEqual([]);
   expect(boundary.demoSessionWrites).toEqual([]);
@@ -484,7 +485,7 @@ test("Crossmark availability, connection, proof, and logout remain explicit sepa
 
   await page.goto(pilotRoutes.onboarding);
   await page.getByRole("button", { name: /Crossmark/i }).click();
-  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Find my wallet/i }).click();
 
   await expect(page.getByRole("status")).toContainText(/Crossmark is available/i);
   await expect(page.getByRole("button", { name: /Connect account/i })).toBeVisible();
@@ -497,18 +498,18 @@ test("Crossmark availability, connection, proof, and logout remain explicit sepa
   })).toContainText(
     new RegExp(`Crossmark account ${WALLET_FIXTURE_ACCOUNT} is connected on testnet`, "i"),
   );
-  await expect(page.getByRole("button", { name: /Sign authentication proof/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Sign in with wallet/i })).toBeVisible();
   expect(await readSyntheticCrossmarkCalls(page)).toContain("sign:SignIn");
   expect(await readSyntheticCrossmarkCalls(page)).not.toContain("sign:AccountSet");
   expect(boundary.walletChallengeRequests).toEqual([]);
 
-  await page.getByRole("button", { name: /Sign authentication proof/i }).click();
-  await expect(page.getByRole("heading", { name: /Choose model access/i })).toBeVisible();
+  await page.getByRole("button", { name: /Sign in with wallet/i }).click();
+  await expect(page.getByRole("heading", { name: /Choose an AI model/i })).toBeVisible();
   expect(boundary.walletChallengeRequests).toEqual(["POST /api/auth/wallet/challenge"]);
   expect(await readSyntheticCrossmarkCalls(page)).toContain("sign:AccountSet");
 
   await page.getByRole("button", { name: /Try free demo/i }).click();
-  await expect(page.getByRole("heading", { name: /Wallet and model ready/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /You’re all set/i })).toBeVisible();
   const providerCallsBeforeLogout = await readSyntheticCrossmarkCalls(page);
   await page.getByRole("button", { name: /Sign out wallet/i }).click();
   await page.waitForURL(/\/onboarding\?wallet=signed-out$/);
@@ -566,17 +567,17 @@ test("a saved extension delegation waits for explicit preflight, reconnect, and 
   })).toContainText(
     /saved active delegation.*recovery metadata only/i,
   );
-  await expect(page.getByRole("button", { name: /Check extension/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Find my wallet/i })).toBeVisible();
   expect(await readSyntheticGemWalletCalls(page)).toEqual([]);
   expect(boundary.walletChallengeRequests).toEqual([]);
   expect(boundary.tradingRequests).toEqual([]);
 
-  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Find my wallet/i }).click();
   await page.getByRole("button", { name: /Connect account/i }).click();
-  await expect(page.getByRole("button", { name: /Sign authentication proof/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Sign in with wallet/i })).toBeVisible();
   expect(boundary.walletChallengeRequests).toEqual([]);
 
-  await page.getByRole("button", { name: /Sign authentication proof/i }).click();
+  await page.getByRole("button", { name: /Sign in with wallet/i }).click();
   await expect(page.getByRole("heading", { name: /trading setup is active/i })).toBeVisible();
   expect(boundary.walletChallengeRequests).toEqual(["POST /api/auth/wallet/challenge"]);
   expect((await readSyntheticGemWalletCalls(page)).filter(
@@ -640,9 +641,9 @@ test("an authenticated extension owner can review exact Testnet delegation revoc
   }, activeRecoveryRecord());
 
   await page.goto(pilotRoutes.onboarding);
-  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Find my wallet/i }).click();
   await page.getByRole("button", { name: /Connect account/i }).click();
-  await page.getByRole("button", { name: /Sign authentication proof/i }).click();
+  await page.getByRole("button", { name: /Sign in with wallet/i }).click();
   await expect(page.getByRole("heading", { name: /trading setup is active/i })).toBeVisible();
   await expect(page.getByText(/does not delete your external wallet key/i)).toBeVisible();
   await expect(page.getByRole("status").filter({ hasText: /Active Harbor delegation/i })).toHaveCount(0);
@@ -688,12 +689,12 @@ test("switching providers after account connection clears pre-proof wallet state
 
   await page.goto(pilotRoutes.onboarding);
   await page.getByRole("button", { name: /GemWallet/i }).click();
-  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Find my wallet/i }).click();
   await page.getByRole("button", { name: /Connect account/i }).click();
-  await expect(page.getByRole("button", { name: /Sign authentication proof/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Sign in with wallet/i })).toBeVisible();
 
   await page.getByRole("button", { name: /Crossmark/i }).click();
-  await expect(page.getByRole("button", { name: /Check extension/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Find my wallet/i })).toBeVisible();
   await expect(page.getByText(/GemWallet account .* is connected/i)).toHaveCount(0);
   expect(boundary.walletChallengeRequests).toEqual([]);
   expect((await readSyntheticCrossmarkCalls(page)).filter(
@@ -714,23 +715,23 @@ test("switching identity clears the authenticated wallet and model authority fir
 
   await page.goto(pilotRoutes.onboarding);
   await page.getByRole("button", { name: /Crossmark/i }).click();
-  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Find my wallet/i }).click();
   await page.getByRole("button", { name: /Connect account/i }).click();
-  await page.getByRole("button", { name: /Sign authentication proof/i }).click();
-  await expect(page.getByRole("heading", { name: /Choose model access/i })).toBeVisible();
+  await page.getByRole("button", { name: /Sign in with wallet/i }).click();
+  await expect(page.getByRole("heading", { name: /Choose an AI model/i })).toBeVisible();
 
   const deletesBeforeSwitch = boundary.walletSessionMethods.filter(
     (method) => method === "DELETE",
   ).length;
   await page.getByRole("button", { name: /Use a different wallet/i }).click();
-  await expect(page.getByRole("heading", { name: /Authenticate your budget wallet/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Connect your wallet$/i })).toBeVisible();
   await page.getByRole("button", { name: /GemWallet/i }).click();
 
-  await expect(page.getByRole("button", { name: /Check extension/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Find my wallet/i })).toBeVisible();
   expect(boundary.walletSessionMethods.filter(
     (method) => method === "DELETE",
   )).toHaveLength(deletesBeforeSwitch + 1);
-  await expect(page.getByRole("heading", { name: /Choose model access/i })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /Choose an AI model/i })).toHaveCount(0);
 });
 
 test("a saved delegation rejects a different provider before wallet proof", async ({
@@ -748,7 +749,7 @@ test("a saved delegation rejects a different provider before wallet proof", asyn
 
   await page.goto(pilotRoutes.onboarding);
   await page.getByRole("button", { name: /Crossmark/i }).click();
-  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Find my wallet/i }).click();
   await page.getByRole("button", { name: /Connect account/i }).click();
 
   await expect(page.getByRole("alert").filter({
@@ -781,13 +782,12 @@ test("wallet and model readiness creates no trading authority until explicit opt
   }, { account: WALLET_FIXTURE_ACCOUNT });
 
   await page.goto(`${pilotRoutes.onboarding}?openrouter=error`);
-  await expect(page.getByRole("heading", { name: /Choose model access/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Choose an AI model/i })).toBeVisible();
   await page.getByRole("button", { name: /Try free demo/i }).click();
 
-  await expect(page.getByRole("heading", { name: /Wallet and model ready/i })).toBeVisible();
-  await expect(page.getByText(/no trust line|no trustline/i)).toBeVisible();
-  await expect(page.getByText(/trading.*disabled|has not been enabled/i)).toBeVisible();
-  await expect(page.getByRole("link", { name: /Open workspace/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /You’re all set/i })).toBeVisible();
+  await expect(page.getByText(/can’t trade for you yet/i)).toBeVisible();
+  await expect(page.getByRole("link", { name: /Open Pilot/i })).toBeVisible();
   expect(boundary.demoSessionWrites).toHaveLength(1);
   expect(boundary.tradingRequests).toEqual([]);
   await attachPageScreenshot(page, testInfo, "mock-provider-conformance-wallet-and-model-ready");
@@ -820,16 +820,16 @@ test("wallet proof alone creates a Pilot account and model setup stays optional"
 
   await page.goto(pilotRoutes.onboarding);
   await page.getByRole("button", { name: /Crossmark/i }).click();
-  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Find my wallet/i }).click();
   await page.getByRole("button", { name: /Connect account/i }).click();
-  await page.getByRole("button", { name: /Sign authentication proof/i }).click();
+  await page.getByRole("button", { name: /Sign in with wallet/i }).click();
 
-  await expect(page.getByText(/wallet account ready/i).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Choose an AI model/i })).toBeVisible();
   await page.getByRole("button", { name: /Skip model setup/i }).click();
 
-  await expect(page.getByRole("heading", { name: /Wallet account ready/i })).toBeVisible();
-  await expect(page.getByText(/Not configured · optional/i)).toBeVisible();
-  await expect(page.getByText(/Model access remains unconfigured/i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Your wallet is connected/i })).toBeVisible();
+  await expect(page.getByText(/Not set up yet/i)).toBeVisible();
+  await expect(page.getByText(/add an AI model any time/i)).toBeVisible();
   expect(boundary.walletChallengeRequests).toEqual(["POST /api/auth/wallet/challenge"]);
   expect(boundary.walletSessionMethods.filter((method) => method === "POST")).toEqual(["POST"]);
   expect(boundary.demoSessionWrites).toEqual([]);
@@ -858,10 +858,10 @@ test("a valid wallet session survives same-tab reload without restoring signing 
 
   await page.goto(pilotRoutes.onboarding);
   await page.getByRole("button", { name: /Crossmark/i }).click();
-  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Find my wallet/i }).click();
   await page.getByRole("button", { name: /Connect account/i }).click();
-  await page.getByRole("button", { name: /Sign authentication proof/i }).click();
-  await expect(page.getByRole("heading", { name: /Choose model access/i })).toBeVisible();
+  await page.getByRole("button", { name: /Sign in with wallet/i }).click();
+  await expect(page.getByRole("heading", { name: /Choose an AI model/i })).toBeVisible();
   const proofCalls = (await readSyntheticCrossmarkCalls(page)).filter(
     (call) => call === "sign:AccountSet",
   );
@@ -869,7 +869,7 @@ test("a valid wallet session survives same-tab reload without restoring signing 
 
   await page.reload();
 
-  await expect(page.getByRole("heading", { name: /Choose model access/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Choose an AI model/i })).toBeVisible();
   expect((await readSyntheticCrossmarkCalls(page)).filter(
     (call) => call === "sign:AccountSet",
   )).toEqual([]);
@@ -897,7 +897,7 @@ test("same-tab restore shows the existing OAuth session and skip clears it serve
 
   await page.goto(pilotRoutes.onboarding);
 
-  await expect(page.getByRole("heading", { name: /Choose model access/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Choose an AI model/i })).toBeVisible();
   await expect(page.getByRole("link", { name: /Reconnect OpenRouter/i })).toBeVisible();
   await expect(page.getByRole("button", { name: /Continue with OpenRouter/i })).toBeVisible();
   expect((await readSyntheticCrossmarkCalls(page)).filter(
@@ -906,8 +906,8 @@ test("same-tab restore shows the existing OAuth session and skip clears it serve
 
   await page.getByRole("button", { name: /Skip model setup/i }).click();
 
-  await expect(page.getByRole("heading", { name: /Wallet account ready/i })).toBeVisible();
-  await expect(page.getByText(/Not configured · optional/i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Your wallet is connected/i })).toBeVisible();
+  await expect(page.getByText(/Not set up yet/i)).toBeVisible();
   expect(boundary.modelRequests.filter(
     (request) => request === "DELETE /api/auth/openrouter/session",
   )).toEqual(["DELETE /api/auth/openrouter/session"]);
@@ -943,7 +943,7 @@ for (const callbackPath of ["", "?openrouter=connected"] as const) {
 
     await page.goto(`${pilotRoutes.onboarding}${callbackPath}`);
 
-    await expect(page.getByRole("heading", { name: /Choose model access/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Choose an AI model/i })).toBeVisible();
     await expect(page.getByText(WALLET_FIXTURE_ACCOUNT)).toBeVisible();
     await expect(page.getByRole("status").filter({
       hasText: /could not check.*model session/i,
@@ -951,7 +951,7 @@ for (const callbackPath of ["", "?openrouter=connected"] as const) {
     await expect(page.getByRole("button", { name: /Try free demo/i })).toBeDisabled();
     await expect(page.getByRole("link", { name: /Connect OpenRouter/i })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Skip model setup/i })).toBeEnabled();
-    await expect(page.getByRole("heading", { name: /Authenticate your budget wallet/i })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: /^Connect your wallet$/i })).toHaveCount(0);
     expect((await readSyntheticCrossmarkCalls(page)).filter(
       (call) => call === "sign:AccountSet",
     )).toEqual([]);
@@ -969,10 +969,10 @@ test("an indeterminate session check keeps identity visible and locks authority 
 
   await page.goto(pilotRoutes.onboarding);
   await page.getByRole("button", { name: /Crossmark/i }).click();
-  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Find my wallet/i }).click();
   await page.getByRole("button", { name: /Connect account/i }).click();
-  await page.getByRole("button", { name: /Sign authentication proof/i }).click();
-  await expect(page.getByRole("heading", { name: /Choose model access/i })).toBeVisible();
+  await page.getByRole("button", { name: /Sign in with wallet/i }).click();
+  await expect(page.getByRole("heading", { name: /Choose an AI model/i })).toBeVisible();
 
   await page.route("**/api/auth/wallet/session", async (route) => {
     if (route.request().method() === "GET") {
@@ -983,7 +983,7 @@ test("an indeterminate session check keeps identity visible and locks authority 
   });
   await page.evaluate(() => window.dispatchEvent(new Event("pilot:wallet-session-changed")));
 
-  await expect(page.getByRole("heading", { name: /Choose model access/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Choose an AI model/i })).toBeVisible();
   await expect(page.getByRole("status").filter({
     hasText: /could not revalidate.*known account remains visible/i,
   })).toBeVisible();
@@ -993,7 +993,7 @@ test("an indeterminate session check keeps identity visible and locks authority 
   await expect(page.locator('[aria-disabled="true"]').filter({
     hasText: /Connect OpenRouter/i,
   })).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Authenticate your budget wallet/i })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /^Connect your wallet$/i })).toHaveCount(0);
 });
 
 test("an indeterminate check during optional trading preserves state and exposes no authority control", async ({
@@ -1007,9 +1007,9 @@ test("an indeterminate check during optional trading preserves state and exposes
 
   await page.goto(pilotRoutes.onboarding);
   await page.getByRole("button", { name: /Crossmark/i }).click();
-  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Find my wallet/i }).click();
   await page.getByRole("button", { name: /Connect account/i }).click();
-  await page.getByRole("button", { name: /Sign authentication proof/i }).click();
+  await page.getByRole("button", { name: /Sign in with wallet/i }).click();
   await page.getByRole("button", { name: /Skip model setup/i }).click();
   await page.getByRole("button", { name: /Enable Testnet trading/i }).click();
   await expect(page.getByRole("heading", { name: /Prepare the budget account/i })).toBeVisible();
@@ -1044,10 +1044,10 @@ test("an invalidated live wallet session immediately removes model readiness", a
 
   await page.goto(pilotRoutes.onboarding);
   await page.getByRole("button", { name: /Crossmark/i }).click();
-  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Find my wallet/i }).click();
   await page.getByRole("button", { name: /Connect account/i }).click();
-  await page.getByRole("button", { name: /Sign authentication proof/i }).click();
-  await expect(page.getByRole("heading", { name: /Choose model access/i })).toBeVisible();
+  await page.getByRole("button", { name: /Sign in with wallet/i }).click();
+  await expect(page.getByRole("heading", { name: /Choose an AI model/i })).toBeVisible();
 
   await page.route("**/api/auth/wallet/session", async (route) => {
     if (route.request().method() === "GET") {
@@ -1058,9 +1058,9 @@ test("an invalidated live wallet session immediately removes model readiness", a
   });
   await page.evaluate(() => window.dispatchEvent(new Event("pilot:wallet-session-changed")));
 
-  await expect(page.getByRole("heading", { name: /Authenticate your budget wallet/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Connect your wallet$/i })).toBeVisible();
   await expect(page.getByText(/wallet session is no longer valid/i)).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Choose model access/i })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /Choose an AI model/i })).toHaveCount(0);
 });
 
 test("an authenticated server session without tab metadata requires exact-wallet reconnect", async ({
@@ -1076,11 +1076,11 @@ test("an authenticated server session without tab metadata requires exact-wallet
   });
 
   await page.goto(`${pilotRoutes.onboarding}?openrouter=connected`);
-  await expect(page.getByRole("heading", { name: /Authenticate your budget wallet/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Connect your wallet$/i })).toBeVisible();
   await expect(page.getByRole("alert").filter({
     hasText: /reconnect the exact wallet|reconnect.*this tab/i,
   }).first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Choose model access/i })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /Choose an AI model/i })).toHaveCount(0);
   expect(boundary.modelRequests).toEqual([]);
   expect(boundary.tradingRequests).toEqual([]);
 
@@ -1112,7 +1112,7 @@ test("an expired wallet session stays before model selection and trading", async
   }, { account: WALLET_FIXTURE_ACCOUNT });
 
   await page.goto(`${pilotRoutes.onboarding}?openrouter=connected`);
-  await expect(page.getByRole("heading", { name: /Authenticate your budget wallet/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Connect your wallet$/i })).toBeVisible();
   await expect(page.getByRole("alert").filter({
     hasText: /reconnect the exact wallet|session expired/i,
   }).first()).toBeVisible();
@@ -1144,7 +1144,7 @@ test("Pilot sign-out preserves an active recovery record without silently restor
 
   await page.goto(`${pilotRoutes.onboarding}?openrouter=error`);
   await page.getByRole("button", { name: /Try free demo/i }).click();
-  await expect(page.getByRole("heading", { name: /Wallet and model ready/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /You’re all set/i })).toBeVisible();
   await page.evaluate((activeRecord) => {
     sessionStorage.setItem("pilot:onboarding", activeRecord);
   }, active);
@@ -1203,7 +1203,7 @@ test("Pilot sign-out preserves pending recovery without silently reconnecting", 
 
   await page.goto(`${pilotRoutes.onboarding}?openrouter=error`);
   await page.getByRole("button", { name: /Try free demo/i }).click();
-  await expect(page.getByRole("heading", { name: /Wallet and model ready/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /You’re all set/i })).toBeVisible();
   await page.evaluate((pendingRecord) => {
     sessionStorage.setItem("pilot:onboarding-pending", pendingRecord);
   }, pending);
@@ -1251,7 +1251,7 @@ test("a failed explicit reconnect keeps signed-out restoration suppressed", asyn
   }, active);
 
   await page.goto(`${pilotRoutes.onboarding}?wallet=signed-out`);
-  await page.getByRole("button", { name: /Check extension/i }).click();
+  await page.getByRole("button", { name: /Find my wallet/i }).click();
 
   await expect(page.getByRole("alert").filter({
     hasText: /install|not installed|unavailable/i,
@@ -1283,7 +1283,7 @@ test("an unconfigured free demo cannot reach access readiness", async ({ page, l
   await page.goto(`${pilotRoutes.onboarding}?openrouter=error`);
   await expect(page.getByRole("button", { name: /Free demo unavailable/i })).toBeDisabled();
   await expect(page.getByRole("status")).toContainText("The free demo is not configured.");
-  await expect(page.getByRole("heading", { name: /Wallet and model ready/i })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /You’re all set/i })).toHaveCount(0);
   expect(boundary.demoSessionWrites).toEqual([]);
   expect(boundary.tradingRequests).toEqual([]);
 });

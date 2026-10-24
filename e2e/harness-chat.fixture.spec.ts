@@ -133,7 +133,10 @@ test("standalone pages anchor the desktop drawer to the viewport edge", async ({
   evidence,
 }) => {
   await installFixtureChatPrerequisites(page);
+  // The landing page intentionally has no harness toggle; standalone product pages keep it.
   await page.goto("/");
+  await expect(page.getByTestId("harness-chat-toggle")).toHaveCount(0);
+  await page.goto("/integrations/aws");
 
   const { panel, toggle } = await openHarness(page);
   await expect.poll(async () => (await panel.boundingBox())?.x ?? -1).toBe(0);
@@ -142,10 +145,11 @@ test("standalone pages anchor the desktop drawer to the viewport edge", async ({
   expect(panelBounds).not.toBeNull();
   expect(toggleBounds).not.toBeNull();
   expect(panelBounds?.x).toBe(0);
-  expect(toggleBounds?.x).toBeLessThanOrEqual(480);
+  expect(toggleBounds!.x).toBeGreaterThanOrEqual(panelBounds!.x + panelBounds!.width);
+  expect(toggleBounds!.x).toBeLessThanOrEqual(panelBounds!.x + panelBounds!.width + 24);
 
   evidence.record("harness-standalone-desktop-offset", {
-    page: "/",
+    page: "/integrations/aws",
     panelLeft: panelBounds!.x,
     appShellOffsetApplied: false,
   });

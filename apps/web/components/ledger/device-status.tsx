@@ -41,7 +41,7 @@ export function DeviceStatus({
     <p
       role="status"
       aria-live="polite"
-      className="border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900"
+      className="border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 rounded-xl"
     >
       {text}
     </p>

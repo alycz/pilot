@@ -76,7 +76,7 @@ export function NoteLibrary({
   };
 
   return (
-    <section className="min-w-0 border border-border bg-card" aria-labelledby="notes-title">
+    <section className="min-w-0 border border-border bg-card rounded-xl overflow-hidden" aria-labelledby="notes-title">
       <div className="flex flex-col gap-4 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
         <div className="flex min-w-0 items-center gap-3">
           <BookOpenText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -96,7 +96,7 @@ export function NoteLibrary({
               setFocusIndex(-1);
             }}
             placeholder="Search notes and tags"
-            className="h-10 w-full min-w-0 border border-input bg-background/60 pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground/75 focus-visible:border-primary/60 focus-visible:outline-none"
+            className="h-10 w-full min-w-0 border border-input bg-background/60 pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground/75 focus-visible:border-primary/60 focus-visible:outline-none rounded-md"
           />
         </label>
       </div>
@@ -127,13 +127,13 @@ export function NoteLibrary({
                       selected ? "bracket bracket-accent bg-white/[0.05]" : "hover:bg-white/[0.03]"
                     }`}
                   >
-                    <span aria-hidden="true" className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center border ${style.className}`}>
+                    <span aria-hidden="true" className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center border rounded-md ${style.className}`}>
                       {note.kind === "policy" ? <ShieldCheck className="h-3.5 w-3.5" /> : note.kind === "reflection" ? <Sparkles className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="flex min-w-0 items-start gap-2">
                         <span className="line-clamp-1 min-w-0 text-sm font-medium leading-5 text-foreground">{note.title}</span>
-                        <span className={`ml-auto mt-px shrink-0 border px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wide ${style.className}`}>{style.label}</span>
+                        <span className={`ml-auto mt-px shrink-0 border px-1.5 py-0.5 text-xs font-medium rounded ${style.className}`}>{style.label}</span>
                       </span>
                       <span className="mt-1 line-clamp-1 text-xs leading-5 text-muted-foreground">{note.summary}</span>
                     </span>
@@ -156,17 +156,17 @@ export function NoteLibrary({
 
 export function NoteReader({ note, notes, onSelect }: { note: MemoryNote; notes: MemoryNote[]; onSelect: (noteId: string) => void }) {
   return (
-    <article className="flex min-w-0 flex-col overflow-hidden border border-border bg-card xl:absolute xl:inset-0" aria-labelledby="reader-title">
+    <article className="flex min-w-0 flex-col overflow-hidden border border-border bg-card xl:absolute xl:inset-0 rounded-xl" aria-labelledby="reader-title">
       <header className="flex min-h-[5.75rem] flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b border-border p-5">
         <div className="min-w-0">
           <h2 id="reader-title" className="text-balance text-[1.25rem] font-normal leading-tight tracking-[-0.02em]">{note.title}</h2>
           <p className="mt-1.5 break-all font-mono text-[11px] text-muted-foreground">{note.path}</p>
         </div>
         <div className="flex min-w-0 flex-col items-start gap-2 sm:items-end">
-          <span className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.04em] text-muted-foreground"><CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />{note.updatedAt ? `Updated ${formatDate(note.updatedAt)}` : "No stored timestamp"}</span>
+          <span className="flex items-center gap-1.5 text-[13px] text-muted-foreground"><CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />{note.updatedAt ? `Updated ${formatDate(note.updatedAt)}` : "No stored timestamp"}</span>
           <div className="flex flex-wrap items-center gap-1.5 text-muted-foreground">
-            <span className={`border px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wide ${kindStyles[note.kind].className}`}>{kindStyles[note.kind].label}</span>
-            {note.network ? <span className="border border-border-strong px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide">{note.network}</span> : null}
+            <span className={`border px-1.5 py-0.5 text-xs font-medium rounded ${kindStyles[note.kind].className}`}>{kindStyles[note.kind].label}</span>
+            {note.network ? <span className="border border-border-strong px-1.5 py-0.5 text-xs rounded">{note.network}</span> : null}
           </div>
         </div>
       </header>
@@ -190,7 +190,7 @@ export function NoteReader({ note, notes, onSelect }: { note: MemoryNote; notes:
                   key={linkId}
                   type="button"
                   onClick={() => onSelect(linkId)}
-                  className="bracket bracket-hover bracket-light max-w-full truncate border border-border-strong bg-white/[0.03] px-2.5 py-1.5 font-mono text-[11px] text-foreground transition hover:bg-white/[0.06] pointer-coarse:min-h-11 pointer-coarse:py-2.5"
+                  className="bracket bracket-hover bracket-light max-w-full truncate border border-border-strong bg-white/[0.03] px-2.5 py-1.5 font-mono text-[11px] text-foreground transition hover:bg-white/[0.06] pointer-coarse:min-h-11 pointer-coarse:py-2.5 rounded-md"
                 >
                   [[{linked.title}]]
                 </button>
@@ -203,7 +203,7 @@ export function NoteReader({ note, notes, onSelect }: { note: MemoryNote; notes:
       {/* Pinned to the bottom so it lines up with the graph's wikilinks label. */}
       <footer className="flex flex-wrap gap-2 border-t border-border px-5 pb-5 pt-4" aria-label="Note tags">
         {note.tags.map((tag) => (
-          <span key={tag} className="inline-flex h-7 items-center gap-1 border border-border px-2 font-mono text-[11px] text-muted-foreground">
+          <span key={tag} className="inline-flex h-7 items-center gap-1 border border-border px-2 font-mono text-[11px] text-muted-foreground rounded-md">
             <Tag className="h-3 w-3" aria-hidden="true" />#{tag}
           </span>
         ))}

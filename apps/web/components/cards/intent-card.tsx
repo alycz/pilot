@@ -55,8 +55,8 @@ export function IntentCard({ ownerSigner, realLedgerReceipt = false, ...props }:
   return (
     <div className="min-w-0 space-y-3" data-intent-card>
       <Component {...props} />
-      {explorerUrl ? <section aria-label="Validated XRPL Testnet receipt" className="border border-executed/35 bg-executed/[0.06] px-3 py-2 text-xs">
-        <p className="font-mono font-medium uppercase text-executed">Validated ledger transaction · XRPL Testnet</p>
+      {explorerUrl ? <section aria-label="Validated XRPL Testnet receipt" className="border border-executed/35 bg-executed/[0.06] px-3 py-2 text-xs rounded-xl overflow-hidden">
+        <p className="font-medium text-executed">Validated ledger transaction · XRPL Testnet</p>
         <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">{props.event.hash!.toUpperCase()}</p>
         <a href={explorerUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex min-h-11 items-center text-primary underline underline-offset-4">Open validated transaction in XRPL Testnet Explorer</a>
       </section> : null}

@@ -23,10 +23,10 @@ export default function Ap4mDemoPage() {
       <div className="mx-auto flex min-h-[768px] w-full max-w-[1248px] flex-col gap-3">
         <header className="flex flex-col justify-between gap-3 border-b border-slate-400 pb-3 lg:flex-row lg:items-end">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#235a52]">
+            <p className="text-xs font-bold text-[#235a52]">
               Mastercard AP4M on XRPL
             </p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-[-0.035em] sm:text-3xl">
+            <h1 className="mt-1 text-2xl font-semibold tracking-[-0.035em] sm:text-3xl font-display">
               Authorize once. Transact many times.
             </h1>
             <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-600">
@@ -38,7 +38,7 @@ export default function Ap4mDemoPage() {
             {labels.map((label) => (
               <span
                 key={label}
-                className="border border-[#235a52]/40 bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.04em] text-[#235a52]"
+                className="border border-[#235a52]/40 bg-white px-2.5 py-1 text-xs font-bold text-[#235a52] rounded-xl"
               >
                 {label}
               </span>
@@ -47,7 +47,7 @@ export default function Ap4mDemoPage() {
         </header>
 
         <div
-          className="border border-amber-700/40 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-950"
+          className="border border-approval/40 bg-approval/10 px-3 py-2 text-[11px] font-semibold text-approval rounded-xl"
           role="status"
         >
           Mock-only stand-in evidence · LIVE Mastercard and XRPL Testnet checks remain pending

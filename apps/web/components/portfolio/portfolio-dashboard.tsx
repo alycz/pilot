@@ -1,8 +1,6 @@
 import Link from "next/link";
 import {
-  Activity,
   ArrowRight,
-  ArrowUpRight,
   TrendingUp,
   BadgeCheck,
   Bot,
@@ -27,6 +25,8 @@ import type {
   PortfolioSnapshot,
   QuickNodeStatus,
 } from "./portfolio-data";
+import { withoutIssuer } from "./offer-format";
+import { OpenOffersSection } from "./open-offers";
 import type { PortfolioConnectionStatus } from "./live-state";
 import { QuickNodePanel } from "./quicknode-panel";
 
@@ -66,7 +66,7 @@ export function PortfolioDashboard({
   quickNodeStatus,
   connection = {
     kind: "demo",
-    detail: "Simulated demo portfolio.",
+    detail: "Demo portfolio.",
     accountCount: 0,
   },
 }: {
@@ -74,6 +74,8 @@ export function PortfolioDashboard({
   quickNodeStatus?: QuickNodeStatus | null;
   connection?: PortfolioConnectionStatus;
 }) {
+  // While the session check runs, show a quiet blank page rather than a "checking access" screen.
+  if (!snapshot && connection.kind === "connecting") return <div className="min-h-[60vh]" role="status" aria-busy="true"><span className="sr-only">Loading portfolio</span></div>;
   if (!snapshot) return <PortfolioUnavailable connection={connection} />;
 
   const demo = isDemoView(connection, snapshot);
@@ -103,7 +105,6 @@ export function PortfolioDashboard({
       <section aria-label="Portfolio summary" className="relative min-w-0 overflow-hidden border-b border-border">
         <div className={`grid min-w-0 ${demo ? "" : "xl:grid-cols-[minmax(0,1fr)_23rem]"}`}>
           <div className="relative min-w-0 overflow-hidden px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-            <div aria-hidden="true" className="bg-rules pointer-events-none absolute inset-0" />
             <div className="relative grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
               <div className="min-w-0">
                 <p className="label-mono flex items-center gap-2">
@@ -116,14 +117,14 @@ export function PortfolioDashboard({
                     {snapshot.totalUsd === null ? "Valuation unavailable" : money.format(snapshot.totalUsd)}
                   </p>
                   {snapshot.changePercent !== null && snapshot.changeUsd !== null ? (
-                    <span className="inline-flex items-center gap-1.5 border border-executed/30 bg-executed/10 px-2 py-1 font-mono text-xs font-medium tabular-nums text-executed">
+                    <span className="inline-flex items-center gap-1.5 border border-executed/30 bg-executed/10 px-2 py-1 font-mono text-xs font-medium tabular-nums text-executed rounded">
                       <TrendingUp className="h-3.5 w-3.5" aria-hidden="true" /> {snapshot.changePercent.toFixed(2)}% · +{money.format(snapshot.changeUsd)}
                     </span>
                   ) : null}
                 </div>
                 <p className="label-mono mt-3 max-w-2xl leading-6">
                   {demo
-                    ? "Balances, positions, budget and activity for a simulated XRPL Testnet account."
+                    ? "Balances, positions, budget and activity on XRPL Testnet."
                     : `Owner-scoped balances, positions, budget and activity on XRPL ${snapshot.network.replace("-", " ")}.`}
                 </p>
               </div>
@@ -147,22 +148,22 @@ export function PortfolioDashboard({
 
       {/* Rows align across columns: balances ↔ budget, positions + offers ↔ delegation, then activity full width. */}
       <div className="grid min-w-0 gap-5 px-4 py-6 sm:px-6 lg:px-8 lg:py-8 xl:grid-cols-[minmax(0,1.6fr)_minmax(19rem,0.72fr)]">
-          <section aria-labelledby="balances-title" className="flex min-w-0 flex-col border border-border bg-card">
+          <section aria-labelledby="balances-title" className="flex min-w-0 flex-col border border-border bg-card rounded-xl overflow-hidden">
             <SectionHeader
               id="balances-title"
               icon={<CircleDollarSign className="h-4 w-4" />}
               title="Balances"
-              detail={snapshot.coverage.balances === "partial" ? "Budget account · partial" : "Budget account"}
+              detail={snapshot.coverage.balances === "partial" ? "Partial read" : undefined}
             />
             <div className="grid flex-1 gap-px bg-border sm:grid-cols-2">
-              {snapshot.balances.map((balance) => <BalanceCard key={balance.id} balance={balance} demo={demo} />)}
+              {snapshot.balances.map((balance) => <BalanceCard key={balance.id} balance={balance} demo={demo} totalUsd={snapshot.totalUsd} inOffers={amountInOffers(snapshot.offers, balance.symbol)} openOffers={snapshot.offers.filter((offer) => withoutIssuer(offer.quantity).endsWith(` ${balance.symbol}`)).length} />)}
             </div>
           </section>
 
           <BudgetCard snapshot={snapshot} demo={demo} />
 
         <div className="flex min-w-0 flex-col gap-5">
-          <section aria-labelledby="positions-title" className="border border-border bg-card">
+          <section aria-labelledby="positions-title" className="border border-border bg-card rounded-xl overflow-hidden">
             <SectionHeader
               id="positions-title"
               icon={<Droplets className="h-4 w-4" />}
@@ -179,69 +180,7 @@ export function PortfolioDashboard({
             </div>
           </section>
 
-          <section aria-labelledby="offers-title" className="bracket flex flex-1 flex-col border border-border bg-card">
-            <SectionHeader
-              id="offers-title"
-              icon={<Activity className="h-4 w-4" />}
-              title="Open offers"
-              detail={snapshot.coverage.offers === "partial"
-                ? `${snapshot.offers.length} loaded · partial`
-                : `${snapshot.offers.length} on ledger`}
-            />
-            {snapshot.offers.length ? (
-              <>
-              <ul className="divide-y divide-border sm:hidden" aria-label="Open offers">
-                {snapshot.offers.map((offer) => (
-                  <li key={offer.id} className="px-4 py-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="inline-flex items-center gap-1.5 font-mono text-xs font-medium uppercase tracking-wide text-approval"><ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />{offer.side} <span className="text-foreground">{offer.quantity}</span></span>
-                      <span className={`${chipBase} ${chipTone.info}`}>{offer.status}</span>
-                    </div>
-                    <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2">
-                      <dt className="label-mono">Receive</dt>
-                      <dd className="min-w-0 break-words text-right font-mono text-xs">{offer.receive}</dd>
-                      <dt className="label-mono">Limit price</dt>
-                      <dd className="min-w-0 break-words text-right font-mono text-xs">{offer.price}</dd>
-                    </dl>
-                  </li>
-                ))}
-              </ul>
-              <div className="hidden overflow-x-auto sm:block" role="region" aria-label="Open offers table" tabIndex={0}>
-                <table className="w-full min-w-[38rem] text-left">
-                  <thead className="border-b border-border bg-surface">
-                    <tr>
-                      <th className="label-mono px-5 py-2.5 font-medium">Side</th>
-                      <th className="label-mono px-5 py-2.5 font-medium">Quantity</th>
-                      <th className="label-mono px-5 py-2.5 font-medium">Receive</th>
-                      <th className="label-mono px-5 py-2.5 font-medium">Limit price</th>
-                      <th className="label-mono px-5 py-2.5 font-medium">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="font-mono text-xs">
-                    {snapshot.offers.map((offer) => (
-                      <tr key={offer.id} className="border-b border-border transition-colors last:border-0 hover:bg-white/[0.02]">
-                        <td className="px-5 py-3.5"><span className="inline-flex items-center gap-1.5 font-medium uppercase text-approval"><ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />{offer.side}</span></td>
-                        <td className="px-5 py-3.5 uppercase text-foreground">{offer.quantity}</td>
-                        <td className="px-5 py-3.5 text-muted-foreground">{offer.receive}</td>
-                        <td className="px-5 py-3.5 text-foreground">{offer.price}</td>
-                        <td className="px-5 py-3.5"><span className={`${chipBase} ${chipTone.info}`}>{offer.status}</span></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              </>
-            ) : <p className="px-5 py-6 text-sm text-muted-foreground">
-              {snapshot.coverage.offers === "partial"
-                ? "No supported offers were loaded from the incomplete ledger read."
-                : "No resting offers."}
-            </p>}
-            {snapshot.coverage.reasons.length > 0 ? (
-              <ul className="mt-auto space-y-1 border-t border-approval/25 bg-approval/[0.06] px-5 py-3 text-xs leading-relaxed text-approval" aria-label="Portfolio read limitations">
-                {snapshot.coverage.reasons.map((reason) => <li key={reason}>{reason}</li>)}
-              </ul>
-            ) : null}
-          </section>
+          <OpenOffersSection offers={snapshot.offers} coverage={snapshot.coverage} demo={demo} />
         </div>
 
         <div className="flex min-w-0 flex-col gap-5">
@@ -266,11 +205,11 @@ function DemoBand() {
     <div className="flex min-w-0 flex-col gap-3 border-b border-border bg-surface px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:hidden" role="note" aria-label="Demo portfolio">
       <p className="flex min-w-0 items-start gap-2.5 text-[13px] leading-5 text-muted-foreground">
         <span aria-hidden="true" className="mt-[7px] h-1.5 w-1.5 shrink-0 bg-primary" />
-        <span><span className="font-medium text-foreground">You&apos;re viewing a simulated demo portfolio.</span> Connect a wallet to see your own.</span>
+        <span><span className="font-medium text-foreground">You&apos;re viewing a demo portfolio.</span> Connect a wallet to see your own.</span>
       </p>
       <Link
         href="/onboarding"
-        className="link-dashed inline-flex shrink-0 items-center gap-1.5 self-start font-mono text-[11px] font-medium uppercase tracking-wide text-foreground sm:self-auto pointer-coarse:py-3.5"
+        className="link-dashed inline-flex shrink-0 items-center gap-1.5 self-start text-[13px] font-medium text-foreground sm:self-auto pointer-coarse:py-3.5"
       >
         Get started <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
       </Link>
@@ -278,7 +217,7 @@ function DemoBand() {
   );
 }
 
-const chipBase = "inline-flex items-center gap-1.5 border px-1.5 py-0.5 font-mono text-[11px] font-medium uppercase tracking-wide";
+const chipBase = "inline-flex items-center gap-1.5 border px-1.5 py-0.5 text-[13px] font-medium rounded";
 const chipTone = {
   neutral: "border-border-strong text-muted-foreground",
   executed: "border-executed/30 bg-executed/10 text-executed",
@@ -286,7 +225,7 @@ const chipTone = {
   destructive: "border-destructive/30 bg-destructive/10 text-destructive",
   info: "border-info/30 bg-info/10 text-info",
   violet: "border-chart-4/30 bg-chart-4/10 text-chart-4",
-  primary: "border-primary/40 bg-primary/[0.06] text-[color-mix(in_srgb,var(--primary)_72%,var(--foreground))]",
+  primary: "border-primary-soft-border bg-primary-soft text-[color-mix(in_srgb,var(--primary)_72%,var(--foreground))]",
 } as const;
 
 function PortfolioUnavailable({ connection }: { connection: PortfolioConnectionStatus }) {
@@ -302,13 +241,13 @@ function PortfolioUnavailable({ connection }: { connection: PortfolioConnectionS
       : chipTone.neutral;
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 lg:px-8">
-      <section className="border border-border bg-card p-6 sm:p-8" aria-live="polite">
+      <section className="border border-border bg-card p-6 sm:p-8 rounded-xl overflow-hidden" aria-live="polite">
         <span className={`${chipBase} ${tone}`}>
           <Radio className={`h-3 w-3 ${connection.kind === "connecting" ? "animate-pulse" : ""}`} aria-hidden="true" /> {label}
         </span>
-        <h1 className="mt-6 text-[1.5rem] font-normal tracking-[-0.02em]">No owner-scoped portfolio data is displayed</h1>
+        <h1 className="mt-6 text-[1.5rem] font-semibold tracking-[-0.02em] font-display">No owner-scoped portfolio data is displayed</h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">{connection.detail}</p>
-        <p className="mt-6 border-t border-border pt-4 font-mono text-[11px] uppercase leading-5 tracking-wide text-muted-foreground">
+        <p className="mt-6 border-t border-border pt-4 text-[13px] leading-5 text-muted-foreground">
           Signed-in portfolios only ever show owner-scoped Harbor reads. Demo data is shown only to visitors without a verified wallet session.
         </p>
       </section>
@@ -341,10 +280,10 @@ function FreshnessCard({
           <span className="label-mono inline-flex items-center gap-2"><Clock3 className="h-3.5 w-3.5" aria-hidden="true" />Snapshot freshness</span>
           <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 ${statusTone}`} />
         </div>
-        <p className="mt-3 font-mono text-sm uppercase tabular-nums text-foreground">{formatFreshness(snapshot.asOf)}</p>
+        <p className="mt-3 text-sm tabular-nums text-foreground">{formatFreshness(snapshot.asOf)}</p>
         <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{connection.detail}</p>
       </div>
-      <p className="border-t border-border pt-3 font-mono text-[11px] uppercase leading-relaxed tracking-wide text-muted-foreground">
+      <p className="border-t border-border pt-3 text-[13px] leading-relaxed text-muted-foreground">
         {demo
           ? "Simulated snapshot · no wallet connected"
           : `${snapshot.asOfBasis} · ${connection.accountCount} subscribed account${connection.accountCount === 1 ? "" : "s"}`}
@@ -353,12 +292,12 @@ function FreshnessCard({
   );
 }
 
-function SectionHeader({ id, icon, title, detail }: { id: string; icon: React.ReactNode; title: string; detail: string }) {
+function SectionHeader({ id, icon, title, detail }: { id: string; icon: React.ReactNode; title: string; detail?: string }) {
   return (
     <div className="flex h-12 min-w-0 items-center gap-2.5 border-b border-border px-4 sm:px-5">
       <span className="shrink-0 text-muted-foreground" aria-hidden="true">{icon}</span>
       <h2 id={id} className="text-sm font-medium tracking-tight">{title}</h2>
-      <span className="label-mono ml-auto truncate">{detail}</span>
+      {detail ? <span className="label-mono ml-auto truncate">{detail}</span> : null}
     </div>
   );
 }
@@ -386,20 +325,20 @@ function TokenMark({ symbol, size = "md" }: { symbol: string; size?: "md" | "sm"
   const box = size === "md" ? "h-9 w-9" : "h-7 w-7";
   if (symbol === "XRP") {
     return (
-      <span className={`grid ${box} shrink-0 place-items-center border border-border-strong bg-foreground text-background`} role="img" aria-label="XRP">
+      <span className={`grid ${box} shrink-0 place-items-center border border-foreground bg-foreground text-background rounded-md`} role="img" aria-label="XRP">
         <XrpMark className={size === "md" ? "h-[18px] w-[18px]" : "h-3.5 w-3.5"} />
       </span>
     );
   }
   if (symbol === "RLUSD") {
     return (
-      <span className={`grid ${box} shrink-0 place-items-center border border-[#0058d6] bg-[#0069fe] text-[#ffffff]`} role="img" aria-label="RLUSD">
+      <span className={`grid ${box} shrink-0 place-items-center border border-[#0058d6] bg-[#0069fe] text-[#ffffff] rounded-md`} role="img" aria-label="RLUSD">
         <RlusdMark className={size === "md" ? "h-[18px] w-[18px]" : "h-3.5 w-3.5"} />
       </span>
     );
   }
   return (
-    <span className={`grid ${box} shrink-0 place-items-center border border-info/30 bg-[color-mix(in_srgb,var(--info)_10%,var(--card))] font-mono ${size === "md" ? "text-xs" : "text-[10px]"} font-semibold text-info`} role="img" aria-label={symbol}>
+    <span className={`grid ${box} shrink-0 place-items-center border border-info/30 bg-[color-mix(in_srgb,var(--info)_10%,var(--card))] font-mono rounded-md ${size === "md" ? "text-xs" : "text-[10px]"} font-semibold text-info`} role="img" aria-label={symbol}>
       {symbol === "RLUSD" ? "R$" : symbol.slice(0, 2)}
     </span>
   );
@@ -421,28 +360,66 @@ function positionMarks(title: string): React.ReactNode {
 }
 
 // In the demo, the sidebar card already says the data is sample data; per-card "demo" tags are dropped.
-function BalanceCard({ balance, demo = false }: { balance: PortfolioBalance; demo?: boolean }) {
+function BalanceCard({ balance, demo = false, totalUsd, inOffers, openOffers }: { balance: PortfolioBalance; demo?: boolean; totalUsd: number | null; inOffers: number; openOffers: number }) {
+  const share = balance.usdValue !== null && totalUsd ? (balance.usdValue / totalUsd) * 100 : null;
+  const available = Math.max(0, balance.amount - inOffers);
+  const amount = (value: number) => value.toLocaleString("en-US", { maximumFractionDigits: 6 });
   return (
-    <article className="flex min-w-0 flex-col bg-card p-4 transition-colors hover:bg-white/[0.02] sm:p-5">
+    <article className="flex min-w-0 flex-col bg-card p-4 sm:p-5">
       <div className="flex min-w-0 items-center gap-3">
         <TokenMark symbol={balance.symbol} />
         <div className="min-w-0">
           <p className="text-sm font-medium">{balance.symbol}</p>
           <p className="truncate text-xs text-muted-foreground">{balance.name}</p>
         </div>
-        <p className="ml-auto text-right font-mono text-xs tabular-nums text-muted-foreground">{balance.usdValue === null ? "USD unavailable" : money.format(balance.usdValue)}</p>
       </div>
-      <p className="mt-auto pt-5 text-2xl font-normal tracking-[-0.02em] tabular-nums">{balance.amount.toLocaleString("en-US", { maximumFractionDigits: 6 })}</p>
-      {demo ? null : <p className="label-mono mt-1.5">{balance.availabilityNote}</p>}
+      <div className="mt-5 min-w-0">
+        <p className="label-mono">Balance</p>
+        <p className="mt-1 flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1">
+          <span className="text-2xl font-normal tracking-[-0.02em] tabular-nums">{amount(balance.amount)} <span className="text-base text-muted-foreground">{balance.symbol}</span></span>
+          <span className="font-mono text-xs tabular-nums text-muted-foreground">{balance.usdValue === null ? "" : `≈ ${money.format(balance.usdValue)}`}</span>
+        </p>
+      </div>
+      {share !== null ? (
+        <div className="mt-4">
+          <p className="flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
+            <span>Share of portfolio</span>
+            <span className="tabular-nums text-foreground">{share.toFixed(1)}%</span>
+          </p>
+          <div className="mt-1.5 h-1.5 bg-border" role="img" aria-label={`${share.toFixed(1)} percent of portfolio value`}>
+            <div className={`h-full ${balance.accent === "violet" ? "bg-[color-mix(in_oklab,var(--info)_70%,var(--primary))]" : "bg-foreground/70"}`} style={{ width: `${Math.min(100, share)}%` }} />
+          </div>
+        </div>
+      ) : null}
+      <dl className="mt-4 grid grid-cols-2 gap-px border border-border bg-border rounded-xl overflow-hidden">
+        <div className="min-w-0 bg-card px-3 py-2.5">
+          <dt className="label-mono">Free to use</dt>
+          <dd className="mt-1 truncate font-mono text-xs tabular-nums">{amount(available)} {balance.symbol}</dd>
+        </div>
+        <div className="min-w-0 bg-card px-3 py-2.5">
+          <dt className="label-mono">Held in offers</dt>
+          <dd className="mt-1 truncate font-mono text-xs tabular-nums">{amount(inOffers)} {balance.symbol}{openOffers ? <span className="text-muted-foreground"> · {openOffers} {openOffers === 1 ? "offer" : "offers"}</span> : null}</dd>
+        </div>
+      </dl>
+      {demo ? null : <p className="label-mono mt-3">{balance.availabilityNote}</p>}
     </article>
   );
+}
+
+/** "5.12 RLUSD (rQhWct2…x9iLKV)" → "5.12 RLUSD"; the full text stays in the tooltip. */
+/** Total of one asset committed to open offers, from each offer's quantity. */
+function amountInOffers(offers: PortfolioSnapshot["offers"], symbol: string): number {
+  return offers.reduce((sum, offer) => {
+    const match = /^([\d,.]+)\s+(\S+)$/.exec(withoutIssuer(offer.quantity).trim());
+    return match && match[2] === symbol ? sum + Number(match[1]!.replace(/,/g, "")) : sum;
+  }, 0);
 }
 
 function PositionCard({ position, icon, demo = false }: { position: PortfolioPosition; icon: React.ReactNode; demo?: boolean }) {
   return (
     <article className="flex min-w-0 flex-col bg-card p-4 sm:p-5">
       <div className="flex min-w-0 items-start gap-3">
-        {positionMarks(position.title) ?? <span className="grid h-9 w-9 shrink-0 place-items-center border border-border-strong text-muted-foreground" aria-hidden="true">{icon}</span>}
+        {positionMarks(position.title) ?? <span className="grid h-9 w-9 shrink-0 place-items-center border border-border-strong text-muted-foreground rounded-md" aria-hidden="true">{icon}</span>}
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-sm font-medium">{position.title}</h3>
           <p className="mt-1 truncate text-xs text-muted-foreground">{position.subtitle}</p>
@@ -472,8 +449,8 @@ function BudgetCard({ snapshot, demo }: { snapshot: PortfolioSnapshot; demo: boo
     ? snapshot.policy.daily_cap_usd - snapshot.dailySpendUsd!
     : null;
   return (
-    <section aria-labelledby="budget-title" className="flex min-w-0 flex-col border border-border bg-card">
-      <SectionHeader id="budget-title" icon={<Gauge className="h-4 w-4" />} title="Daily budget" detail={spendAvailable ? demo ? "Today" : "Harbor policy" : "Spend unavailable"} />
+    <section aria-labelledby="budget-title" className="flex min-w-0 flex-col border border-border bg-card rounded-xl overflow-hidden">
+      <SectionHeader id="budget-title" icon={<Gauge className="h-4 w-4" />} title="Daily budget" detail={spendAvailable ? demo ? undefined : "Harbor policy" : "Spend unavailable"} />
       <div className="p-4 sm:p-5">
         <div className="flex items-end justify-between gap-3">
           <div>
@@ -508,21 +485,21 @@ function DelegationCard({ snapshot, demo }: { snapshot: PortfolioSnapshot; demo:
       ? "Revoked · no permissions active"
       : `${snapshot.delegation.status} · permissions are not active`;
   return (
-    <section aria-labelledby="delegation-title" className="flex min-w-0 flex-col border border-border bg-card">
-      <div className="flex items-start gap-2.5 border-b border-border px-4 py-3.5 sm:px-5">
-        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 id="delegation-title" className="text-sm font-medium tracking-tight">Delegation {snapshot.delegation.status}</h2>
-            {demo ? null : <span className={`${chipBase} text-[10px] ${tone}`}><BadgeCheck className="h-3 w-3" aria-hidden="true" />Harbor read</span>}
-          </div>
-          <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">{compactAddress(snapshot.delegation.delegate)}</p>
-        </div>
+    <section aria-labelledby="delegation-title" className="flex min-w-0 flex-col border border-border bg-card rounded-xl overflow-hidden">
+      {/* Same header row as Balances and Positions; the delegate address sits on the right. */}
+      <div className="flex h-12 min-w-0 items-center gap-2.5 border-b border-border px-4 sm:px-5">
+        <ShieldCheck className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <h2 id="delegation-title" className="shrink-0 text-sm font-medium tracking-tight">Delegation {snapshot.delegation.status}</h2>
+        {demo ? null : <span className={`${chipBase} shrink-0 text-[10px] ${tone}`}><BadgeCheck className="h-3 w-3" aria-hidden="true" />Harbor read</span>}
+        <span className="ml-auto truncate font-mono text-[11px] text-muted-foreground" title={snapshot.delegation.delegate}>
+          <span className="sr-only">Delegate </span>
+          {compactAddress(snapshot.delegation.delegate)}
+        </span>
       </div>
       <div className="p-4 sm:px-5">
         <p className="label-mono flex items-center gap-2 text-foreground"><LockKeyhole className={`h-3.5 w-3.5 ${active ? "text-executed" : revoked ? "text-destructive" : "text-approval"}`} aria-hidden="true" />{permissionSummary}</p>
         {active ? (
-          <ul className="mt-3 grid border border-border sm:grid-cols-2 xl:grid-cols-1" aria-label="Granted delegate permissions">
+          <ul className="mt-3 grid border border-border sm:grid-cols-2 xl:grid-cols-1 rounded-xl" aria-label="Granted delegate permissions">
             {snapshot.delegation.permissions.map((permission) => (
               <li key={permission} className="flex items-center gap-2.5 border-b border-border px-3 py-2 text-xs text-foreground/85 last:border-b-0">
                 <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 bg-executed" />
@@ -552,7 +529,7 @@ function LiveFeed({
   demo: boolean;
 }) {
   return (
-    <section aria-labelledby="feed-title" className="border border-border bg-card">
+    <section aria-labelledby="feed-title" className="border border-border bg-card rounded-xl overflow-hidden">
       <div className="flex h-12 items-center gap-2.5 border-b border-border px-4 sm:px-5">
         {mode === "live" && !demo ? (
           <span className="relative flex h-1.5 w-1.5" aria-hidden="true"><span className="absolute inline-flex h-full w-full animate-ping bg-executed/60" /><span className="relative inline-flex h-1.5 w-1.5 bg-executed" /></span>
@@ -582,14 +559,13 @@ function FeedRow({ item, last }: { item: FeedItem; last: boolean }) {
   return (
     <li className="relative flex min-w-0 gap-3 pb-5 last:pb-0">
       {!last ? <span className="absolute bottom-0 left-[13px] top-7 w-px bg-border" aria-hidden="true" /> : null}
-      <span className={`relative z-10 grid h-7 w-7 shrink-0 place-items-center border bg-card ${tone}`} aria-hidden="true"><Icon className="h-3.5 w-3.5" /></span>
+      <span className={`relative z-10 grid h-7 w-7 shrink-0 place-items-center border bg-card rounded-md ${tone}`} aria-hidden="true"><Icon className="h-3.5 w-3.5" /></span>
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-baseline gap-2">
           <p className="min-w-0 flex-1 truncate text-[13px] font-medium">{item.title}</p>
-          <time className="shrink-0 font-mono text-[11px] uppercase text-muted-foreground">{item.time}</time>
+          <time className="shrink-0 text-[13px] text-muted-foreground">{item.time}</time>
         </div>
         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{item.detail}</p>
-        {item.hash ? <span className="mt-1.5 inline-flex items-center gap-1.5 font-mono text-[11px] uppercase text-muted-foreground" title={item.hash}><span className="label-mono text-[10px]">Tx</span>{item.hash.slice(0, 8)}…{item.hash.slice(-5)}</span> : null}
       </div>
     </li>
   );
@@ -602,13 +578,12 @@ function TimelineNode({ item, last }: { item: FeedItem; last: boolean }) {
     <li className="min-w-0">
       {/* Connector sits in the row's free space, so it never runs under an icon or a label. */}
       <div className="flex items-center gap-2.5">
-        <span className={`grid h-7 w-7 shrink-0 place-items-center border ${tone}`} aria-hidden="true"><Icon className="h-3.5 w-3.5" /></span>
-        <time className="shrink-0 font-mono text-[11px] uppercase text-muted-foreground">{item.time}</time>
+        <span className={`grid h-7 w-7 shrink-0 place-items-center border rounded-md ${tone}`} aria-hidden="true"><Icon className="h-3.5 w-3.5" /></span>
+        <time className="shrink-0 text-[13px] text-muted-foreground">{item.time}</time>
         {!last ? <span aria-hidden="true" className="mx-1 h-px min-w-6 flex-1 bg-border-strong" /> : null}
       </div>
       <p className="mt-3 pr-6 text-[13px] font-medium leading-snug">{item.title}</p>
       <p className="mt-1 pr-6 text-xs leading-relaxed text-muted-foreground">{item.detail}</p>
-      {item.hash ? <span className="mt-2 inline-flex items-center gap-1.5 font-mono text-[11px] uppercase text-muted-foreground" title={item.hash}><span className="label-mono text-[10px]">Tx</span>{item.hash.slice(0, 8)}…{item.hash.slice(-5)}</span> : null}
     </li>
   );
 }

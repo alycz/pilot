@@ -9,7 +9,7 @@ import {
   type AnalyticsSnapshot,
 } from "./analytics-panels";
 
-const label = "font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground";
+const label = "text-xs font-medium text-muted-foreground";
 
 function usableEstimate(
   quote: AnalyticsSnapshot["liquidity"][number],
@@ -35,7 +35,7 @@ export function TerminalTradePreview({ snapshot }: { snapshot: AnalyticsSnapshot
     snapshot.provenance.network !== "mainnet" && availableEstimateCount > 0;
 
   return (
-    <section className="border border-border bg-card" aria-labelledby="terminal-trade-preview-title">
+    <section className="border border-border bg-card rounded-xl overflow-hidden" aria-labelledby="terminal-trade-preview-title">
       <header className="border-b border-border bg-sidebar/40 px-4 py-3">
         <p className={label}>Bounded preview</p>
         <h2 id="terminal-trade-preview-title" className="mt-1 text-sm font-semibold text-foreground">
@@ -59,12 +59,12 @@ export function TerminalTradePreview({ snapshot }: { snapshot: AnalyticsSnapshot
                   <div className="min-w-0 text-right">
                     <dt className={label}>Estimated output</dt>
                     <dd className="mt-1 truncate font-mono text-xs tabular-nums text-foreground">
-                      {available ? `${formatMetric(quote.estimatedOutput, 4)} ${snapshot.quote.symbol}` : "Unavailable"}
+                      {available ? `${formatMetric(quote.estimatedOutput, 4)} ${snapshot.quote.symbol}` : "—"}
                     </dd>
                   </div>
                   <p className="col-span-2 font-mono text-[10px] leading-5 text-muted-foreground">
                     {available
-                      ? <>{formatMetric(quote.averagePrice, 6)} {snapshot.priceUnit}{typeof quote.priceImpactBps === "number" && Number.isFinite(quote.priceImpactBps) ? ` · ${formatMetric(quote.priceImpactBps, 1)} bps observed impact` : " · impact unavailable"}</>
+                      ? <>{formatMetric(quote.averagePrice, 6)} {snapshot.priceUnit}{typeof quote.priceImpactBps === "number" && Number.isFinite(quote.priceImpactBps) ? ` · ${formatMetric(quote.priceImpactBps, 1)} bps observed impact` : ""}</>
                       : quote.reason ?? "The bounded depth read did not cover this size."}
                   </p>
                 </div>
@@ -85,13 +85,13 @@ export function TerminalTradePreview({ snapshot }: { snapshot: AnalyticsSnapshot
           {approvalEligible ? (
             <Link
               href="/chat"
-              className="bracket bracket-light mt-4 inline-flex h-10 w-full items-center justify-center gap-2 border border-border bg-foreground px-4 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-background transition hover:bg-foreground/90"
+              className="bracket bracket-light mt-4 inline-flex h-10 w-full items-center justify-center gap-2 border border-border bg-primary px-4 text-xs font-medium text-primary-foreground transition hover:bg-primary/90 rounded-md"
             >
               Review in workspace chat
               <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
             </Link>
           ) : (
-            <p className="mt-4 border border-border bg-sidebar/30 px-3 py-3 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+            <p className="mt-4 border border-border bg-sidebar/30 px-3 py-3 text-xs text-muted-foreground rounded-xl">
               {snapshot.provenance.mode === "demo"
                 ? "Illustrative fixture · no approval path"
                 : snapshot.provenance.network === "mainnet"

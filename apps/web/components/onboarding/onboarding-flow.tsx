@@ -131,6 +131,14 @@ type DemoCatalogState =
 export const XAMAN_UNAVAILABLE_REASON =
   "Unavailable: Xaman needs an app API key, and the current adapter cannot sign Pilot's non-broadcast wallet-auth proof safely.";
 
+const WALLET_NAMES: Record<string, string> = {
+  gemwallet: "GemWallet",
+  crossmark: "Crossmark",
+  ledger: "Ledger",
+  dev: "Testnet dev signer",
+  xaman: "Xaman",
+};
+
 export function walletProviderUnavailableReason(
   provider: WalletProvider,
 ): string | undefined {
@@ -4687,20 +4695,19 @@ export function OnboardingFlow({
           <span className="label-mono ml-1 hidden sm:inline">Guided setup</span>
         </a>
         {/* A full navigation (not client routing) so the unresolved-delegation beforeunload warning still applies. */}
-        <a href="/chat" className="bracket bracket-light inline-flex h-9 items-center gap-2 border border-border bg-white/[0.03] px-3 font-mono text-[11px] font-medium uppercase tracking-wide text-foreground transition hover:bg-white/[0.06]">
+        <a href="/chat" className="bracket bracket-light inline-flex h-9 items-center gap-2 border border-border bg-white/[0.03] px-3 text-[13px] font-medium text-foreground transition hover:bg-white/[0.06] rounded-md">
           <X aria-hidden="true" className="size-3.5" />
           Exit setup
         </a>
       </div>
     </header>
     <main className="mx-auto flex w-full max-w-6xl flex-1 items-center px-4 py-8 sm:px-8 lg:px-12">
-      <div className="bracket bracket-light grid w-full border border-border bg-card lg:grid-cols-[0.8fr_1.2fr]">
+      <div className="bracket bracket-light grid w-full overflow-hidden border border-border bg-card lg:grid-cols-[0.8fr_1.2fr] rounded-xl">
         <aside aria-label="About setup" className="relative overflow-hidden border-b border-border bg-surface p-6 sm:p-9 lg:border-b-0 lg:border-r">
-          <div aria-hidden="true" className="bg-rules pointer-events-none absolute inset-0" />
           <div className="relative">
-            <p className="label-mono flex items-center gap-2"><Compass aria-hidden="true" className="size-3.5 text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))]" />{network ? `${network} guided setup` : "Test-network guided setup"}</p>
-            <h1 className="mt-4 max-w-md text-[1.75rem] font-normal leading-[1.15] tracking-[-0.02em]">Check and connect your wallet, then choose how Pilot connects to AI.</h1>
-            <p className="mt-5 max-w-md text-sm leading-6 text-muted-foreground">Pilot checks extension availability first, then lets you connect and verify the Testnet account before a separate non-broadcast authentication signature. Funding, trust lines, delegation, and every on-ledger action remain separate later steps.</p>
+            <p className="label-mono flex items-center gap-2"><Compass aria-hidden="true" className="size-3.5 text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))]" />Get started</p>
+            <h1 className="mt-4 max-w-md text-[1.75rem] font-semibold leading-[1.15] tracking-[-0.02em] font-display">Set up Pilot in about a minute.</h1>
+            <p className="mt-5 max-w-md text-sm leading-6 text-muted-foreground">Connect your wallet and pick an AI model. Connecting is free: no money moves and nothing is sent to the ledger. Trading stays off until you turn it on.</p>
             <div className="mt-8"><OnboardingSteps current={step} includeAcquire={liveDevAcquisition} /></div>
           </div>
         </aside>
@@ -4708,7 +4715,7 @@ export function OnboardingFlow({
         <section className="min-w-0 p-6 sm:p-9 lg:p-12">
           {step === "ai" ? (
             <div className="space-y-6">
-              <div><p className="label-mono">Step 2 of 3 · wallet account ready</p><h2 className="mt-2 text-xl font-normal tracking-[-0.02em]">Choose model access <span className="text-muted-foreground">(optional)</span></h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Your wallet ownership proof created this signed-in Pilot session. Continue with Pilot&apos;s quota-limited free demo when verified and configured, connect your own OpenRouter account, or skip model setup for now. Provider credentials stay encrypted on Pilot&apos;s server and never reach the browser.</p></div>
+              <div><p className="label-mono">Step 2 of 3 · wallet connected</p><h2 className="mt-2 text-xl font-normal tracking-[-0.02em]">Choose an AI model <span className="text-muted-foreground">(optional)</span></h2><p className="mt-2 text-sm leading-6 text-muted-foreground">You’re signed in. Pick the model Pilot uses to chat. Try the free demo, connect your own OpenRouter account, or skip this for now. Your keys stay on Pilot&apos;s server.</p></div>
               <ModelPicker
                 {...{
                   bedrockMode: oauthConnected ? bedrockMode : "off",
@@ -4721,7 +4728,7 @@ export function OnboardingFlow({
               />
               {walletSessionStatusUnavailable ? (
                 <div className="space-y-3">
-                  <p className="border border-approval/35 bg-approval/10 px-3 py-2 text-xs leading-5 text-approval" role="status">
+                  <p className="border border-approval/35 bg-approval/10 px-3 py-2 text-xs leading-5 text-approval rounded-xl" role="status">
                     Pilot could not revalidate this wallet session. The known account remains visible, but model and trading changes are locked until the session can be checked again.
                   </p>
                   <AccountPanel account={account} network={network} />
@@ -4729,7 +4736,7 @@ export function OnboardingFlow({
               ) : null}
               {!walletSessionStatusUnavailable && modelSessionStatusUnavailable ? (
                 <div className="space-y-3">
-                  <p className="border border-approval/35 bg-approval/10 px-3 py-2 text-xs leading-5 text-approval" role="status">
+                  <p className="border border-approval/35 bg-approval/10 px-3 py-2 text-xs leading-5 text-approval rounded-xl" role="status">
                     Pilot verified this wallet account but could not check its existing model session. Model changes are locked; retry when connectivity returns or use “Skip model setup” to clear the server session first.
                   </p>
                   <AccountPanel account={account} network={network} />
@@ -4737,38 +4744,37 @@ export function OnboardingFlow({
               ) : null}
               <div className="grid gap-3 sm:grid-cols-2">
                 {walletSessionStatusUnavailable || modelSessionStatusUnavailable ? (
-                  <span aria-disabled="true" className="bracket bracket-light inline-flex h-11 cursor-not-allowed items-center justify-center gap-2 border border-border bg-white/[0.03] px-4 font-mono text-[11px] font-medium uppercase tracking-wide opacity-45">
+                  <span aria-disabled="true" className="bracket bracket-light inline-flex h-11 cursor-not-allowed items-center justify-center gap-2 border border-border bg-white/[0.03] px-4 text-[13px] font-medium opacity-45 rounded-md">
                     <ExternalLink className="size-4" /> {oauthConnected ? "Reconnect OpenRouter" : "Connect OpenRouter"}
                   </span>
                 ) : (
-                  <a className="bracket bracket-light inline-flex h-11 items-center justify-center gap-2 border border-border bg-white/[0.03] px-4 font-mono text-[11px] font-medium uppercase tracking-wide transition hover:bg-white/[0.06]" href="/api/auth/openrouter/start?returnTo=%2Fonboarding%3Fopenrouter%3Dconnected" onClick={() => setAiMode("openrouter")}>
+                  <a className="bracket bracket-light inline-flex h-11 items-center justify-center gap-2 border border-border bg-white/[0.03] px-4 text-[13px] font-medium transition hover:bg-white/[0.06] rounded-md" href="/api/auth/openrouter/start?returnTo=%2Fonboarding%3Fopenrouter%3Dconnected" onClick={() => setAiMode("openrouter")}>
                     <ExternalLink className="size-4" /> {oauthConnected ? "Reconnect OpenRouter" : "Connect OpenRouter"}
                   </a>
                 )}
-                <button className="inline-flex h-11 items-center justify-center gap-2 bg-foreground px-4 font-mono text-[11px] font-medium uppercase tracking-wide text-background transition hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-45" disabled={busy || walletSessionStatusUnavailable || modelSessionStatusUnavailable || (!oauthConnected && demoCatalog.status !== "available")} onClick={oauthConnected ? continueOpenRouter : startDemo} type="button">
+                <button className="inline-flex h-11 items-center justify-center gap-2 bg-primary px-4 text-[13px] font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-45 rounded-md" disabled={busy || walletSessionStatusUnavailable || modelSessionStatusUnavailable || (!oauthConnected && demoCatalog.status !== "available")} onClick={oauthConnected ? continueOpenRouter : startDemo} type="button">
                   {busy || (!oauthConnected && demoCatalog.status === "loading") ? <LoaderCircle className="size-4 animate-spin" /> : oauthConnected ? <ArrowRight className="size-4" /> : <Bot className="size-4" />} {oauthConnected ? "Continue with OpenRouter" : demoCatalog.status === "loading" ? "Checking free demo" : demoCatalog.status === "unavailable" ? "Free demo unavailable" : "Try free demo"}
                 </button>
               </div>
               {!oauthConnected && demoCatalog.status === "unavailable" ? (
-                <p className="border border-approval/35 bg-approval/10 px-3 py-2 text-xs leading-5 text-approval" role="status">
+                <p className="border border-approval/35 bg-approval/10 px-3 py-2 text-xs leading-5 text-approval rounded-xl" role="status">
                   {demoCatalog.message} Connect OpenRouter instead, or return to the wallet step to explore the read-only demo.
                 </p>
               ) : null}
-              <p className="text-xs leading-5 text-muted-foreground">Demo access is server-gated, finite, text-only, and limited to an exact allowlist of tool-capable <code className="font-mono text-foreground/80">:free</code> models. It stays unavailable until the operator verifies the zero-paid policy and configures every quota. Selecting demo does not reserve capacity: on each chat request Pilot atomically checks shared, wallet-daily, rate, token, and concurrency quotas, then rechecks current zero pricing before model access.{demoLimits ? ` Current request caps: ${demoLimits.maxInputBytes ?? "—"} bytes input, ${demoLimits.maxOutputTokens ?? "—"} output tokens total, and ${demoLimits.maxSteps ?? "—"} model steps.` : ""}</p>
+              <p className="text-xs leading-5 text-muted-foreground">The free demo uses free models with a daily message limit.{demoLimits?.maxOutputTokens ? ` Each reply is capped at ${demoLimits.maxOutputTokens} tokens.` : ""}</p>
               <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
-                <button className="bracket bracket-light inline-flex h-11 items-center justify-center gap-2 border border-border bg-white/[0.03] px-4 font-mono text-[11px] font-medium uppercase tracking-wide transition hover:bg-white/[0.06] disabled:opacity-50" disabled={busy} onClick={() => void signOutWalletAccess()} type="button"><WalletCards className="size-4" /> Use a different wallet</button>
-                <button className="inline-flex h-11 items-center justify-center border border-border px-4 font-mono text-[11px] font-medium uppercase tracking-wide text-muted-foreground transition hover:bg-white/[0.04] disabled:opacity-50" disabled={busy} onClick={skipModelAccess} type="button">Skip model setup</button>
+                <button className="bracket bracket-light inline-flex h-11 items-center justify-center gap-2 border border-border bg-white/[0.03] px-4 text-[13px] font-medium transition hover:bg-white/[0.06] disabled:opacity-50 rounded-md" disabled={busy} onClick={() => void signOutWalletAccess()} type="button"><WalletCards className="size-4" /> Use a different wallet</button>
+                <button className="inline-flex h-11 items-center justify-center border border-border px-4 text-[13px] font-medium text-muted-foreground transition hover:bg-white/[0.04] disabled:opacity-50 rounded-md" disabled={busy} onClick={skipModelAccess} type="button">Skip model setup</button>
               </div>
             </div>
           ) : null}
 
           {step === "wallet" ? (
             <div className="space-y-6">
-              <div><p className="label-mono">Step 1 of 3</p><h2 className="mt-2 text-xl font-normal tracking-[-0.02em]">Authenticate your budget wallet</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Check the selected extension without a prompt, connect and verify its Testnet account, then separately sign a zero-fee, sequence-zero AccountSet proof that cannot be submitted to the ledger. This does not fund an account, create a trust line, grant delegation, or send an on-chain transaction.</p></div>
-              {walletNotice ? <p className="border border-info/30 bg-info/[0.06] px-4 py-3 text-sm text-muted-foreground" role="status">{walletNotice}</p> : null}
-              <DesktopWalletGuide />
+              <div><p className="label-mono">Step 1 of 3</p><h2 className="mt-2 text-xl font-normal tracking-[-0.02em]">Connect your wallet</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Open your wallet extension, switch it to Testnet, then pick it below. You’ll sign a free message to prove the account is yours.</p></div>
+              {walletNotice ? <p className="border border-info/30 bg-info/[0.06] px-4 py-3 text-sm text-muted-foreground rounded-xl" role="status">{walletNotice}</p> : null}
               <div className="grid gap-3 sm:grid-cols-2">
-                {(["gemwallet", "crossmark", "ledger", "dev", "xaman"] as const)
+                {(["gemwallet", "crossmark", "ledger", "dev"] as const)
                   .filter((choice) =>
                     choice === "ledger"
                       ? publicConfig?.ledger?.enabled
@@ -4777,9 +4783,9 @@ export function OnboardingFlow({
                     const unavailableReason = walletProviderUnavailableReason(choice) ??
                       walletViewportUnavailableReason(walletViewportState);
                     return (
-                      <button aria-disabled={unavailableReason || busy ? true : undefined} aria-pressed={provider === choice} className={`border p-4 text-left transition ${provider === choice ? "bracket bracket-accent border-border-strong bg-primary/[0.06]" : "border-border bg-white/[0.02] hover:border-border-strong hover:bg-white/[0.04]"} disabled:cursor-not-allowed disabled:opacity-55`} disabled={Boolean(unavailableReason) || busy} key={choice} onClick={() => chooseWalletProvider(choice)} type="button">
-                        <span className="flex items-center justify-between gap-2"><span className="text-sm font-medium capitalize">{choice === "dev" ? "Testnet dev signer" : choice}</span>{provider === choice ? <Check aria-hidden="true" className="size-4 text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))]" /> : null}</span>
-                        <span className="mt-2 block text-xs leading-5 text-muted-foreground">{unavailableReason ?? (choice === "gemwallet" ? "Recommended · desktop extension" : choice === "crossmark" ? "Alternative · desktop extension" : choice === "ledger" ? "Hardware custody · advanced path" : choice === "dev" ? "Browser-only, session-scoped test wallet" : "Sign-only through xrpl-connect")}</span>
+                      <button aria-disabled={unavailableReason || busy ? true : undefined} aria-pressed={provider === choice} className={`border p-4 text-left transition rounded-md ${provider === choice ? "bracket bracket-accent border-border-strong bg-primary-soft" : "border-border bg-white/[0.02] hover:border-border-strong hover:bg-white/[0.04]"} disabled:cursor-not-allowed disabled:opacity-55`} disabled={Boolean(unavailableReason) || busy} key={choice} onClick={() => chooseWalletProvider(choice)} type="button">
+                        <span className="flex items-center justify-between gap-2"><span className="text-sm font-medium">{WALLET_NAMES[choice]}</span>{provider === choice ? <Check aria-hidden="true" className="size-4 text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))]" /> : null}</span>
+                        <span className="mt-2 block text-xs leading-5 text-muted-foreground">{unavailableReason ?? (choice === "gemwallet" ? "Recommended · browser extension" : choice === "crossmark" ? "Also works · browser extension" : choice === "ledger" ? "Hardware wallet" : "Temporary wallet for this browser")}</span>
                       </button>
                     );
                   })}
@@ -4808,9 +4814,9 @@ export function OnboardingFlow({
                   }
                 />
               ) : null}
-              {!publicConfig ? <p className="text-xs text-muted-foreground" role="status">Loading public test-network configuration…</p> : null}
-              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
-                <a className="bracket bracket-light inline-flex h-11 items-center justify-center gap-2 border border-border bg-white/[0.03] px-4 font-mono text-[11px] font-medium uppercase tracking-wide transition hover:bg-white/[0.06]" href="/chat">Explore the read-only demo</a>
+              <DesktopWalletGuide smallScreen={walletViewportState === "small-screen"} />
+              {!publicConfig ? <p className="text-xs text-muted-foreground" role="status">Getting things ready…</p> : null}
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                 <PrimaryButton
                   busy={busy || !publicConfig}
                   disabled={walletViewportState !== "desktop" || (provider === "ledger" && !ledgerTransportAvailable(publicConfig?.ledger, ledgerTransport))}
@@ -4821,10 +4827,10 @@ export function OnboardingFlow({
                       ? "Desktop wallet required"
                       : isExtensionWalletProvider(provider)
                         ? availableExtension !== provider
-                          ? "Check extension"
+                          ? "Find my wallet"
                           : connectedExtension !== provider || !wallet || !account
                             ? "Connect account"
-                            : "Sign authentication proof"
+                            : "Sign in with wallet"
                         : provider === "ledger"
                           ? ledgerRestoredWithoutDevice
                             ? "Reconnect Ledger"
@@ -4843,34 +4849,34 @@ export function OnboardingFlow({
           {step === "access" ? (
             <div className="space-y-6">
               <div>
-                <p className="label-mono">Step 3 of 3 · basic setup complete</p>
-                <h2 className="mt-2 text-xl font-normal tracking-[-0.02em]">{modelAccessReady ? "Wallet and model ready" : "Wallet account ready"}</h2>
+                <p className="label-mono">Step 3 of 3 · done</p>
+                <h2 className="mt-2 text-xl font-normal tracking-[-0.02em]">{modelAccessReady ? "You’re all set" : "Your wallet is connected"}</h2>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
                   {modelAccessReady
-                    ? "Pilot can open with this authenticated wallet and model session."
-                    : "Pilot can open with this authenticated wallet. Model access remains unconfigured and can be added later."} Trading has not been enabled: no trust line, funding, delegation, mandate, strategy, or on-ledger authority was created by basic setup.
+                    ? "Pilot is ready to chat with your wallet."
+                    : "Pilot is ready with your wallet. You can add an AI model any time."} Pilot can’t trade for you yet. That stays off until you turn it on.
                 </p>
               </div>
               {walletSessionStatusUnavailable ? (
-                <p className="border border-approval/35 bg-approval/10 px-4 py-3 text-sm leading-6 text-approval" role="status">
+                <p className="border border-approval/35 bg-approval/10 px-4 py-3 text-sm leading-6 text-approval rounded-xl" role="status">
                   Pilot could not revalidate this wallet session. Read-only navigation remains available, but model and trading changes are locked until the session can be checked again.
                 </p>
               ) : null}
               <AccountPanel account={account} network={network} />
-              <div className="grid gap-px border border-border bg-border text-left sm:grid-cols-2">
-                <div className="bg-card p-4"><p className="label-mono">Wallet</p><p className="mt-1.5 text-sm font-medium capitalize">{provider}</p></div>
-                <div className="bg-card p-4"><p className="label-mono">Model access</p><p className="mt-1.5 text-sm font-medium">{modelAccessReady ? aiMode === "openrouter" ? "Connected OpenRouter account" : "Quota-limited free demo" : "Not configured · optional"}</p></div>
+              <div className="grid gap-px border border-border bg-border text-left sm:grid-cols-2 rounded-xl overflow-hidden">
+                <div className="bg-card p-4"><p className="label-mono">Wallet</p><p className="mt-1.5 text-sm font-medium">{WALLET_NAMES[provider] ?? provider}</p></div>
+                <div className="bg-card p-4"><p className="label-mono">AI model</p><p className="mt-1.5 text-sm font-medium">{modelAccessReady ? aiMode === "openrouter" ? "Your OpenRouter account" : "Free demo" : "Not set up yet"}</p></div>
               </div>
-              <p className="border border-approval/35 bg-approval/[0.06] px-4 py-3 text-sm leading-6 text-muted-foreground">
-                Optional Testnet trading setup is separate and requires explicit reviews and wallet signatures. It is not needed to explore Pilot or use model features.
+              <p className="border border-approval/35 bg-approval/[0.06] px-4 py-3 text-sm leading-6 text-muted-foreground rounded-xl">
+                Want Pilot to trade for you? Turn on Testnet trading next. You’ll review and sign each step in your wallet. You don’t need it to explore or chat.
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
-                <a className="inline-flex h-11 items-center justify-center gap-2 bg-foreground px-4 font-mono text-[11px] font-medium uppercase tracking-wide text-background transition hover:bg-foreground/90" href="/chat">Open workspace <ArrowRight className="size-4" /></a>
-                <button className="bracket bracket-light inline-flex h-11 items-center justify-center gap-2 border border-border bg-white/[0.03] px-4 font-mono text-[11px] font-medium uppercase tracking-wide transition hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-45" disabled={walletSessionStatusUnavailable} onClick={() => setStep("fund")} type="button"><ShieldCheck className="size-4" /> Enable Testnet trading</button>
+                <a className="inline-flex h-11 items-center justify-center gap-2 bg-primary px-4 text-[13px] font-medium text-primary-foreground transition hover:bg-primary/90 rounded-md" href="/chat">Open Pilot <ArrowRight className="size-4" /></a>
+                <button className="bracket bracket-light inline-flex h-11 items-center justify-center gap-2 border border-border bg-white/[0.03] px-4 text-[13px] font-medium transition hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-45 rounded-md" disabled={walletSessionStatusUnavailable} onClick={() => setStep("fund")} type="button"><ShieldCheck className="size-4" /> Enable Testnet trading</button>
               </div>
               <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
                 <BackButton onClick={() => setStep("ai")} />
-                <button className="inline-flex h-11 items-center justify-center border border-border px-4 font-mono text-[11px] font-medium uppercase tracking-wide text-muted-foreground transition hover:bg-white/[0.04] disabled:opacity-50" disabled={busy} onClick={() => void signOutWalletAccess()} type="button">Sign out wallet</button>
+                <button className="inline-flex h-11 items-center justify-center border border-border px-4 text-[13px] font-medium text-muted-foreground transition hover:bg-white/[0.04] disabled:opacity-50 rounded-md" disabled={busy} onClick={() => void signOutWalletAccess()} type="button">Sign out wallet</button>
               </div>
             </div>
           ) : null}
@@ -4886,21 +4892,21 @@ export function OnboardingFlow({
               </div>
               <AccountPanel account={account} network={network} />
               {link?.status === "active" ? (
-                <p className="border border-approval/35 bg-approval/10 px-4 py-3 text-sm leading-6 text-approval" role="status">
+                <p className="border border-approval/35 bg-approval/10 px-4 py-3 text-sm leading-6 text-approval rounded-xl" role="status">
                   The recorded delegation for this account remains active until an exact owner-authorized revocation is completed. This temporary lock is not a revocation.
                 </p>
               ) : pending ? (
-                <p className="border border-approval/35 bg-approval/10 px-4 py-3 text-sm leading-6 text-approval" role="status">
+                <p className="border border-approval/35 bg-approval/10 px-4 py-3 text-sm leading-6 text-approval rounded-xl" role="status">
                   A signed transaction remains pending or uncertain. Pilot will not sign or submit it again while the wallet session is indeterminate.
                 </p>
               ) : (
-                <p className="border border-approval/35 bg-approval/10 px-4 py-3 text-sm leading-6 text-approval" role="status">
+                <p className="border border-approval/35 bg-approval/10 px-4 py-3 text-sm leading-6 text-approval rounded-xl" role="status">
                   Partially completed Testnet setup is preserved. Pilot will not assume it was rolled back or create additional authority while the wallet session is indeterminate.
                 </p>
               )}
               <div className="grid gap-3 sm:grid-cols-2">
-                <a className="inline-flex h-11 items-center justify-center gap-2 bg-foreground px-4 font-mono text-[11px] font-medium uppercase tracking-wide text-background transition hover:bg-foreground/90" href="/chat">Open read-only Pilot <ArrowRight className="size-4" /></a>
-                <button className="bracket bracket-light inline-flex h-11 items-center justify-center gap-2 border border-border bg-white/[0.03] px-4 font-mono text-[11px] font-medium uppercase tracking-wide transition hover:bg-white/[0.06]" onClick={() => window.dispatchEvent(new Event(WALLET_SESSION_CHANGED_EVENT))} type="button">Retry session check</button>
+                <a className="inline-flex h-11 items-center justify-center gap-2 bg-primary px-4 text-[13px] font-medium text-primary-foreground transition hover:bg-primary/90 rounded-md" href="/chat">Open read-only Pilot <ArrowRight className="size-4" /></a>
+                <button className="bracket bracket-light inline-flex h-11 items-center justify-center gap-2 border border-border bg-white/[0.03] px-4 text-[13px] font-medium transition hover:bg-white/[0.06] rounded-md" onClick={() => window.dispatchEvent(new Event(WALLET_SESSION_CHANGED_EVENT))} type="button">Retry session check</button>
               </div>
             </div>
           ) : null}
@@ -4912,8 +4918,8 @@ export function OnboardingFlow({
               {provider === "ledger" ? (
                 <LedgerSigningGuide phase="trust" transport={ledgerTransport} wallet={wallet} />
               ) : null}
-              <div className="border border-border bg-white/[0.02] p-4 text-sm text-muted-foreground"><p className="label-mono text-foreground">What happens</p><ol className="mt-3 space-y-2"><li>1. Pilot confirms the account has XRP for reserves, fees{liveDevAcquisition ? ", and the capped RLUSD acquisition" : ""}.</li><li>2. Harbor builds and simulates the TrustSet; your wallet signs that exact transaction, then Pilot relays it through its fixed test-network provider.</li><li>3. {liveDevAcquisition ? "Pilot unlocks the separate 75 RLUSD acquisition approval." : "The configured test-network stablecoin funding handoff runs."}</li></ol></div>
-              {fundingSource === "fixture" ? <p className="border border-info/30 bg-info/[0.06] px-4 py-3 text-sm text-muted-foreground" role="status">Mock funding fixture staged. No testnet balance transfer was asserted.</p> : null}
+              <div className="border border-border bg-white/[0.02] p-4 text-sm text-muted-foreground rounded-xl"><p className="label-mono text-foreground">What happens</p><ol className="mt-3 space-y-2"><li>1. Pilot confirms the account has XRP for reserves, fees{liveDevAcquisition ? ", and the capped RLUSD acquisition" : ""}.</li><li>2. Harbor builds and simulates the TrustSet; your wallet signs that exact transaction, then Pilot relays it through its fixed test-network provider.</li><li>3. {liveDevAcquisition ? "Pilot unlocks the separate 75 RLUSD acquisition approval." : "The configured test-network stablecoin funding handoff runs."}</li></ol></div>
+              {fundingSource === "fixture" ? <p className="border border-info/30 bg-info/[0.06] px-4 py-3 text-sm text-muted-foreground rounded-xl" role="status">Mock funding fixture staged. No testnet balance transfer was asserted.</p> : null}
               <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between"><BackButton onClick={() => setStep("access")} /><PrimaryButton busy={busy} icon={<NetworkIcon className="size-4" />} label={funded ? fundingSource === "fixture" ? "Mock budget staged" : "Budget funded" : "Create trust line"} onClick={prepareFunding} /></div>
             </div>
           ) : null}
@@ -4922,7 +4928,7 @@ export function OnboardingFlow({
             <div className="space-y-6">
               <StepHeading eyebrow="Optional trading · step 2 of 6" title="Acquire 75 official Testnet RLUSD">Review an exact-output, fill-or-kill offer. It receives exactly 75 RLUSD or cancels, uses a 1% slippage ceiling, and can spend no more than 275 XRP.</StepHeading>
               <AccountPanel account={account} network={network} />
-              <div className="border border-approval/35 bg-approval/[0.06] p-4 text-sm text-muted-foreground">
+              <div className="border border-approval/35 bg-approval/[0.06] p-4 text-sm text-muted-foreground rounded-xl">
                 <p className="label-mono text-[color-mix(in_oklab,var(--approval)_80%,var(--foreground))]">Exact owner approval</p>
                 <ul className="mt-3 space-y-2">
                   <li>75 official Testnet RLUSD</li>
@@ -4930,7 +4936,7 @@ export function OnboardingFlow({
                   <li>Fill or kill (FOK): all 75 RLUSD or the offer cancels</li>
                 </ul>
               </div>
-              {acquisition?.status === "signed_pending" ? <p className="border border-info/30 bg-info/[0.06] px-4 py-3 text-sm text-muted-foreground" role="status">The signed acquisition is pending. Check status safely; Pilot will not sign or submit it again.</p> : null}
+              {acquisition?.status === "signed_pending" ? <p className="border border-info/30 bg-info/[0.06] px-4 py-3 text-sm text-muted-foreground rounded-xl" role="status">The signed acquisition is pending. Check status safely; Pilot will not sign or submit it again.</p> : null}
               <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between"><BackButton onClick={() => setStep("fund")} /><PrimaryButton busy={busy} icon={<ShieldCheck className="size-4" />} label={acquisition?.status === "signed_pending" ? "Check acquisition status" : "Review RLUSD acquisition"} onClick={prepareAcquisition} /></div>
             </div>
           ) : null}
@@ -4938,7 +4944,7 @@ export function OnboardingFlow({
           {step === "delegate" && !tradingStepLocked ? (
             <div className="space-y-6">
               <StepHeading eyebrow={`Optional trading · step ${liveDevAcquisition ? 3 : 2} of ${liveDevAcquisition ? 6 : 5}`} title="Approve seven narrow permissions">None can send value to another account. Your wallet signs DelegateSet; Harbor's delegate pays network fees for permitted actions.</StepHeading>
-              <ul className="grid gap-px border border-border bg-border sm:grid-cols-2">{DEFAULT_PERMISSIONS.map((permission) => <li className="flex items-center gap-2 bg-card px-3 py-2.5 font-mono text-[11px] uppercase tracking-wide" key={permission}><Check aria-hidden="true" className="size-3.5 shrink-0 text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))]" />{permission.replace(/([a-z])([A-Z])/g, "$1 $2")}</li>)}</ul>
+              <ul className="grid gap-px border border-border bg-border sm:grid-cols-2 rounded-xl overflow-hidden">{DEFAULT_PERMISSIONS.map((permission) => <li className="flex items-center gap-2 bg-card px-3 py-2.5 text-[13px]" key={permission}><Check aria-hidden="true" className="size-3.5 shrink-0 text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))]" />{permission.replace(/([a-z])([A-Z])/g, "$1 $2")}</li>)}</ul>
               <p className="border-l-2 border-approval/60 bg-approval/[0.05] px-4 py-3 text-sm text-muted-foreground">Payments, account controls, vaults, lending, and outer Batch transactions always require your signature.</p>
               {provider === "ledger" && link?.status === "pending" ? (
                 <LedgerSigningGuide
@@ -4957,7 +4963,7 @@ export function OnboardingFlow({
           {step === "verify" && !tradingStepLocked ? (
             <div className="space-y-6">
               <StepHeading eyebrow={`Optional trading · step ${liveDevAcquisition ? 4 : 3} of ${liveDevAcquisition ? 6 : 5}`} title="Verify a bounded budget">Mastercard Open Finance supplies a mock, hash-only proof and a budget proposal. Raw customer references and credentials never reach this browser.</StepHeading>
-              {provider === "ledger" ? <p className="border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">Delegation validated. Turn blind signing off again in the XRP app before continuing.</p> : null}
+              {provider === "ledger" ? <p className="border border-approval bg-approval/10 px-4 py-3 text-sm text-approval rounded-xl">Delegation validated. Turn blind signing off again in the XRP app before continuing.</p> : null}
               <OpenFinanceStep dailyCapUsd={25} onVerified={recordOpenFinance} />
               {openFinance ? (
                 <p className="rounded-2xl border border-primary/20 bg-primary/8 px-4 py-3 text-sm text-muted-foreground" role="status">
@@ -5015,47 +5021,50 @@ export function OnboardingFlow({
 
           {step === "ready" && !tradingStepLocked ? (
             <div className="space-y-6 text-center sm:text-left">
-              <div className="mx-auto grid size-14 place-items-center border border-executed/40 bg-executed/10 text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))] sm:mx-0"><Check aria-hidden="true" className="size-7" strokeWidth={1.75} /></div>
+              <div className="mx-auto grid size-14 place-items-center border border-executed/40 bg-executed/10 text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))] sm:mx-0 rounded-xl"><Check aria-hidden="true" className="size-7" strokeWidth={1.75} /></div>
               <StepHeading eyebrow={`Optional trading · step ${liveDevAcquisition ? 6 : 5} of ${liveDevAcquisition ? 6 : 5} · setup complete`} title={`Your ${network ?? "test-network"} trading setup is active`}>{fundingSource === "fixture" ? "The explicit mock funding fixture is staged" : "The test-network wallet is funded"}, the delegate is active, and the bounded AP4M mandate is ACTIVE.</StepHeading>
               <AccountPanel account={account} network={network} />
               {provider === "ledger" ? (
-                <p className="border border-executed/35 bg-executed/10 px-4 py-3 text-left text-sm text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))]">
+                <p className="border border-executed/35 bg-executed/10 px-4 py-3 text-left text-sm text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))] rounded-xl">
                   Owner: Ledger (account {ledgerAccountIndex}, verified on device) · Harbor delegate: {link?.permissions.length ?? DEFAULT_PERMISSIONS.length} permissions
                 </p>
               ) : null}
               {activeMandate ? <MandateSummary draft={activeMandate.form} mandateId={activeMandate.mandate.id} payees={payeeOptions} setupTransactionHashes={activeMandate.setupTransactionHashes} /> : null}
-              <div className="grid gap-px border border-border bg-border text-left sm:grid-cols-3"><div className="bg-card p-4"><p className="label-mono">Delegation</p><p className="mt-1.5 font-mono text-sm uppercase text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))]">{link?.status ?? "active"}</p></div><div className="bg-card p-4"><p className="label-mono">Permissions</p><p className="mt-1.5 font-mono text-sm">{link?.permissions.length ?? DEFAULT_PERMISSIONS.length} of 10 maximum</p></div><div className="bg-card p-4"><p className="label-mono">Funding</p><p className="mt-1.5 text-sm font-medium">{fundingSource === "fixture" ? "Mock fixture" : fundingSource === "acquisition" ? "75 Testnet RLUSD acquired" : `${network ?? "Test network"} route`}</p></div></div>
-              {devRevocationRequired ? <p className="border border-blocked/35 bg-blocked/10 px-4 py-3 text-sm text-blocked">The owner key exists only in this browser tab session. Revoke the active delegation before closing this tab or leaving onboarding. Pilot chat remains disabled until revocation is proven.</p> : null}
+              <div className="grid gap-px border border-border bg-border text-left sm:grid-cols-3 rounded-xl overflow-hidden"><div className="bg-card p-4"><p className="label-mono">Delegation</p><p className="mt-1.5 text-sm text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))]">{link?.status ?? "active"}</p></div><div className="bg-card p-4"><p className="label-mono">Permissions</p><p className="mt-1.5 font-mono text-sm">{link?.permissions.length ?? DEFAULT_PERMISSIONS.length} of 10 maximum</p></div><div className="bg-card p-4"><p className="label-mono">Funding</p><p className="mt-1.5 text-sm font-medium">{fundingSource === "fixture" ? "Mock fixture" : fundingSource === "acquisition" ? "75 Testnet RLUSD acquired" : `${network ?? "Test network"} route`}</p></div></div>
+              {devRevocationRequired ? <p className="border border-blocked/35 bg-blocked/10 px-4 py-3 text-sm text-blocked rounded-xl">The owner key exists only in this browser tab session. Revoke the active delegation before closing this tab or leaving onboarding. Pilot chat remains disabled until revocation is proven.</p> : null}
               {provider !== "dev" && supportsOnboardingRevocation(provider) ? (
-                <p className="border border-border bg-card px-4 py-3 text-left text-sm leading-6 text-muted-foreground">
+                <p className="border border-border bg-card px-4 py-3 text-left text-sm leading-6 text-muted-foreground rounded-xl">
                   Owner control: revocation signs an empty-permission DelegateSet for this exact Testnet account. It stops new Harbor delegated submissions only after validated ledger evidence; it does not cancel an in-flight or uncertain transaction and does not delete your external wallet key.
                   {provider === "ledger" && !wallet ? " Reconnect the exact Ledger account before review or signing." : ""}
                 </p>
               ) : null}
               {provider !== "dev" && persistedPendingExitGuard ? (
-                <p className="border border-blocked/35 bg-blocked/10 px-4 py-3 text-left text-sm leading-6 text-blocked">
+                <p className="border border-blocked/35 bg-blocked/10 px-4 py-3 text-left text-sm leading-6 text-blocked rounded-xl">
                   A signed onboarding transaction is unresolved. Reconnect this exact wallet to resume status reconciliation; Pilot will not request another signature or submit a replacement transaction.
                 </p>
               ) : null}
               <p className="text-xs leading-5 text-muted-foreground">Profile data remains in this browser session until a wallet-bound server capability can safely persist <span className="font-mono">Pilot/Profile.md</span>.</p>
               <div className="flex flex-col gap-3 sm:flex-row">
                 {provider === "ledger" && !wallet ? (
-                  <button className="bracket bracket-light inline-flex h-11 w-full items-center justify-center gap-2 border border-border px-4 font-mono text-[11px] font-medium uppercase tracking-wide transition hover:bg-white/[0.04] sm:w-auto" disabled={busy} onClick={connectWallet} type="button">
+                  <button className="bracket bracket-light inline-flex h-11 w-full items-center justify-center gap-2 border border-border px-4 text-[13px] font-medium transition hover:bg-white/[0.04] sm:w-auto rounded-md" disabled={busy} onClick={connectWallet} type="button">
                     <WalletCards className="size-4" /> Reconnect Ledger
                   </button>
                 ) : null}
                 {devRevocationRequired ? (
-                  <button className="inline-flex h-11 items-center justify-center gap-2 bg-foreground px-4 font-mono text-[11px] font-medium uppercase tracking-wide text-background transition hover:bg-foreground/90 w-full cursor-not-allowed opacity-45 sm:w-auto" disabled type="button">Revoke before opening Pilot <ArrowRight className="size-4" /></button>
+                  <button className="inline-flex h-11 items-center justify-center gap-2 bg-primary px-4 text-[13px] font-medium text-primary-foreground transition hover:bg-primary/90 w-full cursor-not-allowed opacity-45 sm:w-auto rounded-md" disabled type="button">Revoke before opening Pilot <ArrowRight className="size-4" /></button>
                 ) : (
-                  <a className="inline-flex h-11 items-center justify-center gap-2 bg-foreground px-4 font-mono text-[11px] font-medium uppercase tracking-wide text-background transition hover:bg-foreground/90 w-full sm:w-auto" href="/chat">Open workspace <ArrowRight className="size-4" /></a>
+                  <>
+                    <a className="inline-flex h-11 items-center justify-center gap-2 bg-primary px-4 text-[13px] font-medium text-primary-foreground transition hover:bg-primary/90 w-full sm:w-auto rounded-md" href="/chat">Open Pilot <ArrowRight className="size-4" /></a>
+                    <a className="bracket bracket-light inline-flex h-11 w-full items-center justify-center gap-2 border border-border px-4 text-[13px] font-medium transition hover:bg-white/[0.04] sm:w-auto rounded-md" href="/chat?mode=autonomous">Draft a strategy</a>
+                  </>
                 )}
                 {devRevocationRequired ? (
-                  <button className="inline-flex h-11 w-full items-center justify-center gap-2 border border-blocked/45 px-4 font-mono text-[11px] font-medium uppercase tracking-wide text-blocked transition hover:bg-blocked/10 disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto" disabled={busy} onClick={prepareRevocation} type="button">
+                  <button className="inline-flex h-11 w-full items-center justify-center gap-2 border border-blocked/45 px-4 text-[13px] font-medium text-blocked transition hover:bg-blocked/10 disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto rounded-md" disabled={busy} onClick={prepareRevocation} type="button">
                     <ShieldCheck className="size-4" /> Revoke and discard local wallet
                   </button>
                 ) : null}
                 {externalRevocationAvailable ? (
-                  <button className="inline-flex h-11 w-full items-center justify-center gap-2 border border-blocked/45 px-4 font-mono text-[11px] font-medium uppercase tracking-wide text-blocked transition hover:bg-blocked/10 disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto" disabled={busy} onClick={prepareRevocation} type="button">
+                  <button className="inline-flex h-11 w-full items-center justify-center gap-2 border border-blocked/45 px-4 text-[13px] font-medium text-blocked transition hover:bg-blocked/10 disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto rounded-md" disabled={busy} onClick={prepareRevocation} type="button">
                     <ShieldCheck className="size-4" /> Review delegation revocation
                   </button>
                 ) : null}
@@ -5081,7 +5090,7 @@ export function OnboardingFlow({
           ) : null}
 
           {error ? (
-            <div className="mt-5 border border-blocked/35 bg-blocked/10 px-4 py-3" role="alert">
+            <div className="mt-5 border border-blocked/35 bg-blocked/10 px-4 py-3 rounded-xl" role="alert">
               <p className="text-sm leading-6 text-blocked">{error}</p>
               {errorCode ? <p className="mt-2 break-words border-t border-blocked/25 pt-2 font-mono text-[11px] text-blocked/80">{errorCode}</p> : null}
             </div>
@@ -5115,13 +5124,13 @@ function StepHeading({ children, eyebrow, title }: { children: React.ReactNode; 
 }
 
 function AccountPanel({ account, network }: { account?: string; network?: TestNetwork }) {
-  return <div className="min-w-0 border border-border bg-white/[0.02] p-4"><div className="flex items-center justify-between gap-3"><span className="label-mono">Budget address</span><span className="border border-border-strong px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-foreground">{network ?? "loading"}</span></div><p className="mt-2 break-all font-mono text-xs">{account}</p></div>;
+  return <div className="min-w-0 border border-border bg-white/[0.02] p-4 rounded-xl"><div className="flex items-center justify-between gap-3"><span className="label-mono">Budget address</span><span className="border border-border-strong px-1.5 py-0.5 text-xs font-medium text-foreground rounded capitalize">{network ?? "loading"}</span></div><p className="mt-2 break-all font-mono text-xs">{account}</p></div>;
 }
 
 function BackButton({ onClick }: { onClick: () => void }) {
-  return <button className="bracket bracket-light inline-flex h-11 items-center justify-center gap-2 border border-border bg-white/[0.03] px-4 font-mono text-[11px] font-medium uppercase tracking-wide transition hover:bg-white/[0.06]" onClick={onClick} type="button"><ArrowLeft aria-hidden="true" className="size-4" />Back</button>;
+  return <button className="bracket bracket-light inline-flex h-11 items-center justify-center gap-2 border border-border bg-white/[0.03] px-4 text-[13px] font-medium transition hover:bg-white/[0.06] rounded-md" onClick={onClick} type="button"><ArrowLeft aria-hidden="true" className="size-4" />Back</button>;
 }
 
 function PrimaryButton({ busy, disabled = false, icon, label, onClick }: { busy: boolean; disabled?: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {
-  return <button className="inline-flex h-11 items-center justify-center gap-2 bg-foreground px-4 font-mono text-[11px] font-medium uppercase tracking-wide text-background transition hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-45" disabled={busy || disabled} onClick={onClick} type="button">{busy ? <LoaderCircle className="size-4 animate-spin" /> : icon}{label}</button>;
+  return <button className="inline-flex h-11 items-center justify-center gap-2 bg-primary px-4 text-[13px] font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-45 rounded-md" disabled={busy || disabled} onClick={onClick} type="button">{busy ? <LoaderCircle className="size-4 animate-spin" /> : icon}{label}</button>;
 }

@@ -302,9 +302,9 @@ export function PreferenceCard({ proposal }: { proposal: PreferenceProposalEvent
   };
 
   return (
-    <section className="bracket mt-3 border border-approval/35 bg-card" aria-label={`Preference proposal: ${activeProposal.preference}`}>
+    <section className="bracket mt-3 border border-approval/35 bg-card rounded-xl overflow-hidden" aria-label={`Preference proposal: ${activeProposal.preference}`}>
       <header className="flex items-start gap-3 border-b border-border px-4 py-4">
-        <span className="grid h-8 w-8 shrink-0 place-items-center border border-approval/35 text-approval"><SlidersHorizontal className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" /></span>
+        <span className="grid h-8 w-8 shrink-0 place-items-center border border-approval/35 text-approval rounded-md"><SlidersHorizontal className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" /></span>
         <div className="min-w-0">
           <p className="label-mono text-approval">Preference proposal</p>
           <h3 className="mt-1 break-words text-sm font-medium tracking-tight">{activeProposal.preference}</h3>
@@ -315,12 +315,12 @@ export function PreferenceCard({ proposal }: { proposal: PreferenceProposalEvent
       <div className="space-y-3 px-4 py-4">
         <p className="text-xs leading-5 text-muted-foreground">This is only a proposal. Pilot {activeProposal.structured ? "uses it in later chats" : <>updates <span className="font-mono text-foreground/80">Pilot/Profile.md</span></>} only after you explicitly accept.</p>
         {activeProposal.workflowLesson ? (
-          <p className="border border-primary/15 bg-primary/[0.04] px-3 py-2 text-xs leading-5 text-muted-foreground">
+          <p className="border border-primary/15 bg-primary-soft px-3 py-2 text-xs leading-5 text-muted-foreground rounded-xl">
             A separate workflow lesson backed by a validated trade is awaiting review in Memory. Accepting this preference does not accept that lesson.
           </p>
         ) : null}
         {activeProposal.hermesAdvisory ? (
-          <div className="border border-primary/15 bg-primary/[0.04] px-3 py-2 text-xs leading-5 text-muted-foreground">
+          <div className="border border-primary/15 bg-primary-soft px-3 py-2 text-xs leading-5 text-muted-foreground rounded-xl">
             <p className="font-semibold text-foreground/85">Optional Hermes review</p>
             <p className="mt-1">{activeProposal.hermesAdvisory.summary}</p>
             {activeProposal.hermesAdvisory.caveats.length ? (
@@ -333,17 +333,17 @@ export function PreferenceCard({ proposal }: { proposal: PreferenceProposalEvent
             </p>
           </div>
         ) : null}
-        {state === "accepted" ? <p className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wide text-executed" role="status"><Check className="h-4 w-4" aria-hidden="true" />Accepted and saved to your profile.</p> : null}
-        {state === "rejected" ? <p className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wide text-muted-foreground" role="status"><X className="h-4 w-4" aria-hidden="true" />Not saved. Your profile was unchanged.</p> : null}
+        {state === "accepted" ? <p className="flex items-center gap-2 text-[13px] text-executed" role="status"><Check className="h-4 w-4" aria-hidden="true" />Accepted and saved to your profile.</p> : null}
+        {state === "rejected" ? <p className="flex items-center gap-2 text-[13px] text-muted-foreground" role="status"><X className="h-4 w-4" aria-hidden="true" />Not saved. Your profile was unchanged.</p> : null}
         {state === "error" ? <p className="flex items-start gap-2 text-xs leading-5 text-blocked" role="alert"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{error}</p> : null}
 
         {state !== "accepted" && state !== "rejected" ? (
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => void accept()} disabled={state === "accepting"} className="inline-flex h-9 items-center gap-2 bg-approval px-3.5 font-mono text-[11px] font-semibold uppercase tracking-wide text-approval-foreground hover:brightness-105 disabled:cursor-wait disabled:opacity-60">
+            <button type="button" onClick={() => void accept()} disabled={state === "accepting"} className="inline-flex h-9 items-center gap-2 bg-primary px-3.5 text-[13px] font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-60 rounded-md">
               {state === "accepting" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
               {state === "accepting" ? "Saving" : state === "error" ? "Try again" : "Accept preference"}
             </button>
-            <button type="button" onClick={() => void reject()} disabled={state === "accepting"} className="bracket bracket-light h-9 border border-border bg-white/[0.03] px-3.5 font-mono text-[11px] uppercase tracking-wide text-muted-foreground hover:bg-white/[0.06] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45">Reject</button>
+            <button type="button" onClick={() => void reject()} disabled={state === "accepting"} className="bracket bracket-light h-9 border border-border bg-white/[0.03] px-3.5 text-[13px] text-muted-foreground hover:bg-white/[0.06] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45 rounded-md">Reject</button>
           </div>
         ) : null}
       </div>

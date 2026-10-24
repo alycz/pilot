@@ -178,7 +178,7 @@ export function AnalyticsView() {
                 type="button"
                 aria-pressed={mode === "live" && network === option}
                 onClick={() => { setMode("live"); setNetwork(option); }}
-                className={`h-9 border px-3 font-mono text-[10px] uppercase tracking-wide ${mode === "live" && network === option ? "border-primary bg-primary/[0.07] text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}
+                className={`h-9 border px-3 text-xs rounded-md ${mode === "live" && network === option ? "border-primary bg-primary-soft text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}
               >
                 {option === "testnet" ? "Testnet live" : "Mainnet read-only"}
               </button>
@@ -187,12 +187,12 @@ export function AnalyticsView() {
               type="button"
               aria-pressed={mode === "demo"}
               onClick={() => { setMode("demo"); setNetwork("testnet"); }}
-              className={`h-9 border px-3 font-mono text-[10px] uppercase tracking-wide ${mode === "demo" ? "border-approval bg-approval/[0.07] text-approval" : "border-border text-muted-foreground hover:text-foreground"}`}
+              className={`h-9 border px-3 text-xs rounded-md ${mode === "demo" ? "border-approval bg-approval/[0.07] text-approval" : "border-border text-muted-foreground hover:text-foreground"}`}
             >
               Illustrative demo
             </button>
           </div>
-          <p className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {mode === "demo" ? "Fixture values · never live" : `${network} · validated read only · no signing authority`}
           </p>
         </div>

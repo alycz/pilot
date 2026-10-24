@@ -45,6 +45,22 @@ describe("Pilot chat stream parts", () => {
     },
   };
 
+  it("does not expose raw tool errors to the UI", () => {
+    const onToolError = vi.fn();
+    parsePilotStreamLine(`data: ${JSON.stringify({
+      type: "tool-output-error",
+      toolCallId: "tool-1",
+      errorText: `provider-token=secret-${"x".repeat(2_000)}`,
+    })}`, {
+      onText: vi.fn(),
+      onCard: vi.fn(),
+      onPreference: vi.fn(),
+      onToolError,
+    });
+    expect(onToolError).toHaveBeenCalledWith("tool-1", "The requested tool could not complete.");
+    expect(onToolError.mock.calls[0]?.[1]).not.toContain("provider-token");
+  });
+
   it("accepts only strictly bound exact/live AP4M evidence parts", () => {
     const onAp4m = vi.fn();
     const callbacks = { onText: vi.fn(), onCard: vi.fn(), onPreference: vi.fn(), onAp4m };

@@ -194,8 +194,8 @@ test("model access stays hidden until a wallet-bound session is restored", async
   await installWalletFirstRoutes(page, boundary, { oauthConnected: true });
 
   await page.goto(pilotRoutes.onboarding);
-  await expect(page.getByRole("heading", { name: /Authenticate your budget wallet/i })).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Choose model access/i })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /^Connect your wallet$/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Choose an AI model/i })).toHaveCount(0);
   await expect(page.getByRole("link", { name: /Connect OpenRouter/i })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Try free demo/i })).toHaveCount(0);
   await page.waitForTimeout(250);
@@ -215,7 +215,7 @@ test("model access stays hidden until a wallet-bound session is restored", async
     url: lane.baseURL,
   }]);
   await page.goto(`${pilotRoutes.onboarding}?openrouter=connected`);
-  await expect(page.getByRole("heading", { name: /Choose model access/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Choose an AI model/i })).toBeVisible();
   await expect(page.getByRole("link", { name: /Connect OpenRouter/i })).toBeVisible();
   await expect(page.getByRole("button", { name: /Continue with OpenRouter/i })).toBeVisible();
   expect(boundary.forbiddenBeforeWalletProof).toEqual([]);
@@ -252,11 +252,10 @@ test("wallet-first onboarding is responsive without horizontal overflow", async 
   ]) {
     await page.setViewportSize(viewport);
     await page.goto(pilotRoutes.onboarding);
-    await expect(page.getByRole("heading", { name: /Authenticate your budget wallet/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Connect your wallet$/i })).toBeVisible();
     await expect(page.getByRole("button", { name: /gemwallet/i })).toBeVisible();
     await expect(page.getByRole("button", { name: /crossmark/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /xaman/i })).toBeDisabled();
-    await expect(page.getByText(/Xaman needs an app API key/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /xaman/i })).toHaveCount(0);
     const overflow = await page.evaluate(() =>
       document.documentElement.scrollWidth - document.documentElement.clientWidth
     );
@@ -291,14 +290,14 @@ test("an unavailable free demo stays disabled without hiding OpenRouter or read-
   }]);
 
   await page.goto(`${pilotRoutes.onboarding}?openrouter=error`);
-  await expect(page.getByRole("heading", { name: /Choose model access/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Choose an AI model/i })).toBeVisible();
   await expect(page.getByRole("button", { name: /Free demo unavailable/i })).toBeDisabled();
   await expect(page.getByRole("status")).toContainText("The free demo is not configured.");
   await expect(page.getByRole("link", { name: /Connect OpenRouter/i })).toBeVisible();
   expect(boundary.demoSessionResponses).toEqual([]);
 
   await page.getByRole("button", { name: /Use a different wallet/i }).click();
-  await expect(page.getByRole("link", { name: /Explore the read-only demo/i })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Exit setup/i })).toBeVisible();
 });
 
 test("OpenRouter error recovery rejects stored Xaman with the exact unavailable reason", async ({
@@ -327,7 +326,7 @@ test("OpenRouter error recovery rejects stored Xaman with the exact unavailable 
   }]);
 
   await page.goto(`${pilotRoutes.onboarding}?openrouter=error`);
-  await expect(page.getByRole("heading", { name: /Authenticate your budget wallet/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Connect your wallet$/i })).toBeVisible();
   await expect(page.getByRole("alert").filter({ hasText: "Xaman needs an app API key" })).toContainText(
     "Xaman needs an app API key, and the current adapter cannot sign Pilot's non-broadcast wallet-auth proof safely.",
   );
@@ -363,11 +362,11 @@ test("OpenRouter denial restores the exact wallet before demo activation", async
   }]);
 
   await page.goto(`${pilotRoutes.onboarding}?openrouter=error`);
-  await expect(page.getByRole("heading", { name: /Choose model access/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Choose an AI model/i })).toBeVisible();
   await expect(page.getByText(/No provider credential was saved/i)).toBeVisible();
   await page.getByRole("button", { name: /Try free demo/i }).click();
 
-  await expect(page.getByRole("heading", { name: /Wallet and model ready/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /You’re all set/i })).toBeVisible();
   await expect(page.getByRole("button", { name: /Enable Testnet trading/i })).toBeVisible();
   expect(boundary.demoSessionResponses).toHaveLength(1);
   expect(boundary.forbiddenBeforeWalletProof).toEqual([]);
@@ -419,7 +418,7 @@ test("logged-out chat remains a local scripted exploration with no model or ledg
   });
 
   await page.goto(pilotRoutes.chat);
-  await expect(page.getByText("This is a simulated demo.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Pick a prompt below or type your own", { exact: false })).toBeVisible();
   await page.getByRole("textbox", { name: /Message Pilot/i }).fill("Show me a safe swap demo");
   await page.getByRole("button", { name: "Send message" }).click();
   await expect(page.getByText(/simulated|demo/i).first()).toBeVisible();

@@ -45,11 +45,11 @@ export function GuardrailBanner({
   return (
     <section
       aria-label="AWS Bedrock Guardrails notice"
-      className="rounded-2xl border border-amber-400/25 bg-amber-400/[0.055] px-4 py-3 text-foreground/90"
+      className="rounded-2xl border border-approval/25 bg-approval/[0.055] px-4 py-3 text-foreground/90"
       role="status"
     >
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-amber-400/10 text-amber-300">
+        <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-approval/10 text-approval">
           <ShieldAlert aria-hidden="true" className="h-3.5 w-3.5" />
         </span>
         <div className="min-w-0 flex-1">
@@ -60,7 +60,7 @@ export function GuardrailBanner({
                 : `AWS Bedrock Guardrails blocked prompt injections hidden in these fields: ${formatList(labels)}.`}
             </p>
             {includesMock ? (
-              <span className="rounded-full border border-amber-400/20 bg-amber-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-amber-200">
+              <span className="rounded-full border border-approval/20 bg-approval/10 px-2 py-0.5 text-xs font-bold text-approval">
                 Mock screening
               </span>
             ) : null}

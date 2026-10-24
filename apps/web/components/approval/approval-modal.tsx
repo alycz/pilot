@@ -300,13 +300,13 @@ export function ApprovalModal({
         ref={dialogRef}
         aria-labelledby={titleId}
         aria-modal="true"
-        className="max-h-[94dvh] w-full overflow-y-auto border border-border-strong bg-card shadow-2xl shadow-black/[0.14] sm:max-w-lg"
+        className="max-h-[94dvh] w-full overflow-y-auto border border-border-strong bg-card shadow-2xl shadow-black/[0.14] sm:max-w-lg rounded-xl"
         role="dialog"
         tabIndex={-1}
       >
         <header className="flex items-start justify-between gap-4 border-b border-border px-5 py-5 sm:px-6">
           <div>
-            <p className="mb-3 inline-flex items-center gap-1.5 border border-approval/40 bg-approval/10 px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-[color-mix(in_srgb,var(--approval)_72%,var(--foreground))]">
+            <p className="mb-3 inline-flex items-center gap-1.5 border border-approval/40 bg-approval/10 px-1.5 py-0.5 text-xs font-medium text-[color-mix(in_srgb,var(--approval)_72%,var(--foreground))] rounded capitalize">
               <ShieldCheck className="size-3" aria-hidden="true" /> Owner approval
             </p>
             <h2 className="text-lg font-medium tracking-tight" id={titleId}>
@@ -315,7 +315,7 @@ export function ApprovalModal({
           </div>
           <button
             aria-label="Close approval"
-            className="grid h-8 w-8 place-items-center border border-border text-muted-foreground transition hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            className="grid h-8 w-8 place-items-center border border-border text-muted-foreground transition hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 rounded-md"
             disabled={busy}
             onClick={onClose}
             type="button"
@@ -325,12 +325,12 @@ export function ApprovalModal({
         </header>
 
         <div className="space-y-4 px-5 py-5 sm:px-6">
-          <div className="border border-border bg-background/50 p-4">
+          <div className="border border-border bg-background/50 p-4 rounded-xl">
             <p className="label-mono">Action</p>
             <p className="mt-2 text-base font-medium tracking-tight">{request.summary.action}</p>
           </div>
 
-          <dl className="grid min-w-0 gap-px border border-border bg-border text-sm sm:grid-cols-2">
+          <dl className="grid min-w-0 gap-px border border-border bg-border text-sm sm:grid-cols-2 rounded-xl overflow-hidden">
             <div className="min-w-0 bg-card px-3.5 py-3">
               <dt className="label-mono">Amount</dt>
               <dd className="mt-1 break-words font-mono text-xs text-foreground">
@@ -349,7 +349,7 @@ export function ApprovalModal({
             </div>
             <div className="bg-card px-3.5 py-3">
               <dt className="label-mono">Network</dt>
-              <dd className="mt-1 font-mono text-xs uppercase">{request.summary.network.replace("-", " ")}</dd>
+              <dd className="mt-1 text-xs">{request.summary.network.replace("-", " ")}</dd>
             </div>
           </dl>
 
@@ -358,11 +358,11 @@ export function ApprovalModal({
           </p>
 
           {ledger ? (
-            <div className="space-y-3 border border-border bg-background/50 p-4">
+            <div className="space-y-3 border border-border bg-background/50 p-4 rounded-xl">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="label-mono">Ledger review</p>
                 {ledgerSigned ? (
-                  <span className="border border-executed/35 bg-executed/10 px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))]">
+                  <span className="border border-executed/35 bg-executed/10 px-2 py-1 text-xs text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))] rounded">
                     {ledgerApprovalSignerLabel(ledger)}
                   </span>
                 ) : null}
@@ -370,13 +370,13 @@ export function ApprovalModal({
               <DeviceStatus state={ledger.deviceState} signed={ledgerSigned} transport={ledger.transport} />
               {ledger.signingMode === "blind" ? (
                 ledger.blindLegend ?? (
-                  <p className="border border-amber-300 bg-amber-50 p-3 text-xs font-medium text-amber-950">
+                  <p className="border border-approval bg-approval/10 p-3 text-xs font-medium text-approval rounded-xl">
                     This transaction requires blind signing. Match every field in Pilot&apos;s transaction-specific legend before approving it.
                   </p>
                 )
               ) : (
-                <div className="border border-slate-300 bg-white p-3 text-slate-900">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-slate-600">
+                <div className="border border-slate-300 bg-white p-3 text-slate-900 rounded-xl">
+                  <p className="text-xs text-slate-600">
                     Expected Ledger screens
                   </p>
                   <ul className="mt-2 space-y-1 text-xs">
@@ -390,19 +390,19 @@ export function ApprovalModal({
           ) : null}
 
           {expired && ledger === undefined ? (
-            <p className="flex gap-2 border border-blocked/35 bg-blocked/10 px-4 py-3 text-sm text-blocked">
+            <p className="flex gap-2 border border-blocked/35 bg-blocked/10 px-4 py-3 text-sm text-blocked rounded-xl">
               <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" /> This approval expired. Return to chat and build a fresh transaction.
             </p>
           ) : null}
 
           {error ? (
-            <p className="flex gap-2 border border-blocked/35 bg-blocked/10 px-4 py-3 text-sm text-blocked" role="alert">
+            <p className="flex gap-2 border border-blocked/35 bg-blocked/10 px-4 py-3 text-sm text-blocked rounded-xl" role="alert">
               <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" /> {error}
             </p>
           ) : null}
 
           {state === "complete" ? (
-            <p className="flex gap-2 border border-executed/35 bg-executed/10 px-4 py-3 text-sm text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))]" role="status">
+            <p className="flex gap-2 border border-executed/35 bg-executed/10 px-4 py-3 text-sm text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))] rounded-xl" role="status">
               <Check className="mt-0.5 size-4 shrink-0" aria-hidden="true" /> Signed by the owner and accepted for submission.
             </p>
           ) : null}
@@ -410,7 +410,7 @@ export function ApprovalModal({
 
         <footer className="flex flex-col-reverse gap-2 border-t border-border bg-white/[0.015] px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
           <button
-            className="bracket bracket-light h-10 border border-border bg-white/[0.03] px-4 font-mono text-[11px] uppercase tracking-wide transition hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-45"
+            className="bracket bracket-light h-10 border border-border bg-white/[0.03] px-4 text-[13px] transition hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-45 rounded-md"
             disabled={busy}
             onClick={state === "complete" ? onClose : () => {
               setState("review");
@@ -423,7 +423,7 @@ export function ApprovalModal({
           </button>
           {state !== "complete" ? (
             <button
-              className="inline-flex h-10 items-center justify-center gap-2 bg-approval px-4 font-mono text-[11px] font-semibold uppercase tracking-wide text-approval-foreground transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45"
+              className="inline-flex h-10 items-center justify-center gap-2 bg-primary px-4 text-[13px] font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-45 rounded-md"
               disabled={ledger !== undefined
                 ? !canAttemptLedgerApproval({
                     busy,

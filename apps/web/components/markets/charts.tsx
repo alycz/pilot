@@ -178,13 +178,13 @@ export function DepthChart({
         ) : null}
         {hover ? (
           <div
-            className="pointer-events-none absolute z-10 min-w-[11rem] border border-border-strong bg-popover px-3 py-2 font-mono text-[11px] shadow-xl shadow-black/[0.08]"
+            className="pointer-events-none absolute z-10 min-w-[11rem] border border-border-strong bg-popover px-3 py-2 font-mono text-[11px] shadow-xl shadow-black/[0.08] rounded-xl"
             style={{
               left: Math.min(Math.max(hover.x + 12, 0), Math.max(0, width - 190)),
               top: Math.max(0, hover.y - 64),
             }}
           >
-            <p className={`uppercase tracking-wide ${hover.side === "bid" ? "text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))]" : "text-destructive"}`}>{hover.side === "bid" ? "Bid level" : "Ask level"}</p>
+            <p className={` ${hover.side === "bid" ? "text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))]" : "text-destructive"}`}>{hover.side === "bid" ? "Bid level" : "Ask level"}</p>
             <p className="mt-1 flex justify-between gap-4 text-muted-foreground">Price <span className="text-foreground">{formatPrice(hover.level.price)}</span></p>
             <p className="flex justify-between gap-4 text-muted-foreground">Size <span className="text-foreground">{formatAmount(hover.level.size, 0)} {baseSymbol}</span></p>
             <p className="flex justify-between gap-4 text-muted-foreground">Cumulative <span className="text-foreground">{formatAmount(hover.level.cumulative, 0)}</span></p>
@@ -203,27 +203,27 @@ export function DepthChart({
 export function RouteBars({ routes, quoteSymbol, focusRoute }: { routes: RankedRoute[]; quoteSymbol: string; focusRoute?: RankedRoute["route"] }) {
   const max = Math.max(...routes.map((route) => route.output), 0);
   return (
-    <ul className="space-y-px" aria-label="Quoted output by route">
+    <ul className="flex flex-1 flex-col gap-px" aria-label="Quoted output by route">
       {routes.map((route) => {
         const share = max > 0 ? (route.output / max) * 100 : 0;
         return (
           <li
             key={`${route.venue_id}-${route.route}`}
-            className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 px-4 py-3 sm:grid-cols-[12rem_minmax(0,1fr)_7.5rem] ${(focusRoute ? focusRoute === route.route : route.best) ? "bracket bracket-accent bg-primary/[0.06]" : ""}`}
+            className={`grid flex-1 grid-cols-[minmax(0,1fr)_auto] content-center items-center gap-x-4 gap-y-2 px-4 py-3 sm:grid-cols-[12rem_minmax(0,1fr)_7.5rem] ${(focusRoute ? focusRoute === route.route : route.best) ? "bracket bracket-accent bg-primary-soft" : ""}`}
           >
             <div className="min-w-0">
               <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium">
                 <span className="whitespace-nowrap">{ROUTE_LABELS[route.route]}</span>
-                {route.best ? <span className="border border-executed/30 bg-executed/10 px-1.5 py-px font-mono text-[10px] uppercase tracking-wide text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))]">Best</span> : null}
-                {focusRoute === route.route ? <span className="border border-primary/40 px-1.5 py-px font-mono text-[10px] uppercase tracking-wide text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))]">Selected</span> : null}
+                {route.best ? <span className="border border-executed/30 bg-executed/10 px-1.5 py-px text-xs text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))] rounded">Best</span> : null}
+                {focusRoute === route.route ? <span className="border border-primary/40 px-1.5 py-px text-xs text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))] rounded">Selected</span> : null}
               </p>
-              <p className="mt-0.5 truncate font-mono text-[10px] uppercase tracking-wide text-muted-foreground">{route.venue_id === "xrpl-amm" ? "XRPL AMM pool" : route.venue_id === "xrpl-dex-clob" ? "XRPL DEX order book" : route.venue_id.replaceAll("-", " ")}</p>
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">{route.venue_id === "xrpl-amm" ? "XRPL AMM pool" : route.venue_id === "xrpl-dex-clob" ? "XRPL DEX order book" : route.venue_id.replaceAll("-", " ")}</p>
             </div>
             <div className="order-3 col-span-2 min-w-0 sm:order-none sm:col-span-1">
               <div className="h-2 w-full bg-white/[0.05]" aria-hidden="true">
                 <div className={`h-full ${route.best ? "bg-executed" : "bg-muted-foreground/60"}`} style={{ width: `${share}%` }} />
               </div>
-              <p className="mt-1.5 flex flex-wrap gap-x-3 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+              <p className="mt-1.5 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
                 <span>Px {formatPrice(route.effectivePrice)}</span>
                 {route.price_impact_bps !== undefined ? <span>Impact {formatBps(route.price_impact_bps)}</span> : null}
                 {route.fee ? <span className="normal-case">{route.fee}</span> : null}
@@ -262,7 +262,7 @@ export function PoolComposition({
         <div className="h-full bg-info" style={{ width: `${baseShare}%` }} />
         <div className="h-full bg-chart-4" style={{ width: `${100 - baseShare}%` }} />
       </div>
-      <div className="mt-2 flex justify-between font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+      <div className="mt-2 flex justify-between text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="h-1.5 w-1.5 bg-info" />{baseLabel} {baseShare.toFixed(1)}%</span>
         <span className="inline-flex items-center gap-1.5">{quoteLabel} {(100 - baseShare).toFixed(1)}%<span aria-hidden="true" className="h-1.5 w-1.5 bg-chart-4" /></span>
       </div>

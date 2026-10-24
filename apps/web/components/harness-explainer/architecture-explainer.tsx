@@ -105,14 +105,14 @@ const toneStyles: Record<
     dot: "bg-fuchsia-300",
   },
   guardrail: {
-    icon: "bg-amber-400/10 text-amber-300",
-    active: "border-amber-300/55 bg-amber-400/[0.085]",
+    icon: "bg-approval/10 text-approval",
+    active: "border-approval/55 bg-approval/[0.085]",
     glow: "shadow-[0_0_28px_rgba(252,211,77,0.1)]",
-    dot: "bg-amber-300",
+    dot: "bg-approval/10",
   },
   ledger: {
-    icon: "bg-primary/10 text-primary",
-    active: "border-primary/55 bg-primary/[0.075]",
+    icon: "bg-primary-soft text-primary",
+    active: "border-primary/55 bg-primary-soft",
     glow: "shadow-[0_0_28px_oklch(0.76_0.14_177/0.1)]",
     dot: "bg-primary",
   },
@@ -125,9 +125,9 @@ const toneStyles: Record<
 };
 
 const statusStyles: Record<ExplainerStatus, string> = {
-  implemented: "border-primary/25 bg-primary/10 text-primary",
+  implemented: "border-primary/25 bg-primary-soft text-primary",
   inspired: "border-violet-300/25 bg-violet-400/10 text-violet-200",
-  optional: "border-amber-300/25 bg-amber-400/10 text-amber-200",
+  optional: "border-approval/25 bg-approval/10 text-approval",
 };
 
 const laneMeta = [
@@ -252,12 +252,12 @@ export function ArchitectureExplainer() {
             className="flex items-center gap-3 rounded-xl focus-visible:outline-offset-4"
             aria-label="Back to workspace conversation"
           >
-            <span className="grid h-9 w-9 place-items-center rounded-xl border border-primary/25 bg-primary/10 text-primary shadow-[0_0_24px_oklch(0.76_0.14_177/0.12)]">
+            <span className="grid h-9 w-9 place-items-center rounded-xl border border-primary/25 bg-primary-soft text-primary shadow-[0_0_24px_oklch(0.76_0.14_177/0.12)]">
               <Bot className="h-[1.15rem] w-[1.15rem]" />
             </span>
             <span>
-              <span className="block text-[15px] font-bold leading-none tracking-tight">Workspace</span>
-              <span className="mt-1 block text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">System tour</span>
+              <span className="block text-[15px] font-bold leading-none tracking-tight">Pilot</span>
+              <span className="mt-1 block text-xs font-medium text-muted-foreground">System tour</span>
             </span>
           </Link>
           <div className="ml-auto flex items-center gap-2">
@@ -278,11 +278,11 @@ export function ArchitectureExplainer() {
         <section className="mx-auto max-w-[94rem] px-4 pb-10 pt-12 sm:px-6 sm:pt-16 lg:px-8 lg:pt-20">
           <div className="grid items-end gap-9 lg:grid-cols-[minmax(0,1fr)_26rem]">
             <div className="max-w-4xl">
-              <p className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] text-primary">
+              <p className="inline-flex items-center gap-2 text-[13px] font-bold text-primary">
                 <span className="h-px w-7 bg-primary/70" />
                 Architecture, without the hand-waving
               </p>
-              <h1 className="mt-5 text-balance text-4xl font-semibold leading-[1.04] tracking-[-0.04em] sm:text-5xl lg:text-[4.35rem]">
+              <h1 className="mt-5 text-balance text-4xl font-semibold leading-[1.04] tracking-[-0.04em] sm:text-5xl lg:text-[4.35rem] font-display">
                 How Pilot turns context into
                 <span className="block bg-gradient-to-r from-primary via-cyan-200 to-violet-300 bg-clip-text text-transparent">
                   safer, reviewable action.
@@ -306,7 +306,7 @@ export function ArchitectureExplainer() {
           <div className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-[linear-gradient(150deg,rgba(255,255,255,.045),rgba(255,255,255,.012))] shadow-[0_28px_100px_rgba(0,0,0,0.24)]">
             <div className="flex flex-col gap-5 border-b border-white/8 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Interactive system map</p>
+                <p className="text-xs font-bold text-primary">Interactive system map</p>
                 <h2 id="flow-title" className="mt-1 text-lg font-semibold tracking-tight sm:text-xl">Follow the data—not a black box</h2>
               </div>
               <PlaybackControls
@@ -335,7 +335,7 @@ export function ArchitectureExplainer() {
                       <div key={lane.number}>
                         <div className="mb-3 flex items-baseline gap-3">
                           <span className="font-mono text-[10px] text-primary/80">{lane.number}</span>
-                          <h3 className="text-xs font-bold uppercase tracking-[0.16em] text-foreground/85">{lane.label}</h3>
+                          <h3 className="text-xs font-bold text-foreground/85">{lane.label}</h3>
                           <span className="hidden text-xs text-muted-foreground sm:inline">{lane.title} · {lane.detail}</span>
                         </div>
                         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -390,8 +390,8 @@ export function ArchitectureExplainer() {
         <section aria-labelledby="components-title" className="mx-auto max-w-[94rem] px-4 pb-20 sm:px-6 lg:px-8">
           <div className="grid gap-8 lg:grid-cols-[0.72fr_1.28fr] lg:items-start">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">What is actually here</p>
-              <h2 id="components-title" className="mt-3 text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">Clear labels for every layer.</h2>
+              <p className="text-[13px] font-bold text-primary">What is actually here</p>
+              <h2 id="components-title" className="mt-3 text-3xl font-semibold tracking-[-0.035em] sm:text-4xl font-display">Clear labels for every layer.</h2>
               <p className="mt-4 max-w-xl text-sm leading-6 text-muted-foreground">
                 “Implemented,” “inspired,” and “optional” mean different things. This page keeps those boundaries visible instead of blending them into one story.
               </p>
@@ -439,9 +439,9 @@ export function ArchitectureExplainer() {
             <div>
               <div className="flex items-center gap-2 text-primary">
                 <LockKeyhole className="h-4 w-4" />
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em]">Privacy + control</p>
+                <p className="text-[13px] font-bold">Privacy + control</p>
               </div>
-              <h2 id="boundaries-title" className="mt-3 text-3xl font-semibold tracking-[-0.035em]">What the loop does not do.</h2>
+              <h2 id="boundaries-title" className="mt-3 text-3xl font-semibold tracking-[-0.035em] font-display">What the loop does not do.</h2>
             </div>
             <ul className="grid gap-3 sm:grid-cols-2">
               {privacyBoundaries.map((boundary, index) => (
@@ -468,7 +468,7 @@ export function ArchitectureExplainer() {
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-white/8 bg-white/[0.028] px-3 py-3 sm:block lg:flex lg:px-4">
-      <p className="text-wrap text-[9px] font-bold uppercase leading-4 tracking-[0.14em] text-muted-foreground sm:text-[10px]">{label}</p>
+      <p className="text-wrap text-xs font-bold leading-4 text-muted-foreground sm:text-xs">{label}</p>
       <p className="shrink-0 text-sm font-semibold text-foreground sm:mt-1 lg:mt-0">{value}</p>
     </div>
   );
@@ -507,11 +507,11 @@ function PlaybackControls({
         <ChevronLeft className="h-4 w-4" />
       </button>
       {playing ? (
-        <button type="button" onClick={onPause} className="inline-flex h-9 items-center gap-2 rounded-lg border border-primary/25 bg-primary/10 px-3 text-xs font-semibold text-primary">
+        <button type="button" onClick={onPause} className="inline-flex h-9 items-center gap-2 rounded-lg border border-primary/25 bg-primary-soft px-3 text-xs font-semibold text-primary">
           <Pause className="h-3.5 w-3.5" /> Pause
         </button>
       ) : (
-        <button type="button" onClick={onStart} className="inline-flex h-9 items-center gap-2 rounded-lg border border-primary/25 bg-primary/10 px-3 text-xs font-semibold text-primary">
+        <button type="button" onClick={onStart} className="inline-flex h-9 items-center gap-2 rounded-lg border border-primary/25 bg-primary-soft px-3 text-xs font-semibold text-primary">
           <Play className="h-3.5 w-3.5" /> {hasStarted ? "Resume" : "Play flow"}
         </button>
       )}
@@ -633,7 +633,7 @@ function StageDetail({
             </span>
             <StatusBadge status={stage.status}>Implemented</StatusBadge>
           </div>
-          <p className="mt-7 font-mono text-[10px] uppercase tracking-[0.16em] text-primary">Stage {String(stage.order).padStart(2, "0")} of {explainerStages.length}</p>
+          <p className="mt-7 text-xs text-primary">Stage {String(stage.order).padStart(2, "0")} of {explainerStages.length}</p>
           <h3 className="mt-2 text-xl font-semibold tracking-tight">{stage.title}</h3>
           <p className="mt-3 text-sm font-medium leading-6 text-foreground/82">{stage.summary}</p>
           <p className="mt-4 text-xs leading-5 text-muted-foreground">{stage.detail}</p>
@@ -668,7 +668,7 @@ function StageDetail({
 function FlowValue({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
   return (
     <div className="rounded-xl border border-white/8 bg-white/[0.025] p-3">
-      <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
+      <p className="text-xs font-bold text-muted-foreground">{label}</p>
       <p className={`mt-1.5 text-xs font-medium leading-5 ${accent ? "text-primary" : "text-foreground/85"}`}>{value}</p>
     </div>
   );
@@ -676,7 +676,7 @@ function FlowValue({ label, value, accent = false }: { label: string; value: str
 
 function StatusBadge({ status, children }: { status: ExplainerStatus; children: ReactNode }) {
   return (
-    <span className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.11em] ${statusStyles[status]}`}>
+    <span className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-xs font-bold ${statusStyles[status]}`}>
       {children}
     </span>
   );
@@ -698,17 +698,17 @@ function ModelSwitchDemo({
         <div className="grid lg:grid-cols-[0.76fr_1.24fr]">
           <div className="border-b border-white/8 p-6 sm:p-8 lg:border-b-0 lg:border-r lg:p-10">
             <div className="flex flex-wrap gap-2">
-              <span className="inline-flex rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.11em] text-muted-foreground">Synthetic demo</span>
+              <span className="inline-flex rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-1 text-xs font-bold text-muted-foreground">Synthetic demo</span>
               <StatusBadge status="implemented">Implemented · default-off</StatusBadge>
             </div>
-            <h2 id="model-switch-title" className="mt-5 text-3xl font-semibold tracking-[-0.035em]">Switch the model. Keep the confirmed context.</h2>
+            <h2 id="model-switch-title" className="mt-5 text-3xl font-semibold tracking-[-0.035em] font-display">Switch the model. Keep the confirmed context.</h2>
             <p className="mt-4 text-sm leading-6 text-muted-foreground">{modelSwitchDemo.explanation}</p>
 
             <div className="mt-7 rounded-2xl border border-violet-300/18 bg-violet-400/[0.065] p-4">
               <div className="flex items-start gap-3">
                 <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-violet-400/10 text-violet-200"><Database className="h-4 w-4" /></span>
                 <div>
-                  <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-violet-200/80">Reviewed memory · not training</p>
+                  <p className="text-xs font-bold text-violet-200/80">Reviewed memory · not training</p>
                   <p className="mt-2 text-sm font-semibold leading-5">{modelSwitchDemo.confirmedPreference}</p>
                   <p className="mt-1.5 text-[11px] leading-5 text-muted-foreground">{modelSwitchDemo.preferenceState}</p>
                 </div>
@@ -724,7 +724,7 @@ function ModelSwitchDemo({
                   type="button"
                   aria-pressed={selectedIndex === index}
                   onClick={() => onSelect(index)}
-                  className={`min-w-0 rounded-xl border px-3 py-3 text-left transition sm:px-4 ${selectedIndex === index ? "border-primary/35 bg-primary/[0.08]" : "border-white/8 bg-white/[0.02] hover:bg-white/[0.045]"}`}
+                  className={`min-w-0 rounded-xl border px-3 py-3 text-left transition sm:px-4 ${selectedIndex === index ? "border-primary/35 bg-primary-soft" : "border-white/8 bg-white/[0.02] hover:bg-white/[0.045]"}`}
                 >
                   <span className="flex items-center gap-2 text-xs font-semibold">
                     <span className={`h-1.5 w-1.5 rounded-full ${selectedIndex === index ? "bg-primary shadow-[0_0_9px_var(--primary)]" : "bg-muted-foreground/50"}`} />
@@ -769,11 +769,11 @@ function ModelSwitchDemo({
 function DemoMessage({ actor, icon: Icon, text, accent = false }: { actor: string; icon: LucideIcon; text: string; accent?: boolean }) {
   return (
     <div className="flex min-w-0 gap-3">
-      <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl ${accent ? "bg-primary/10 text-primary" : "bg-white/[0.05] text-muted-foreground"}`}>
+      <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl ${accent ? "bg-primary-soft text-primary" : "bg-white/[0.05] text-muted-foreground"}`}>
         <Icon className="h-4 w-4" />
       </span>
       <div className="min-w-0">
-        <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground">{actor}</p>
+        <p className="text-xs font-bold text-muted-foreground">{actor}</p>
         <p className="mt-1 text-xs leading-5 text-foreground/85">{text}</p>
       </div>
     </div>

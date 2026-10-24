@@ -56,7 +56,8 @@ describe("Portfolio mock read model", () => {
         expect.objectContaining({ symbol: "RLUSD", amount: 1000 }),
       ]),
     );
-    expect(snapshot.offers).toHaveLength(1);
+    expect(snapshot.offers).toHaveLength(6);
+    expect(snapshot.offers.filter((offer) => offer.side === "Buy")).toHaveLength(2);
     expect(snapshot.delegation.status).toBe("active");
     expect(snapshot.delegation.permissions).toHaveLength(7);
     expect(snapshot.policy.daily_cap_usd).toBe(5000);

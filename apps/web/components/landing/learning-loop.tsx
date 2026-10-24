@@ -147,7 +147,6 @@ export function LearningLoop() {
   const route = useMemo(() => scene.route.map((id) => nodeById.get(id)!), [scene]);
   const activeIds = new Set<LoopNodeId>(scene.route);
   const activeLinks = new Set(scene.route.slice(1).map((id, step) => linkKey(scene.route[step]!, id)));
-  const travelSeconds = reduced ? 0 : Math.min(2.6, Math.max(0.9, (route.length - 1) * 0.55));
   const destination = route[route.length - 1]!;
   const packetPath = useMemo(() => {
     // Half the node box in diagram percent: the message rests on the box's
@@ -170,11 +169,25 @@ export function LearningLoop() {
     });
     return points;
   }, [route, diagramSize, wide]);
+  // Constant speed: each leg gets time in proportion to its length, so short
+  // hops across a box don't take as long as a full line. Only the very start
+  // and end ease, which keeps multi-hop routes from stuttering at every node.
+  const motionPlan = useMemo(() => {
+    const lengths = packetPath.slice(1).map((point, step) => Math.hypot(point.x - packetPath[step]!.x, point.y - packetPath[step]!.y));
+    const total = lengths.reduce((sum, length) => sum + length, 0);
+    if (packetPath.length < 2 || total === 0) return { duration: 0, times: undefined, ease: undefined };
+    let run = 0;
+    const times = [0, ...lengths.map((length) => (run += length) / total)];
+    const ease = lengths.map((_, step) =>
+      lengths.length === 1 ? "easeInOut" : step === 0 ? "easeIn" : step === lengths.length - 1 ? "easeOut" : "linear",
+    ) as ("easeIn" | "easeOut" | "easeInOut" | "linear")[];
+    return { duration: reduced ? 0 : Math.min(2.2, Math.max(0.6, total / 75)), times, ease };
+  }, [packetPath, reduced]);
 
   return (
     <div ref={rootRef} className="space-y-6">
       <div
-        className="border border-border bg-card"
+        className="border border-border bg-card rounded-xl"
         onFocus={(event) => setFocusPaused(event.target instanceof HTMLElement && event.target.matches(":focus-visible"))}
         onBlur={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocusPaused(false);
@@ -183,7 +196,7 @@ export function LearningLoop() {
         {/* Outcome switch */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-6">
           <p className="label-mono">Watch one message run the whole loop</p>
-          <div role="radiogroup" aria-label="Outcome" className="grid w-full grid-cols-3 border border-border sm:flex sm:w-auto">
+          <div role="radiogroup" aria-label="Outcome" className="grid w-full grid-cols-3 border border-border sm:flex sm:w-auto rounded-xl">
             {branchOptions.map((option) => (
               <button
                 key={option.id}
@@ -192,7 +205,7 @@ export function LearningLoop() {
                 aria-checked={branch === option.id}
                 title={option.hint}
                 onClick={() => chooseBranch(option.id)}
-                className={`h-8 border-r border-border px-2 font-mono text-[10px] uppercase tracking-wide transition last:border-r-0 sm:px-3 pointer-coarse:h-11 ${
+                className={`h-8 border-r border-border px-2 text-xs transition last:border-r-0 sm:px-3 pointer-coarse:h-11 ${
                   branch === option.id ? "bg-white/[0.08] text-foreground" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -206,7 +219,6 @@ export function LearningLoop() {
         <div className="grid min-w-0 lg:grid-cols-2">
           {/* Diagram */}
           <div className="relative min-w-0 overflow-hidden border-b border-border px-6 py-8 sm:p-10 lg:border-b-0 lg:border-r">
-            <div aria-hidden="true" className="bg-rules pointer-events-none absolute inset-0 opacity-60" />
             <div ref={diagramRef} className="relative mx-auto aspect-square w-full max-w-[30rem]" role="img" aria-label={`Diagram, step ${index + 1}: ${scene.title}`}>
               <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 h-full w-full" aria-hidden="true">
                 {loopLinks.map(([from, to]) => {
@@ -243,10 +255,10 @@ export function LearningLoop() {
                     <span
                       className={`grid place-items-center border transition-colors duration-300 ${node.id === "pilot" ? "h-14 w-14 sm:h-16 sm:w-16" : "h-11 w-11 sm:h-12 sm:w-12"} ${
                         here
-                          ? "bracket bracket-accent border-primary/50 bg-[color-mix(in_srgb,var(--primary)_10%,var(--card))] text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))]"
+                          ? "bracket bracket-accent border-primary-soft-border bg-primary-soft text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))]"
                           : active
                             ? "border-border-strong bg-card text-foreground"
-                            : `${node.optional ? "border-dashed" : ""} border-border bg-card text-muted-foreground`
+                            : `${node.optional ? "border-dashed rounded-xl" : ""} border-border bg-card text-muted-foreground`
                       }`}
                     >
                       <Icon className={node.id === "pilot" ? "h-6 w-6" : "h-5 w-5"} strokeWidth={1.6} aria-hidden="true" />
@@ -254,7 +266,7 @@ export function LearningLoop() {
                     {/* Labels hang below the box so the box itself sits exactly on the line ends. */}
                     <span className="absolute left-1/2 top-full mt-2.5 flex -translate-x-1/2 flex-col items-center text-center">
                       <span className={`whitespace-nowrap bg-card/80 px-1 text-[11px] font-medium sm:text-xs ${active ? "text-foreground" : "text-muted-foreground"}`}>{node.label}</span>
-                      <span className="hidden whitespace-nowrap bg-card/80 px-1 font-mono text-[9px] uppercase tracking-wide text-muted-foreground sm:block">
+                      <span className="hidden whitespace-nowrap bg-card/80 px-1 text-xs text-muted-foreground sm:block">
                         {node.optional ? "Optional · your consent" : node.role}
                       </span>
                     </span>
@@ -269,7 +281,7 @@ export function LearningLoop() {
                 className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-1/2"
                 initial={{ left: `${packetPath[0]!.x}%`, top: `${packetPath[0]!.y}%` }}
                 animate={{ left: packetPath.map((point) => `${point.x}%`), top: packetPath.map((point) => `${point.y}%`) }}
-                transition={{ duration: travelSeconds, ease: "easeInOut", delay: reduced ? 0 : 0.15 }}
+                transition={{ duration: motionPlan.duration, times: motionPlan.times, ease: motionPlan.ease ?? "easeInOut", delay: reduced ? 0 : 0.1 }}
               >
                 <span className="relative block h-3 w-3 bg-primary shadow-[0_0_0_3px_color-mix(in_srgb,var(--primary)_22%,transparent)]">
                   {reduced ? null : <span className="absolute inset-0 animate-ping bg-primary/50" />}
@@ -290,7 +302,7 @@ export function LearningLoop() {
               <p className="label-mono">
                 Step {String(index + 1).padStart(2, "0")} of {scenes.length}
               </p>
-              <p className={`flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wide ${running ? "text-muted-foreground" : "text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))]"}`}>
+              <p className={`flex items-center gap-1.5 text-xs ${running ? "text-muted-foreground" : "text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))]"}`}>
                 <span aria-hidden="true" className={`h-1.5 w-1.5 ${running ? "animate-pulse bg-executed motion-reduce:animate-none" : "bg-primary"}`} />
                 {reduced ? "Use the steps below" : running ? "Playing" : hoverPaused || focusPaused ? "Paused while you read" : "Paused"}
               </p>
@@ -317,7 +329,7 @@ export function LearningLoop() {
         {/* Scrubber */}
         <div ref={scrubberRef} className="overflow-x-auto border-t border-border" role="region" aria-label="Steps" tabIndex={0}>
           {/* Equal columns, so the middle divider lines up with the split between the diagram and the explanation. */}
-          <ol className="grid min-w-[44rem] lg:min-w-0" style={{ gridTemplateColumns: `repeat(${scenes.length}, minmax(0, 1fr))` }}>
+          <ol className="grid min-w-[60rem] lg:min-w-0" style={{ gridTemplateColumns: `repeat(${scenes.length}, minmax(0, 1fr))` }}>
             {scenes.map((item, position) => {
               const current = position === index;
               return (
@@ -327,12 +339,12 @@ export function LearningLoop() {
                     type="button"
                     onClick={() => goTo(position)}
                     aria-current={current ? "step" : undefined}
-                    className={`flex h-full w-full flex-col items-start gap-1 px-2.5 py-2.5 text-left transition pointer-coarse:min-h-11 ${
-                      current ? "bg-[color-mix(in_srgb,var(--primary)_7%,var(--card))]" : "hover:bg-white/[0.03]"
+                    className={`flex h-full w-full items-baseline justify-center gap-1.5 whitespace-nowrap px-1.5 py-3.5 transition pointer-coarse:min-h-11 ${
+                      current ? "bg-primary-soft" : "hover:bg-white/[0.03]"
                     }`}
                   >
-                    <span className={`font-mono text-[10px] ${current ? "text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))]" : "text-muted-foreground"}`}>{String(position + 1).padStart(2, "0")}</span>
-                    <span className={`whitespace-nowrap text-xs ${current ? "font-medium text-foreground" : "text-muted-foreground"}`}>{item.label}</span>
+                    <span className={`font-mono text-[11px] ${current ? "text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))]" : "text-muted-foreground"}`}>{String(position + 1).padStart(2, "0")}</span>
+                    <span className={`text-[13px] lg:text-xs xl:text-[13px] ${current ? "font-medium text-foreground" : "text-muted-foreground"}`}>{item.label}</span>
                   </button>
                 </li>
               );
@@ -342,7 +354,7 @@ export function LearningLoop() {
       </div>
 
       {/* Boundaries */}
-      <section aria-labelledby="loop-boundaries-title" className="grid gap-4 border border-border bg-card p-5 sm:p-6 lg:grid-cols-[14rem_minmax(0,1fr)]">
+      <section aria-labelledby="loop-boundaries-title" className="grid gap-4 border border-border bg-card p-5 sm:p-6 lg:grid-cols-[14rem_minmax(0,1fr)] rounded-xl overflow-hidden">
         <div>
           <p className="label-mono">Privacy and control</p>
           <h3 id="loop-boundaries-title" className="mt-2 text-[15px] font-medium text-foreground">What the loop never does.</h3>

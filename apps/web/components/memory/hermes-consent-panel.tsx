@@ -201,7 +201,7 @@ export function HermesConsentPanel({ scopeKey }: { scopeKey: string }) {
   return (
     <section className="rounded-2xl border border-white/8 bg-card/72 p-4" aria-labelledby="hermes-consent-title">
       <div className="flex items-start gap-3">
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary">
           <Bot className="h-4 w-4" />
         </span>
         <div>
@@ -233,8 +233,8 @@ export function HermesConsentPanel({ scopeKey }: { scopeKey: string }) {
       ) : null}
 
       {view && !view.activationReady ? (
-        <p className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] p-2.5 text-xs leading-5 text-muted-foreground" role="status">
-          <ShieldOff className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
+        <p className="mt-3 flex items-start gap-2 rounded-lg border border-approval/20 bg-approval/[0.06] p-2.5 text-xs leading-5 text-muted-foreground" role="status">
+          <ShieldOff className="mt-0.5 h-3.5 w-3.5 shrink-0 text-approval" />
           Hermes activation is blocked ({view.activationBlock}). Saving consent does not enable model calls. The dedicated profile must keep tools and compression disabled.
         </p>
       ) : null}

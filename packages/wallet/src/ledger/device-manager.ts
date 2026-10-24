@@ -1,4 +1,4 @@
-import type { LedgerDeviceState } from "../index.js";
+import type { LedgerDeviceState } from "../types.js";
 import type { DiscoveredDevice } from "@ledgerhq/device-management-kit";
 import { LedgerManagerError } from "./errors.js";
 import {

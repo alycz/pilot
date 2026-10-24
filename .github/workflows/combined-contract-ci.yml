@@ -1,0 +1,36 @@
+name: Combined contract integrity
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  contract-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      - name: Verify destination integrity
+        run: node scripts/integrity/verify.mjs
+
+      - name: Verify Harbor and Pilot contract bytes
+        run: cmp services/harbor/src/contracts.ts packages/contracts/src/index.ts
+
+      - name: Verify recorded contract hash
+        shell: bash
+        run: |
+          actual="$(shasum -a 256 services/harbor/src/contracts.ts | awk '{print $1}')"
+          expected="$(tr -d '[:space:]' < packages/contracts/CONTRACT_HASH)"
+          test "$actual" = "$expected"

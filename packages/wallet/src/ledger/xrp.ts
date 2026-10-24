@@ -1,6 +1,6 @@
 import type { Observable } from "rxjs";
 
-import type { LedgerDeviceState } from "../index.js";
+import type { LedgerDeviceState } from "../types.js";
 
 type DeviceActionState<T> =
   | { status: "not-started" }

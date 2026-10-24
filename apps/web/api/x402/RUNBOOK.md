@@ -1,13 +1,20 @@
 # Local runbook
 
-Run from the Pilot repository root with Python 3.11 or newer. The checked task used a temporary virtual environment and installed only the pinned official PyPI dependencies.
+Run from the Pilot repository root with Python 3.11, matching CI and the lock's resolver target. Use a temporary virtual environment and install the complete hash-locked graph from official PyPI. Initial installation needs network access; the tests below do not.
 
 ## Install and test
 
 ```bash
 python3.11 -m venv /tmp/pilot-x402-venv
-/tmp/pilot-x402-venv/bin/python -m pip install -r apps/web/api/x402/requirements-test.txt
-PYTHONDONTWRITEBYTECODE=1 /tmp/pilot-x402-venv/bin/python -m pytest -q apps/web/api/x402/tests
+/tmp/pilot-x402-venv/bin/python -m pip install \
+  --index-url https://pypi.org/simple \
+  --require-hashes \
+  --requirement apps/web/api/x402/requirements-test.lock
+HTTP_PROXY=http://127.0.0.1:9 \
+HTTPS_PROXY=http://127.0.0.1:9 \
+NO_PROXY=127.0.0.1,localhost \
+PYTHONDONTWRITEBYTECODE=1 \
+/tmp/pilot-x402-venv/bin/python -m pytest -q apps/web/api/x402/tests
 ```
 
 ## Configure
@@ -43,7 +50,7 @@ Invoice storage is fixed at `apps/web/api/x402/.local/invoices.sqlite3`; an envi
 
 ## Start on loopback only
 
-The reviewed isolated lane must use its fail-closed entrypoint:
+The isolated lane must use its fail-closed entrypoint:
 
 ```bash
 /tmp/pilot-x402-venv/bin/python -m uvicorn apps.web.api.x402.isolated_compare:app \
@@ -51,7 +58,7 @@ The reviewed isolated lane must use its fail-closed entrypoint:
 ```
 
 The reusable `apps.web.api.x402.compare:app` entrypoint retains the generic
-configurable-price contract and is not the reviewed isolated lane.
+configurable-price contract and is not the isolated fail-closed lane.
 
 In another shell, inspect the unpaid challenge:
 

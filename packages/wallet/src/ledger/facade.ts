@@ -11,7 +11,7 @@ import {
   PilotWalletError,
   type LedgerDeviceState,
   type PilotWallet,
-} from "../index.js";
+} from "../types.js";
 import {
   acquireLedgerDevice,
   type LedgerDeviceLease,

@@ -54,7 +54,7 @@ export function WorkAgreementFixtureViewComponent() {
         </p>
       </header>
 
-      <section className="border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-950" role="note">
+      <section className="rounded-xl border border-blocked/35 bg-blocked/10 p-4 text-sm leading-6" role="note">
         Recorded fixture only. No Ledger or Speculos signed these blobs, the signatures are not valid,
         and nothing is submitted to XRPL. The fixture route is disabled unless a local opt-in flag is set.
       </section>

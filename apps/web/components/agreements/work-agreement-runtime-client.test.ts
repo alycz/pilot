@@ -3,9 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import {
   WORK_AGREEMENT_RECOVERY_KEY,
   clearWorkAgreementRecovery,
+  inspectWorkAgreementRecovery,
   loadWorkAgreementRecovery,
   requestWorkAgreement,
   saveWorkAgreementRecovery,
+  workAgreementRecoveryKey,
   type WorkAgreementPublicState,
   type WorkAgreementRecovery,
 } from "./work-agreement-runtime-client";
@@ -151,6 +153,7 @@ describe("work-agreement runtime client", () => {
       owner: OWNER,
       network: "testnet",
       agreement_id: "agreement-client-0001",
+      phase: "submission_unknown",
       approval_id: "agreement-approval-0001",
       idempotency_key: "agreement-idempotency-0001",
       attempt_id: "agreement-attempt-0001",
@@ -159,12 +162,82 @@ describe("work-agreement runtime client", () => {
       retain_until: "2026-10-25T12:00:00.000Z",
     };
     saveWorkAgreementRecovery(storage, recovery);
-    expect(storage.getItem(WORK_AGREEMENT_RECOVERY_KEY)).not.toContain("signed_blob");
+    const key = workAgreementRecoveryKey(OWNER, "testnet");
+    expect(key).toContain(WORK_AGREEMENT_RECOVERY_KEY);
+    expect(storage.getItem(key)).not.toContain("signed_blob");
     expect(loadWorkAgreementRecovery(storage, OWNER, "testnet", Date.parse(CREATED))).toEqual(recovery);
     expect(loadWorkAgreementRecovery(storage, COUNTERPARTY, "testnet", Date.parse(CREATED))).toBeNull();
     expect(loadWorkAgreementRecovery(storage, OWNER, "testnet", Date.parse(EXPIRES))).toEqual(recovery);
     expect(loadWorkAgreementRecovery(storage, OWNER, "testnet", Date.parse(recovery.retain_until))).toBeNull();
-    clearWorkAgreementRecovery(storage);
-    expect(storage.getItem(WORK_AGREEMENT_RECOVERY_KEY)).toBeNull();
+    clearWorkAgreementRecovery(storage, OWNER, "testnet");
+    expect(storage.getItem(key)).toBeNull();
+  });
+
+  it("persists a prepare lock before any request and keeps it account-scoped", () => {
+    const storage = memoryStorage();
+    const recovery: WorkAgreementRecovery = {
+      version: 1,
+      owner: OWNER,
+      network: "testnet",
+      agreement_id: "agreement-client-0002",
+      idempotency_key: "agreement-idempotency-0002",
+      phase: "prepare_unknown",
+      retain_until: "2026-10-25T12:00:00.000Z",
+    };
+    saveWorkAgreementRecovery(storage, recovery);
+    expect(loadWorkAgreementRecovery(storage, OWNER, "testnet", Date.parse(CREATED)))
+      .toEqual(recovery);
+    expect(loadWorkAgreementRecovery(storage, COUNTERPARTY, "testnet", Date.parse(CREATED)))
+      .toBeNull();
+    expect(storage.getItem(workAgreementRecoveryKey(OWNER, "testnet"))).not.toContain("signed_blob");
+  });
+
+  it("isolates recovery references across account switches", () => {
+    const storage = memoryStorage();
+    const ownerRecovery: WorkAgreementRecovery = {
+      version: 1,
+      owner: OWNER,
+      network: "testnet",
+      agreement_id: "agreement-owner-0001",
+      idempotency_key: "agreement-idempotency-owner",
+      phase: "tracking",
+      retain_until: "2026-10-25T12:00:00.000Z",
+    };
+    const counterpartyRecovery: WorkAgreementRecovery = {
+      ...ownerRecovery,
+      owner: COUNTERPARTY,
+      agreement_id: "agreement-counterparty-0001",
+      idempotency_key: "agreement-idempotency-counterparty",
+    };
+    saveWorkAgreementRecovery(storage, ownerRecovery);
+    saveWorkAgreementRecovery(storage, counterpartyRecovery);
+    expect(loadWorkAgreementRecovery(storage, OWNER, "testnet", Date.parse(CREATED)))
+      .toEqual(ownerRecovery);
+    expect(loadWorkAgreementRecovery(storage, COUNTERPARTY, "testnet", Date.parse(CREATED)))
+      .toEqual(counterpartyRecovery);
+    clearWorkAgreementRecovery(storage, OWNER, "testnet");
+    expect(loadWorkAgreementRecovery(storage, OWNER, "testnet", Date.parse(CREATED))).toBeNull();
+    expect(loadWorkAgreementRecovery(storage, COUNTERPARTY, "testnet", Date.parse(CREATED)))
+      .toEqual(counterpartyRecovery);
+  });
+
+  it("distinguishes corrupt recovery from an absent or expired reference", () => {
+    const storage = memoryStorage();
+    expect(inspectWorkAgreementRecovery(storage, OWNER, "testnet", Date.parse(CREATED)))
+      .toEqual({ status: "absent" });
+    storage.setItem(workAgreementRecoveryKey(OWNER, "testnet"), "not-json");
+    expect(inspectWorkAgreementRecovery(storage, OWNER, "testnet", Date.parse(CREATED)))
+      .toEqual({ status: "invalid" });
+    storage.setItem(workAgreementRecoveryKey(OWNER, "testnet"), JSON.stringify({
+      version: 1,
+      owner: OWNER,
+      network: "testnet",
+      agreement_id: "agreement-expired-0001",
+      idempotency_key: "agreement-idempotency-expired",
+      phase: "tracking",
+      retain_until: CREATED,
+    }));
+    expect(inspectWorkAgreementRecovery(storage, OWNER, "testnet", Date.parse(CREATED)))
+      .toEqual({ status: "expired" });
   });
 });

@@ -172,17 +172,26 @@ export async function requestWorkAgreement(
 }
 
 export const WORK_AGREEMENT_RECOVERY_KEY = "pilot.work-agreement.recovery.v1";
-export const WorkAgreementRecoverySchema = z.object({
+export function workAgreementRecoveryKey(owner: string, network: "testnet"): string {
+  return `${WORK_AGREEMENT_RECOVERY_KEY}:${network}:${ClassicAddressSchema.parse(owner)}`;
+}
+const WorkAgreementRecoveryBaseSchema = z.object({
   version: z.literal(1),
   owner: ClassicAddressSchema,
   network: z.literal("testnet"),
   agreement_id: IdentifierSchema,
-  approval_id: IdentifierSchema,
   idempotency_key: IdentifierSchema,
+  retain_until: z.string().datetime(),
+}).strict();
+const WorkAgreementTrackingRecoverySchema = WorkAgreementRecoveryBaseSchema.extend({
+  phase: z.enum(["prepare_pending", "prepare_unknown", "tracking"]),
+}).strict();
+const WorkAgreementSubmissionRecoverySchema = WorkAgreementRecoveryBaseSchema.extend({
+  phase: z.enum(["submission_pending", "submission_unknown"]),
+  approval_id: IdentifierSchema,
   attempt_id: IdentifierSchema,
   action: z.enum(["create", "release", "cancel"]),
   expires_at: z.string().datetime(),
-  retain_until: z.string().datetime(),
 }).strict().superRefine((value, context) => {
   const expiry = Date.parse(value.expires_at);
   const retained = Date.parse(value.retain_until);
@@ -190,11 +199,28 @@ export const WorkAgreementRecoverySchema = z.object({
     context.addIssue({ code: "custom", message: "Recovery retention must be after approval expiry and at most seven days." });
   }
 });
+export const WorkAgreementRecoverySchema = z.union([
+  WorkAgreementTrackingRecoverySchema,
+  WorkAgreementSubmissionRecoverySchema,
+]);
 export type WorkAgreementRecovery = z.infer<typeof WorkAgreementRecoverySchema>;
+export type WorkAgreementRecoveryInspection =
+  | Readonly<{ status: "absent" | "expired" | "invalid" }>
+  | Readonly<{ status: "valid"; value: WorkAgreementRecovery }>;
+
+export function isWorkAgreementSubmissionRecovery(
+  value: WorkAgreementRecovery | null | undefined,
+): value is z.infer<typeof WorkAgreementSubmissionRecoverySchema> {
+  return value?.phase === "submission_pending" || value?.phase === "submission_unknown";
+}
 
 /** Persists only bounded recovery references—never a signed blob or owner key. */
 export function saveWorkAgreementRecovery(storage: Storage, value: WorkAgreementRecovery): void {
-  storage.setItem(WORK_AGREEMENT_RECOVERY_KEY, JSON.stringify(WorkAgreementRecoverySchema.parse(value)));
+  const parsed = WorkAgreementRecoverySchema.parse(value);
+  storage.setItem(
+    workAgreementRecoveryKey(parsed.owner, parsed.network),
+    JSON.stringify(parsed),
+  );
 }
 
 export function loadWorkAgreementRecovery(
@@ -203,17 +229,33 @@ export function loadWorkAgreementRecovery(
   network: "testnet",
   now = Date.now(),
 ): WorkAgreementRecovery | null {
-  const raw = storage.getItem(WORK_AGREEMENT_RECOVERY_KEY);
-  if (raw === null || raw.length > 4_096) return null;
+  const inspected = inspectWorkAgreementRecovery(storage, owner, network, now);
+  return inspected.status === "valid" ? inspected.value : null;
+}
+
+export function inspectWorkAgreementRecovery(
+  storage: Storage,
+  owner: string,
+  network: "testnet",
+  now = Date.now(),
+): WorkAgreementRecoveryInspection {
+  const raw = storage.getItem(workAgreementRecoveryKey(owner, network));
+  if (raw === null) return { status: "absent" };
+  if (raw.length > 4_096) return { status: "invalid" };
   try {
     const parsed = WorkAgreementRecoverySchema.parse(JSON.parse(raw));
-    if (parsed.owner !== owner || parsed.network !== network || Date.parse(parsed.retain_until) <= now) return null;
-    return parsed;
+    if (parsed.owner !== owner || parsed.network !== network) return { status: "invalid" };
+    if (Date.parse(parsed.retain_until) <= now) return { status: "expired" };
+    return { status: "valid", value: parsed };
   } catch {
-    return null;
+    return { status: "invalid" };
   }
 }
 
-export function clearWorkAgreementRecovery(storage: Storage): void {
-  storage.removeItem(WORK_AGREEMENT_RECOVERY_KEY);
+export function clearWorkAgreementRecovery(
+  storage: Storage,
+  owner: string,
+  network: "testnet",
+): void {
+  storage.removeItem(workAgreementRecoveryKey(owner, network));
 }

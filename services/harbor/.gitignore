@@ -1,0 +1,10 @@
+.dev.vars
+.env
+.env.*
+!.env.example
+node_modules/
+.wrangler/
+dist/
+coverage/
+src/ops/index.gen.ts
+catalog/manifest.json

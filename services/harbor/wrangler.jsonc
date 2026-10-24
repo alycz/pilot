@@ -1,0 +1,32 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pilot-harbor-disabled",
+  "main": "src/server.ts",
+  "workers_dev": false,
+  "compatibility_date": "2026-10-06",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "pilot-harbor-disabled",
+      "database_id": "ffffffff-ffff-4fff-8fff-ffffffffffff"
+    }
+  ],
+  "worker_loaders": [
+    {
+      "binding": "LOADER"
+    }
+  ],
+  "observability": {
+    "enabled": false
+  },
+  "upload_source_maps": false,
+  "vars": {
+    "HARBOR_SOURCE_TAG": "2610240",
+    "EXEC_NETWORK": "testnet",
+    "MAINNET_EXECUTION": "false",
+    "EXECUTOR": "dynamic"
+  }
+}

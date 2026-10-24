@@ -38,6 +38,7 @@ const MIGRATIONS = [
   "0006_x402_budget_accounting.sql",
   "0007_x402_payer_provisioning.sql",
   "0009_isolated_sequence_authority.sql",
+  "0010_issued_x402_authority.sql",
 ];
 const PAYER = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
 const ATTEMPT_ID = "isolated-x402-payment-1";

@@ -49,6 +49,7 @@ const MIGRATIONS = [
   "0006_x402_budget_accounting.sql",
   "0007_x402_payer_provisioning.sql",
   "0009_isolated_sequence_authority.sql",
+  "0010_issued_x402_authority.sql",
 ] as const;
 
 /**
@@ -285,11 +286,11 @@ describe("local isolated x402 state-root contract", () => {
         "2026-10-23T00:00:00.000Z",
       );
     const localMigration = readFileSync(
-      join(process.cwd(), "migrations-local-x402", MIGRATIONS.at(-1)!),
+      join(process.cwd(), "migrations-local-x402", "0009_isolated_sequence_authority.sql"),
       "utf8",
     );
     const profileMigration = readFileSync(
-      join(process.cwd(), "migrations-profile-x402-isolated-v1", MIGRATIONS.at(-1)!),
+      join(process.cwd(), "migrations-profile-x402-isolated-v1", "0009_isolated_sequence_authority.sql"),
       "utf8",
     );
     expect(profileMigration).toBe(localMigration);

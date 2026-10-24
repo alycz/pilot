@@ -98,6 +98,7 @@ describe("isolated migration profiles", () => {
       "0006_x402_budget_accounting.sql",
       "0007_x402_payer_provisioning.sql",
       "0009_isolated_sequence_authority.sql",
+      "0010_issued_x402_authority.sql",
     ]);
     expect(TRADING_ISOLATED_V1_MIGRATIONS).not.toContain(
       "0008_ap4m_shared_runtime.sql",
@@ -110,7 +111,7 @@ describe("isolated migration profiles", () => {
       "0014_declarative_strategies.sql",
     );
     expect(X402_ISOLATED_V1_MIGRATIONS.at(-1)).toBe(
-      "0009_isolated_sequence_authority.sql",
+      "0010_issued_x402_authority.sql",
     );
   });
 

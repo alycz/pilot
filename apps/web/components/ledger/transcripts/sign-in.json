@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "id": "sign-in",
+  "title": "Sign in to Pilot",
+  "simulated": true,
+  "screens": [
+    {
+      "lines": [
+        "Review transaction"
+      ]
+    },
+    {
+      "lines": [
+        "Transaction Type",
+        "Account Setting"
+      ]
+    },
+    {
+      "lines": [
+        "Account",
+        "ra7Zr8ddy9tB88RaXL8",
+        "B87YkqhEJG2vkAJ"
+      ]
+    },
+    {
+      "lines": [
+        "Fee",
+        "XRP 0.000000"
+      ]
+    },
+    {
+      "lines": [
+        "Memo Type [1]",
+        "pilot-wallet-auth-v1"
+      ]
+    },
+    {
+      "lines": [
+        "Memo Data [1]",
+        "q8ZbXk3JmQ1V0aT9y",
+        "Hn2cWpL6rS4uE7oDg",
+        "BfKzAiMhY"
+      ]
+    },
+    {
+      "lines": [
+        "Sign transaction?"
+      ]
+    },
+    {
+      "lines": [
+        "Transaction signed"
+      ]
+    }
+  ]
+}

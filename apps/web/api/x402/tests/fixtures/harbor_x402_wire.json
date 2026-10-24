@@ -1,0 +1,42 @@
+{
+  "fixture_notice": "OFFLINE FACILITATOR FIXTURE ONLY; NOT EVIDENCE OF A REAL PAYMENT",
+  "merchant_body_limits": {
+    "max_bytes": 65536,
+    "max_depth": 16,
+    "max_nodes": 2000,
+    "max_string_bytes": 16384,
+    "max_key_bytes": 256
+  },
+  "t54_payment_signature": {
+    "x402Version": 2,
+    "resource": {
+      "url": "http://127.0.0.1:8000/api/x402/compare",
+      "description": "Local Pilot venue comparison",
+      "mimeType": "application/json",
+      "serviceName": "Pilot",
+      "tags": ["compare"]
+    },
+    "accepted": {
+      "scheme": "exact",
+      "network": "xrpl:1",
+      "asset": "XRP",
+      "payTo": "rnSXTVWEhMKhECNUEENzUi9QuMFoFpKghr",
+      "amount": "5000",
+      "maxTimeoutSeconds": 60,
+      "extra": {
+        "sourceTag": 2610240,
+        "invoiceId": "invoice-1"
+      }
+    },
+    "payload": {"signedTxBlob": "ABCD"}
+  },
+  "verified_receipt": {
+    "fixture": true,
+    "isValid": true,
+    "transaction": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "network": "xrpl:1",
+    "payer": "rG1QQv2nh2gr7RCZ1P8YYcBUKCCN633jCn",
+    "feeDrops": "100"
+  },
+  "merchant_body": {"comparison": ["dex", "amm"]}
+}

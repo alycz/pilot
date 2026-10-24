@@ -3,39 +3,122 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Pilot design tokens. The product ships light-only ("paper"); the dark block below is dormant.
+ * Neutral graphite surfaces, hairline borders, square corners, Geist Sans for
+ * reading text and Geist Mono uppercase for labels and data. Orange is reserved
+ * for focus and selection; green / amber / red stay semantic.
+ * A light theme only needs to redefine this block.
+ */
+/*
+ * Neutral functional design tokens.
+ * Semantic state colors remain distinct across supported themes.
+ */
 :root {
-  color-scheme: dark;
+  color-scheme: light;
+
   --radius: 0px;
+
+  --background: #f5f5f5;
+  --foreground: #171717;
+  --surface: #eeeeee;
+  --card: #ffffff;
+  --card-foreground: var(--foreground);
+  --popover: #ffffff;
+  --popover-foreground: var(--foreground);
+
+  --primary: #4b5563;
+  --primary-foreground: #ffffff;
+  --bracket: #4b5563;
+  --bracket-muted: #a3a3a3;
+
+  --executed: #166534;
+  --executed-foreground: #ffffff;
+  --approval: #854d0e;
+  --approval-foreground: #ffffff;
+  --destructive: #b91c1c;
+  --destructive-foreground: #ffffff;
+  --blocked: var(--destructive);
+  --blocked-foreground: var(--destructive-foreground);
+  --info: #1d4ed8;
+
+  --secondary: #e5e5e5;
+  --secondary-foreground: #262626;
+  --muted: #e5e5e5;
+  --muted-foreground: #525252;
+  --accent: #e5e5e5;
+  --accent-foreground: #171717;
+
+  --border: #d4d4d4;
+  --border-strong: #a3a3a3;
+  --input: #cbd5e1;
+  --ring: var(--primary);
+
+  --chart-1: var(--executed);
+  --chart-2: var(--approval);
+  --chart-3: var(--info);
+  --chart-4: #6b7280;
+  --chart-5: var(--blocked);
+
+  --sidebar: #f0f0f0;
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: #e5e5e5;
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+
+  --color-white: #171717;
+}
+
+/* Dormant neutral dark tokens; no runtime selector enables them by default. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --radius: 0px;
+
   --background: #171717;
   --foreground: #f5f5f5;
+  --surface: #1f1f1f;
   --card: #262626;
   --card-foreground: var(--foreground);
   --popover: #262626;
   --popover-foreground: var(--foreground);
+
   --primary: #a3a3a3;
   --primary-foreground: #171717;
+  --bracket: #a3a3a3;
+  --bracket-muted: #737373;
+
   --executed: #4ade80;
   --executed-foreground: #052e16;
-  --secondary: #262626;
-  --secondary-foreground: #e5e5e5;
-  --muted: #262626;
-  --muted-foreground: #a3a3a3;
-  --accent: #303030;
-  --accent-foreground: #f5f5f5;
   --approval: #facc15;
   --approval-foreground: #422006;
   --destructive: #f87171;
   --destructive-foreground: #450a0a;
   --blocked: var(--destructive);
   --blocked-foreground: var(--destructive-foreground);
+  --info: #60a5fa;
+
+  --secondary: #262626;
+  --secondary-foreground: #e5e5e5;
+  --muted: #262626;
+  --muted-foreground: #a3a3a3;
+  --accent: #303030;
+  --accent-foreground: #f5f5f5;
+
   --border: #404040;
+  --border-strong: #525252;
   --input: #404040;
   --ring: var(--primary);
+
   --chart-1: var(--executed);
   --chart-2: var(--approval);
-  --chart-3: #60a5fa;
+  --chart-3: var(--info);
   --chart-4: #a3a3a3;
   --chart-5: var(--blocked);
+
   --sidebar: #171717;
   --sidebar-foreground: var(--foreground);
   --sidebar-primary: var(--primary);
@@ -44,15 +127,13 @@
   --sidebar-accent-foreground: var(--foreground);
   --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
-}
 
-.dark {
-  color-scheme: dark;
+  --color-white: #ffffff;
 }
 
 @theme inline {
-  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -71,6 +152,10 @@
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-surface: var(--surface);
+  --color-info: var(--info);
+  --color-bracket: var(--bracket);
   --color-input: var(--input);
   --color-ring: var(--ring);
 
@@ -96,10 +181,15 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /* Square corners everywhere; rounded-full is kept only for status dots. */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+  --radius-4xl: 0px;
 }
 
 @layer base {
@@ -113,7 +203,11 @@
   html {
     min-width: 0;
     min-height: 100%;
-    overflow-x: hidden;
+    /* clip, not hidden: hidden turns the root into its own scroll container in
+       Safari, which then ignores overscroll-behavior and keeps bouncing past the
+       footer. */
+    overflow-x: clip;
+    overscroll-behavior-y: none;
     background: var(--background);
     text-size-adjust: 100%;
   }
@@ -123,13 +217,14 @@
     min-height: 100dvh;
     margin: 0;
     overflow-x: clip;
-    background:
-      radial-gradient(circle at 50% -20%, rgb(82 82 82 / 22%), transparent 38rem),
-      var(--background);
+    overscroll-behavior-y: none;
+    background: var(--background);
     color: var(--foreground);
     font-family: var(--font-sans);
     font-synthesis: none;
     text-rendering: optimizeLegibility;
+    font-feature-settings: "ss01", "cv11";
+    letter-spacing: -0.005em;
   }
 
   button,
@@ -158,13 +253,96 @@
   }
 
   :focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: 3px;
+    outline: 1px solid var(--ring);
+    outline-offset: 2px;
   }
 
   ::selection {
-    background: rgb(163 163 163 / 28%);
+    background: color-mix(in srgb, var(--primary) 32%, transparent);
     color: var(--foreground);
+  }
+}
+
+@layer components {
+  /* Uppercase monospace label used for eyebrows, table heads, metrics. */
+  .label-mono {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    line-height: 1.4;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+
+  /*
+   * Corner brackets ("crop marks"). Add .bracket to a positioned element;
+   * .bracket-accent switches them to the focus color, .bracket-hover only
+   * shows them on hover/focus-within. Do not combine with other ::after use.
+   */
+  .bracket {
+    position: relative;
+  }
+  .bracket::after {
+    --bc: var(--bracket-color, var(--bracket-muted));
+    --bl: 8px;
+    --bt: 1.5px;
+    content: "";
+    position: absolute;
+    inset: -1px;
+    pointer-events: none;
+    z-index: 2;
+    background:
+      linear-gradient(var(--bc), var(--bc)) top left / var(--bl) var(--bt) no-repeat,
+      linear-gradient(var(--bc), var(--bc)) top left / var(--bt) var(--bl) no-repeat,
+      linear-gradient(var(--bc), var(--bc)) top right / var(--bl) var(--bt) no-repeat,
+      linear-gradient(var(--bc), var(--bc)) top right / var(--bt) var(--bl) no-repeat,
+      linear-gradient(var(--bc), var(--bc)) bottom left / var(--bl) var(--bt) no-repeat,
+      linear-gradient(var(--bc), var(--bc)) bottom left / var(--bt) var(--bl) no-repeat,
+      linear-gradient(var(--bc), var(--bc)) bottom right / var(--bl) var(--bt) no-repeat,
+      linear-gradient(var(--bc), var(--bc)) bottom right / var(--bt) var(--bl) no-repeat;
+    transition: opacity 150ms ease;
+  }
+  .bracket-accent {
+    --bracket-color: var(--bracket);
+  }
+  /* Selected items sit above any parent group's muted corners. */
+  .bracket-accent::after {
+    z-index: 3;
+  }
+  .bracket-light {
+    --bracket-color: color-mix(in srgb, var(--foreground) 70%, transparent);
+  }
+  .bracket-hover::after {
+    opacity: 0;
+  }
+  .bracket-hover:hover::after,
+  .bracket-hover:focus-visible::after,
+  .bracket-hover:focus-within::after {
+    opacity: 1;
+  }
+  .bracket-focus:focus-within {
+    --bracket-color: var(--bracket);
+  }
+
+  /* Faint vertical rules behind hero areas. */
+  .bg-rules {
+    background-image: repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--foreground) 3.5%, transparent) 0 1px,
+      transparent 1px 7px
+    );
+    mask-image: radial-gradient(ellipse 70% 80% at 50% 45%, #000 30%, transparent 75%);
+  }
+
+  /* Dashed underline used for inline text actions ("See details"). */
+  .link-dashed {
+    text-decoration: underline dashed;
+    text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
+    text-underline-offset: 3px;
+  }
+  .link-dashed:hover {
+    text-decoration-color: currentColor;
   }
 }
 

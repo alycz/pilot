@@ -1,0 +1,37 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "harbor-ap4m-demo-local-only",
+  "main": "src/server.ts",
+  "workers_dev": false,
+  "upload_source_maps": false,
+  "observability": {
+    "enabled": false
+  },
+  "compatibility_date": "2026-10-06",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "harbor-ap4m-demo-local-only",
+      "database_id": "44444444-4444-4444-4444-444444444444",
+      "migrations_dir": "migrations",
+      "remote": false
+    }
+  ],
+  "vars": {
+    "HARBOR_SOURCE_TAG": "2610240",
+    "EXEC_NETWORK": "testnet",
+    "MAINNET_EXECUTION": "false",
+    "EXECUTOR": "quickjs",
+    "HARBOR_LOCAL_DEV": "true",
+    "HARBOR_LOCAL_AUTH_REQUIRED": "true",
+    "HARBOR_LOCAL_CRON_DISABLED": "true",
+    "HARBOR_LOCAL_X402": "false",
+    "HARBOR_LOCAL_X402_RUNTIME_ENABLED": "false",
+    "HARBOR_MOCK": "1",
+    "AP4M_DEMO_ENABLED": "true",
+    "AP4M_PURCHASE_MODE": "mock"
+  }
+}

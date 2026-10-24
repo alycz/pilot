@@ -1,0 +1,39 @@
+{
+  "fixture_kind": "deterministic-synthetic-p-live-state",
+  "note": "Synthetic invariant fixture only; not Testnet, wallet, transaction, hosted, or acceptance evidence.",
+  "delegation": {
+    "engine_result": "tesSUCCESS",
+    "permissions": ["OfferCreate"],
+    "hosted_status_at_activation": "active",
+    "current_hosted_status": "revoked",
+    "current_permissions": []
+  },
+  "acquisition": {
+    "operation_id": "00000000-0000-4000-8000-000000000010",
+    "engine_result": "tesSUCCESS",
+    "flags": 262144,
+    "delegate_present": false,
+    "balance_before": "0",
+    "balance_after": "75",
+    "execution_mode": "fill_or_kill",
+    "approved_absolute_cap_drops": "275000000",
+    "taker_gets_maximum_drops": "271112288",
+    "actual_trade_spend_drops": "268428007"
+  },
+  "revocation": {
+    "engine_result": "tesSUCCESS",
+    "permissions": [],
+    "hosted_status": "revoked",
+    "hosted_permission_count": 0,
+    "queue_count_after": 0,
+    "rlusd_balance_after": "75",
+    "successful_offercreate_count_after": 1,
+    "pending": false
+  },
+  "redactions": {
+    "authorization_headers": "omitted",
+    "api_keys": "omitted",
+    "seeds_and_private_keys": "omitted",
+    "signed_blobs": "omitted"
+  }
+}

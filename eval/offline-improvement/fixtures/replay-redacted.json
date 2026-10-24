@@ -1,0 +1,41 @@
+{
+  "schema_version": "pilot.offline-evaluation-fixture.v1",
+  "fixture_id": "redacted-replay-001",
+  "scope": {
+    "tenant_id": "tenant-fixture",
+    "profile_id": "profile-fixture",
+    "dataset_id": "dataset-offline-v1"
+  },
+  "source": {
+    "kind": "redacted_replay",
+    "replay_id": "constructed-replay-001",
+    "redacted": true,
+    "contains_user_identifiers": false,
+    "contains_real_order_data": false
+  },
+  "task_class": "procedure_proposal",
+  "baseline": {
+    "metrics": {
+      "quality_bps": 7200,
+      "evidence_coverage_bps": 7000,
+      "evaluation_latency_ms": 140
+    },
+    "policy_violations": [],
+    "scope_violations": [],
+    "side_effects": [],
+    "output_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "repeat_output_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "candidate": {
+    "metrics": {
+      "quality_bps": 7800,
+      "evidence_coverage_bps": 7700,
+      "evaluation_latency_ms": 150
+    },
+    "policy_violations": [],
+    "scope_violations": [],
+    "side_effects": [],
+    "output_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "repeat_output_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  }
+}

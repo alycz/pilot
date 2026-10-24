@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "id": "delegate-set-blind",
+  "title": "Grant Harbor seven permissions",
+  "simulated": true,
+  "screens": [
+    {
+      "lines": [
+        "Blind signing ahead",
+        "To accept risk, press ",
+        "both buttons"
+      ]
+    },
+    {
+      "lines": [
+        "Review transaction"
+      ]
+    },
+    {
+      "lines": [
+        "Transaction Type",
+        "Unknown"
+      ]
+    },
+    {
+      "lines": [
+        "Account",
+        "ra7Zr8ddy9tB88RaXL8",
+        "B87YkqhEJG2vkAJ"
+      ]
+    },
+    {
+      "lines": [
+        "Fee",
+        "XRP 0.000012"
+      ]
+    },
+    {
+      "lines": [
+        "Authorize",
+        "rPT1Sjq2YGrBMTttX4",
+        "GZHjKu9dyfzbpAYe"
+      ]
+    },
+    {
+      "lines": [
+        "Unknown [1]",
+        "8"
+      ]
+    },
+    {
+      "lines": [
+        "Unknown [2]",
+        "9"
+      ]
+    },
+    {
+      "lines": [
+        "Unknown [3]",
+        "21"
+      ]
+    },
+    {
+      "lines": [
+        "Unknown [4]",
+        "37"
+      ]
+    },
+    {
+      "lines": [
+        "Unknown [5]",
+        "38"
+      ]
+    },
+    {
+      "lines": [
+        "Unknown [6]",
+        "3"
+      ]
+    },
+    {
+      "lines": [
+        "Unknown [7]",
+        "18"
+      ]
+    },
+    {
+      "lines": [
+        "Sign transaction?"
+      ]
+    },
+    {
+      "lines": [
+        "Transaction signed"
+      ]
+    }
+  ]
+}

@@ -36,3 +36,50 @@ jobs:
 
       - name: Run unit tests
         run: pnpm test
+
+      - name: Install fixture browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run isolated fixture E2E
+        env:
+          DEBUG: pw:webserver
+        run: pnpm test:e2e:fixture
+
+      - name: Upload fixture browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fixture-browser-evidence-${{ github.run_attempt }}
+          path: |
+            playwright-report
+            test-results/playwright
+          if-no-files-found: warn
+          retention-days: 7
+
+  x402-python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: apps/web/api/x402/requirements-test.txt
+
+      - name: Install x402 test dependencies from official PyPI
+        run: >-
+          python -m pip install
+          --index-url https://pypi.org/simple
+          --requirement apps/web/api/x402/requirements-test.txt
+
+      - name: Run offline x402 tests
+        env:
+          HTTP_PROXY: http://127.0.0.1:9
+          HTTPS_PROXY: http://127.0.0.1:9
+          NO_PROXY: 127.0.0.1,localhost
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python -m pytest -q apps/web/api/x402/tests

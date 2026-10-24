@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "verify-address",
+  "title": "Verify address",
+  "simulated": true,
+  "screens": [
+    {
+      "lines": [
+        "Verify XRP Address"
+      ]
+    },
+    {
+      "lines": [
+        "Address",
+        "rGRdukvhGdJCgBHX9",
+        "FUqnw2vndYupSoG2",
+        "E"
+      ]
+    },
+    {
+      "lines": [
+        "Confirm"
+      ]
+    }
+  ]
+}

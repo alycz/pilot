@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "id": "reject",
+  "title": "Reject a request",
+  "simulated": true,
+  "screens": [
+    {
+      "lines": [
+        "Review transaction"
+      ]
+    },
+    {
+      "lines": [
+        "Transaction Type",
+        "Set Trust Line"
+      ]
+    },
+    {
+      "lines": [
+        "Account",
+        "ra7Zr8ddy9tB88RaXL8",
+        "B87YkqhEJG2vkAJ"
+      ]
+    },
+    {
+      "lines": [
+        "Limit Amount",
+        "1000"
+      ]
+    },
+    {
+      "lines": [
+        "Currency",
+        "RLUSD"
+      ]
+    },
+    {
+      "lines": [
+        "Issuer",
+        "rQhWct2fv4Vc4KRjRg",
+        "Mrxa8xPN9Zx9iLKV"
+      ]
+    },
+    {
+      "lines": [
+        "Fee",
+        "XRP 0.000012"
+      ]
+    },
+    {
+      "lines": [
+        "Sign transaction?"
+      ]
+    },
+    {
+      "lines": [
+        "Reject transaction"
+      ]
+    },
+    {
+      "lines": [
+        "Transaction rejected"
+      ]
+    }
+  ]
+}

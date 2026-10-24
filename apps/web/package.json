@@ -3,13 +3,20 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --hostname 127.0.0.1 --port 3003",
+    "dev:isolated": "node ../../scripts/dev-pilot-isolated-v1.mjs",
+    "dev:isolated:x402": "node ../../scripts/dev-pilot-isolated-x402-v1.mjs",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@ai-sdk/amazon-bedrock": "3.0.141",
+    "@ledgerhq/device-management-kit": "1.11.0",
+    "@ledgerhq/device-signer-kit-xrp": "0.2.0",
+    "@ledgerhq/device-transport-kit-speculos": "1.3.0",
+    "@ledgerhq/device-transport-kit-web-hid": "1.2.4",
     "@openrouter/ai-sdk-provider": "^1.2.0",
     "@pilot/agent": "workspace:*",
     "@pilot/contracts": "workspace:*",
@@ -25,6 +32,7 @@
     "next": "^15.5.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "rxjs": "7.8.2",
     "tailwind-merge": "^3.3.1",
     "tw-animate-css": "^1.3.8",
     "zod": "^3.25.0"

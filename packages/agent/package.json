@@ -9,6 +9,36 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./x402": {
+      "types": "./src/x402.ts",
+      "import": "./src/x402.ts",
+      "default": "./src/x402.ts"
+    },
+    "./proposal-provider": {
+      "types": "./src/proposal-provider.ts",
+      "import": "./src/proposal-provider.ts",
+      "default": "./src/proposal-provider.ts"
+    },
+    "./hermes-transport": {
+      "types": "./src/hermes-transport.ts",
+      "import": "./src/hermes-transport.ts",
+      "default": "./src/hermes-transport.ts"
+    },
+    "./offline-improvement": {
+      "types": "./src/offline-improvement.ts",
+      "import": "./src/offline-improvement.ts",
+      "default": "./src/offline-improvement.ts"
+    },
+    "./workflow-lessons": {
+      "types": "./src/workflow-lessons.ts",
+      "import": "./src/workflow-lessons.ts",
+      "default": "./src/workflow-lessons.ts"
+    },
+    "./guardrail-notice": {
+      "types": "./src/guardrail-notice.ts",
+      "import": "./src/guardrail-notice.ts",
+      "default": "./src/guardrail-notice.ts"
     }
   },
   "scripts": {

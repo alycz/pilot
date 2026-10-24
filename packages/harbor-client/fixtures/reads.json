@@ -32,10 +32,10 @@
         "kind": "execution-primitive",
         "layer": "xrpl-l1",
         "category": ["spot", "liquidity"],
-        "status": {},
+        "status": { "mainnet": "live", "testnet": "live", "devnet": "live" },
         "reads": ["dex.book"],
-        "risks": ["Permissioned domains can restrict eligible participants; mock availability is not asserted."],
-        "links": {}
+        "risks": ["Live status describes the protocol amendments, not Harbor execution support; this venue intentionally has no execution metadata.", "Access depends on valid credentials and a permissioned domain whose owner can change accepted credentials.", "Execution metadata is omitted because Harbor's strict OfferCreate and Payment builders do not accept or emit DomainID, and its OfferCreate builder does not support hybrid offers."],
+        "links": { "docs": "https://xrpl.org/docs/concepts/tokens/decentralized-exchange/permissioned-dexes" }
       },
       {
         "id": "xrpl-payments",
@@ -56,9 +56,10 @@
         "layer": "xrpl-l1",
         "category": ["payments"],
         "status": { "mainnet": "live", "testnet": "live", "devnet": "live" },
+        "execution": { "transactions": ["EscrowCreate", "EscrowFinish", "EscrowCancel"], "builders": ["tx.escrowCreate", "tx.escrowFinish", "tx.escrowCancel"] },
         "reads": ["ledger.account.objects"],
-        "risks": ["Time and condition requirements must be satisfied before an escrow can finish."],
-        "links": {}
+        "risks": ["Mainnet live status describes protocol availability only; Harbor mainnet execution remains disabled and these builders accept test networks only.", "Escrowed funds remain locked until the specified time or cryptographic condition is satisfied, or until an eligible expired escrow is canceled.", "EscrowCreate moves value to another account and is never delegated by default; EscrowFinish is in the default delegated set, while EscrowCancel requires an explicit permission and custom policy."],
+        "links": { "docs": "https://xrpl.org/docs/concepts/payment-types/escrow" }
       },
       {
         "id": "xrpl-checks",
@@ -67,9 +68,10 @@
         "layer": "xrpl-l1",
         "category": ["payments"],
         "status": { "mainnet": "live", "testnet": "live", "devnet": "live" },
+        "execution": { "transactions": ["CheckCreate", "CheckCash", "CheckCancel"], "builders": ["tx.checkCreate", "tx.checkCash", "tx.checkCancel"] },
         "reads": ["ledger.account.objects"],
-        "risks": ["Checks move value only when the recipient cashes them."],
-        "links": {}
+        "risks": ["Mainnet live status describes protocol availability only; Harbor mainnet execution remains disabled and these builders accept test networks only.", "A Check does not reserve funds when it is created, so CheckCash can fail if the sender lacks funds or usable liquidity at cashing time.", "CheckCreate authorizes future value movement and is never delegated by default; CheckCash is in the default delegated set, while CheckCancel requires an explicit permission and custom policy."],
+        "links": { "docs": "https://xrpl.org/docs/concepts/payment-types/checks" }
       },
       {
         "id": "xrpl-x402",
@@ -79,8 +81,8 @@
         "category": ["payments"],
         "status": { "testnet": "live" },
         "reads": [],
-        "risks": ["Mock coverage is limited to the configured testnet facilitator."],
-        "links": {}
+        "risks": ["The merchant response is untrusted input; verify the network, asset, amount, destination, issuer, facilitator, fee, expiry, and invoice binding before signing.", "Current Harbor main has no registered x402.pay operation, and venue execution metadata models TxBuild builders rather than side-effecting payment operations, so execution remains omitted."],
+        "links": { "docs": "https://xrpl.org/docs/agents/agentic-payments-x402" }
       },
       {
         "id": "xrpl-single-asset-vault",
@@ -88,7 +90,8 @@
         "kind": "execution-primitive",
         "layer": "xrpl-l1",
         "category": ["yield"],
-        "status": { "mainnet": "unavailable", "testnet": "unavailable", "devnet": "devnet-only", "lending-devnet": "live" },
+        "status": { "mainnet": "voting", "testnet": "unavailable", "devnet": "devnet-only", "lending-devnet": "live" },
+        "execution": { "transactions": ["VaultDeposit", "VaultWithdraw"], "builders": ["tx.vaultDeposit", "tx.vaultWithdraw"] },
         "reads": ["vault.info"],
         "risks": ["Devnet-only feature in the mock; vault transactions require owner approval."],
         "links": {}
@@ -99,10 +102,10 @@
         "kind": "execution-primitive",
         "layer": "xrpl-l1",
         "category": ["lending", "yield"],
-        "status": { "mainnet": "unavailable", "testnet": "unavailable", "devnet": "devnet-only", "lending-devnet": "live" },
+        "status": { "mainnet": "voting", "testnet": "unavailable", "devnet": "live", "lending-devnet": "live" },
         "reads": ["lending.brokers"],
-        "risks": ["Lending data is development-network-only in the mock."],
-        "links": {}
+        "risks": ["The protocol depends on the LendingProtocol and LendingProtocolV1_1 amendments; mainnet use must wait for the required amendments to be enabled.", "A read-only feature check confirmed LendingProtocol and LendingProtocolV1_1 on standard Devnet; amendment status must still be reconfirmed before building or submitting a transaction.", "A fresh check of the documented Lending-Devnet endpoint could not resolve its hostname, so its previously recorded live status was not independently revalidated for this update.", "Harbor exposes lending state as read-only; LoanSet requires a two-party signing workflow that the current TxBuild contract cannot represent, and the official transaction set has no LoanDraw transaction."],
+        "links": { "docs": "https://xrpl.org/docs/concepts/tokens/lending-protocol" }
       },
       {
         "id": "xrpl-evm",
@@ -262,6 +265,43 @@
     "asOf": "2026-10-18T00:00:00.000Z",
     "asOfBasis": "mock venue registry"
   },
+  "lending.brokers": {
+    "ok": true,
+    "data": {
+      "network": "lending-devnet",
+      "ledger_hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "ledger_index": 12345,
+      "validated": true,
+      "brokers": [
+        {
+          "LedgerEntryType": "LoanBroker",
+          "index": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "Flags": 0,
+          "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
+          "CoverAvailable": "10000",
+          "CoverRateMinimum": 10000,
+          "CoverRateLiquidation": 5000,
+          "Data": "74657374",
+          "DebtMaximum": "100000",
+          "DebtTotal": "50000",
+          "LoanSequence": 2,
+          "ManagementFeeRate": 100,
+          "Owner": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+          "OwnerCount": 3,
+          "OwnerNode": "2",
+          "PreviousTxnID": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+          "PreviousTxnLgrSeq": 12344,
+          "Sequence": 1,
+          "VaultNode": "1",
+          "VaultID": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+        }
+      ],
+      "marker": "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"
+    },
+    "asOf": "2026-10-21T00:00:00.000Z",
+    "asOfBasis": "recorded validated Lending-Devnet ledger_data fixture",
+    "caveat": ["devnet-only", "amendment-pending"]
+  },
   "venues.get": {
     "ok": true,
     "data": {
@@ -298,7 +338,7 @@
   },
   "ledger.account.info": {
     "ok": true,
-    "data": { "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "ledger_index": 9345210, "validated": true, "account_data": { "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "Balance": "250000000", "OwnerCount": 3, "Sequence": 42 } },
+    "data": { "ledger_index": 9345210, "validated": true, "account_data": { "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "Balance": "250000000", "OwnerCount": 3, "Sequence": 42 } },
     "asOf": "2026-10-18T00:00:00.000Z",
     "asOfBasis": "mock testnet ledger 9345210"
   },
@@ -316,21 +356,62 @@
   },
   "ledger.account.tx": {
     "ok": true,
-    "data": { "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "transactions": [{ "hash": "A100000000000000000000000000000000000000000000000000000000000002", "ledger_index": 9345201, "validated": true, "tx": { "TransactionType": "OfferCreate", "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59" }, "meta": { "TransactionResult": "tesSUCCESS" } }], "ledger_index_min": 9345000, "ledger_index_max": 9345210 },
+    "data": { "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "transactions": [{ "close_time_iso": "2026-10-18T00:00:00Z", "hash": "A100000000000000000000000000000000000000000000000000000000000002", "ledger_index": 9345201, "validated": true, "tx_json": { "TransactionType": "OfferCreate", "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59" }, "meta": { "TransactionResult": "tesSUCCESS" } }], "ledger_index_min": 9345000, "ledger_index_max": 9345210 },
     "asOf": "2026-10-18T00:00:00.000Z",
     "asOfBasis": "mock testnet ledger range 9345000-9345210"
   },
   "dex.book": {
     "ok": true,
-    "data": { "network": "testnet", "ledger_index": 9345210, "taker_gets": { "currency": "XRP" }, "taker_pays": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" }, "offers": [{ "taker_gets": "2500000000", "taker_pays": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV", "value": "1279.5" }, "quality": "0.5118" }, { "taker_gets": "2300000000", "taker_pays": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV", "value": "1178.06" }, "quality": "0.5122" }] },
+    "data": { "ledger_index": 9345210, "validated": true, "offers": [{ "Account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "Sequence": 41, "TakerGets": "2500000000", "TakerPays": { "currency": "524C555344000000000000000000000000000000", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV", "value": "1279.5" }, "quality": "0.0000005118" }] },
     "asOf": "2026-10-18T00:00:00.000Z",
     "asOfBasis": "mock testnet book_offers at ledger 9345210"
+  },
+  "dex.depth": {
+    "ok": true,
+    "data": { "network": "testnet", "ledger_index": 9345210, "taker_gets": { "currency": "XRP" }, "taker_pays": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" }, "levels": [{ "price": "0.5118", "quality": "0.0000005118", "taker_gets": "2500000000", "taker_pays": "1279.5", "offer_count": 1 }], "totals": { "taker_gets": "2500000000", "taker_pays": "1279.5", "offer_count": 1 } },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock testnet aggregated depth at ledger 9345210"
   },
   "amm.info": {
     "ok": true,
     "data": { "network": "testnet", "ledger_index": 9345210, "amm": { "Account": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "Asset": { "currency": "XRP" }, "Asset2": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" }, "Amount": "50000000000", "Amount2": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV", "value": "25600" }, "TradingFee": 300, "LPToken": { "currency": "03ABCDEF0123456789ABCDEF0123456789ABCDEF", "issuer": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe", "value": "357770.8764" } } },
     "asOf": "2026-10-18T00:00:00.000Z",
     "asOfBasis": "mock testnet amm_info at ledger 9345210"
+  },
+  "vault.info": {
+    "ok": true,
+    "data": { "network": "devnet", "ledger_current_index": 9345210, "validated": false, "vault": { "Account": "r3yUeHyxszsDQrC7hwtC3yoCTg4X1tkSxr", "Asset": { "currency": "XRP" }, "Data": "50696C6F74207075626C696320585250207661756C74", "Flags": 0, "LedgerEntryType": "Vault", "LEVersion": 1, "Owner": "rnSXTVWEhMKhECNUEENzUi9QuMFoFpKghr", "OwnerNode": "0", "PreviousTxnID": "7BBCA49CCC819E283466EB5E97E14D56682F3EFA2C798C09B633D215AB4DE329", "PreviousTxnLgrSeq": 9345200, "Sequence": 9345100, "ShareMPTID": "000000015769E4B6EC73C86F4A12C652FE1261C369B74928", "WithdrawalPolicy": 1, "index": "148D87773B3AB1A29179C3EC34944720C7C5C468D5D4FC2974609CACF434BD6F", "shares": { "DomainID": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "mpt_issuance_id": "000000015769E4B6EC73C86F4A12C652FE1261C369B74928" } }, "risks": ["Devnet-only test vault."] },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock devnet vault_info at ledger 9345210"
+  },
+  "vault.positions": {
+    "ok": true,
+    "data": {
+      "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
+      "ledger_hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "ledger_index": 9345210,
+      "network": "devnet",
+      "positions": [{
+        "asset": { "currency": "XRP" },
+        "assets_available": "24000000",
+        "assets_total": "25000000",
+        "flags": 0,
+        "locked_balance": "2",
+        "mpt_issuance_id": "000000015769E4B6EC73C86F4A12C652FE1261C369B74928",
+        "share_balance": "100",
+        "share_asset_scale": 0,
+        "share_issuer": "r3yUeHyxszsDQrC7hwtC3yoCTg4X1tkSxr",
+        "vault_account": "r3yUeHyxszsDQrC7hwtC3yoCTg4X1tkSxr",
+        "vault_id": "148D87773B3AB1A29179C3EC34944720C7C5C468D5D4FC2974609CACF434BD6F",
+        "vault_kind": 0,
+        "vault_owner": "rnSXTVWEhMKhECNUEENzUi9QuMFoFpKghr",
+        "vault_sequence": 9345100,
+        "withdrawal_policy": 1
+      }],
+      "validated": true
+    },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock owner-scoped devnet vault positions at validated ledger 9345210"
   },
   "tokens.lookup": {
     "ok": true,
@@ -349,6 +430,30 @@
     "asOf": "2026-10-18T00:00:00.000Z",
     "asOfBasis": "mock venue registry and 24-hour volume snapshot",
     "caveat": ["devnet-only", "off-ledger"]
+  },
+  "onboarding.readiness": {
+    "ok": true,
+    "data": {
+      "ready": true,
+      "scope": { "owner": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59", "network": "testnet" },
+      "checks": {
+        "reviewed_runtime": true,
+        "exact_active_link": true,
+        "exact_persisted_policy": true,
+        "usable_encrypted_delegate": true,
+        "validated_trust_set": true,
+        "usable_trust_line": true
+      },
+      "evidence": {
+        "delegate": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+        "link_ledger_index": 9345210,
+        "trust_set_hash": "C100000000000000000000000000000000000000000000000000000000000002",
+        "trust_set_ledger_index": 9345211,
+        "trust_line_ledger_index": 9345212
+      }
+    },
+    "asOf": "2026-10-18T00:00:00.000Z",
+    "asOfBasis": "mock authenticated local onboarding readiness attestation"
   },
   "account.link": {
     "ok": true,
@@ -370,13 +475,13 @@
   },
   "policy.get": {
     "ok": true,
-    "data": { "max_per_tx_usd": 2000, "daily_cap_usd": 5000, "execute_under_usd": 250, "max_slippage_bps": 100, "allowed_tx_types": ["OfferCreate", "OfferCancel", "TrustSet", "AMMDeposit", "AMMWithdraw", "EscrowFinish", "CheckCash"], "issuer_allowlist": ["RLUSD"], "block_requireauth_issuers": true, "networks": ["testnet", "devnet"], "x402_max_per_call_drops": "10000", "x402_daily_cap_drops": "1000000" },
+    "data": { "max_per_tx_usd": 2000, "daily_cap_usd": 5000, "execute_under_usd": 250, "max_slippage_bps": 100, "allowed_tx_types": ["OfferCreate", "OfferCancel", "TrustSet", "AMMDeposit", "AMMWithdraw", "EscrowFinish", "CheckCash"], "issuer_allowlist": ["RLUSD"], "block_requireauth_issuers": true, "networks": ["testnet", "devnet"], "x402_max_per_call_drops": "10000", "x402_daily_cap_drops": "1000000", "ap4m_enabled": false },
     "asOf": "2026-10-18T00:00:00.000Z",
     "asOfBasis": "mock principal-scoped policy store"
   },
   "policy.set": {
     "ok": true,
-    "data": { "max_per_tx_usd": 2000, "daily_cap_usd": 5000, "execute_under_usd": 250, "max_slippage_bps": 100, "allowed_tx_types": ["OfferCreate", "OfferCancel", "TrustSet", "AMMDeposit", "AMMWithdraw", "EscrowFinish", "CheckCash"], "issuer_allowlist": ["RLUSD"], "block_requireauth_issuers": true, "networks": ["testnet", "devnet"], "x402_max_per_call_drops": "10000", "x402_daily_cap_drops": "1000000" },
+    "data": { "max_per_tx_usd": 2000, "daily_cap_usd": 5000, "execute_under_usd": 250, "max_slippage_bps": 100, "allowed_tx_types": ["OfferCreate", "OfferCancel", "TrustSet", "AMMDeposit", "AMMWithdraw", "EscrowFinish", "CheckCash"], "issuer_allowlist": ["RLUSD"], "block_requireauth_issuers": true, "networks": ["testnet", "devnet"], "x402_max_per_call_drops": "10000", "x402_daily_cap_drops": "1000000", "ap4m_enabled": false },
     "asOf": "2026-10-18T00:00:00.000Z",
     "asOfBasis": "mock principal-scoped policy store"
   }

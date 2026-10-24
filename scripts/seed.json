@@ -1,0 +1,13 @@
+{
+  "testnet": {
+    "marketMakerAddress": "rnSXTVWEhMKhECNUEENzUi9QuMFoFpKghr",
+    "stableIssuerAddress": "r9q7rUoPpDCuzMHC9eki81bTK6LSEVHYp",
+    "freemoneyIssuerAddress": "rGt2hbQde8rLig99UR7DZJ9wFbZc6nN53Y"
+  },
+  "devnet": {
+    "marketMakerAddress": "rnSXTVWEhMKhECNUEENzUi9QuMFoFpKghr",
+    "stableIssuerAddress": "r9q7rUoPpDCuzMHC9eki81bTK6LSEVHYp",
+    "freemoneyIssuerAddress": "rGt2hbQde8rLig99UR7DZJ9wFbZc6nN53Y",
+    "xrpVaultId": "148D87773B3AB1A29179C3EC34944720C7C5C468D5D4FC2974609CACF434BD6F"
+  }
+}

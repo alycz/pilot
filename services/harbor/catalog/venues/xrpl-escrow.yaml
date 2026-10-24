@@ -6,15 +6,26 @@ category:
   - payments
 status:
   mainnet: live
+  testnet: live
+  devnet: live
+execution:
+  transactions:
+    - EscrowCreate
+    - EscrowFinish
+    - EscrowCancel
+  builders:
+    - tx.escrowCreate
+    - tx.escrowFinish
+    - tx.escrowCancel
 reads:
   - account_objects
   - account_tx
 risks:
+  - Mainnet live status describes protocol availability only; Harbor mainnet execution remains disabled and these builders accept test networks only.
   - Escrowed funds remain locked until the specified time or cryptographic condition is satisfied, or until an eligible expired escrow is canceled.
   - EscrowCreate adds an owner-reserve obligation, and an EscrowFinish with a crypto-condition has a higher transaction cost.
   - Fungible-token escrows depend on the TokenEscrow amendment and issuer permissions; authorization, freeze, lock, and transfer settings can prevent creation, finish, or cancellation.
-  - Execution metadata is omitted because the fixed Harbor builder set has no dedicated EscrowCreate, EscrowFinish, or EscrowCancel builder; EscrowCreate moves value to another account and is not delegated by Harbor policy.
-  - Testnet and Devnet status is omitted because the cited XRPL pages do not publish a static per-network availability matrix.
+  - EscrowCreate moves value to another account and is never delegated by Harbor policy; EscrowFinish is in the default delegated set, while EscrowCancel requires an explicit on-ledger permission and custom allowed transaction type.
 links:
   site: https://xrpl.org/
   docs: https://xrpl.org/docs/concepts/payment-types/escrow

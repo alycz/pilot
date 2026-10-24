@@ -22,6 +22,179 @@ function clientReturning(result: unknown) {
 }
 
 describe("XRPL Docs MCP adapter", () => {
+  it("runs the stateless MCP sequence with the Worker-global fetch receiver", async () => {
+    const originalFetch = globalThis.fetch;
+    const workerFetch = vi.fn(function (
+      this: typeof globalThis,
+      _input: RequestInfo | URL,
+      init?: RequestInit,
+    ): Promise<Response> {
+      if (this !== globalThis) {
+        throw new TypeError("Illegal invocation");
+      }
+
+      const message = JSON.parse(String(init?.body)) as {
+        id?: number;
+        method: string;
+      };
+      if (message.method === "initialize") {
+        return Promise.resolve(
+          Response.json({
+            jsonrpc: "2.0",
+            id: message.id,
+            result: {
+              protocolVersion: "2025-06-18",
+              capabilities: {},
+              serverInfo: { name: "xrpl-docs-test", version: "1.0.0" },
+            },
+          }, { headers: { "mcp-session-id": "test-session" } }),
+        );
+      }
+      if (message.method === "notifications/initialized") {
+        return Promise.resolve(new Response(null, { status: 202 }));
+      }
+      return Promise.resolve(
+        Response.json({
+          jsonrpc: "2.0",
+          id: message.id,
+          result: {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  results: [
+                    {
+                      file: "xrpl-org/docs/concepts/payment-types/checks.md",
+                      content: "Checks defer a payment.",
+                    },
+                  ],
+                }),
+              },
+            ],
+          },
+        }),
+      );
+    });
+    globalThis.fetch = workerFetch as typeof globalThis.fetch;
+
+    try {
+      const search = createDocsSearch({ endpoint: "https://example.test/mcp" });
+      await expect(search("checks")).resolves.toMatchObject([
+        { title: "checks", snippet: "Checks defer a payment." },
+      ]);
+      expect(workerFetch).toHaveBeenCalledTimes(3);
+      expect(workerFetch.mock.instances).toEqual(
+        Array.from({ length: workerFetch.mock.calls.length }, () => globalThis),
+      );
+      for (const [, init] of workerFetch.mock.calls) {
+        expect(init?.headers).toMatchObject({
+          "user-agent": "pilot-execution-service/1.0",
+        });
+      }
+      for (const [, init] of workerFetch.mock.calls.slice(1)) {
+        expect(init?.headers).toMatchObject({
+          "mcp-protocol-version": "2025-06-18",
+          "mcp-session-id": "test-session",
+        });
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("accepts a bounded SSE tool response", async () => {
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const message = JSON.parse(String(init?.body)) as {
+        id?: number;
+        method: string;
+      };
+      if (message.method === "initialize") {
+        return Response.json({
+          jsonrpc: "2.0",
+          id: message.id,
+          result: {
+            protocolVersion: "2025-11-25",
+            capabilities: {},
+            serverInfo: { name: "xrpl-docs-test", version: "1.0.0" },
+          },
+        });
+      }
+      if (message.method === "notifications/initialized") {
+        return new Response(null, { status: 202 });
+      }
+      const event = {
+        jsonrpc: "2.0",
+        id: message.id,
+        result: {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                results: [
+                  {
+                    file: "xrpl-org/docs/concepts/payment-types/checks.md",
+                    content: "Checks defer a payment.",
+                  },
+                ],
+              }),
+            },
+          ],
+        },
+      };
+      return new Response(
+        `id: priming\ndata: \n\nevent: message\ndata: ${JSON.stringify(event)}\n\n`,
+        {
+          headers: { "content-type": "text/event-stream; charset=utf-8" },
+        },
+      );
+    });
+    const search = createDocsSearch({
+      endpoint: "https://example.test/mcp",
+      fetch: fetcher as typeof globalThis.fetch,
+    });
+
+    await expect(search("checks")).resolves.toMatchObject([
+      { title: "checks", snippet: "Checks defer a payment." },
+    ]);
+  });
+
+  it("rejects an oversized streamed response before parsing", async () => {
+    const fetcher = vi.fn(async () =>
+      new Response(new Uint8Array(1_000_001), {
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const search = createDocsSearch({
+      endpoint: "https://example.test/mcp",
+      fetch: fetcher as typeof globalThis.fetch,
+    });
+
+    await expect(search("checks")).rejects.toMatchObject({
+      name: "DocsMcpError",
+      code: "INVALID_RESPONSE",
+    });
+  });
+
+  it("reports only allowlisted transport diagnostics", async () => {
+    const search = createDocsSearch({
+      endpoint: "https://example.test/mcp",
+      fetch: vi.fn(async () => {
+        throw new Error("secret upstream transport detail");
+      }) as typeof globalThis.fetch,
+    });
+
+    await expect(search("checks")).rejects.toMatchObject({
+      name: "DocsMcpError",
+      code: "TRANSPORT_ERROR",
+      diagnostic: {
+        stage: "initialize",
+        status: "fetch-error",
+        contentType: "none",
+        elapsedMs: expect.any(Number),
+      },
+    });
+  });
+
   it("normalizes text search results and uses the documented MCP tool", async () => {
     const client = clientReturning({
       isError: false,

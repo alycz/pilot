@@ -1,0 +1,24 @@
+{
+  "source": "standin",
+  "network": "testnet",
+  "tx_hash": "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+  "event": {
+    "tx_hash": "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+    "account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    "delegate": "rJdYtgaiEgzL7xD2QdPKg5xoHkWc7CZjvm",
+    "class": "out_of_band_delegate",
+    "ledger_index": 456,
+    "action": "frozen",
+    "next_step": "owner_revoke_onledger"
+  },
+  "link": {
+    "account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+    "frozen": true
+  },
+  "next_execute": {
+    "ok": false,
+    "error": {
+      "code": "link_frozen"
+    }
+  }
+}

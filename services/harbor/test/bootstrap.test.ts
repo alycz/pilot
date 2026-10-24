@@ -13,6 +13,8 @@ describe("P1.0 Worker bootstrap", () => {
 		await expect(response.json()).resolves.toEqual({
 			ok: true,
 			service: "harbor",
+			health: "process",
+			handoff_readiness: "not_evaluated",
 		});
 	});
 });

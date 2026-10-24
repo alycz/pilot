@@ -15,6 +15,7 @@ const AS_OF = "2026-10-18T00:00:00.000Z";
 // https://xrpl.org/docs/references/http-websocket-apis/public-api-methods/vault-methods/vault_info#response-format
 const VAULT_INFO_FIXTURE = {
   ledger_index: 3_280_200,
+  status: "success" as const,
   validated: true,
   vault: {
     Account: VAULT_ACCOUNT,
@@ -50,6 +51,7 @@ const VAULT_INFO_FIXTURE = {
     },
   },
 };
+const { status: _rpcStatus, ...VAULT_INFO_DATA } = VAULT_INFO_FIXTURE;
 
 function operation(): OpDef {
   const op = ops.find(({ name }) => name === "vault.info");
@@ -95,7 +97,7 @@ describe("vault.info", () => {
       caveat: ["devnet-only", "amendment-pending"],
       data: {
         network: "devnet",
-        ...VAULT_INFO_FIXTURE,
+        ...VAULT_INFO_DATA,
       },
     });
     if (!result.ok) throw new Error("Expected successful fixture response");
@@ -105,6 +107,7 @@ describe("vault.info", () => {
         expect.stringMatching(/verify the vault owner/i),
       ]),
     );
+    expect(result.data).not.toHaveProperty("status");
   });
 
   it("supports the official owner and sequence selector", async () => {
@@ -122,6 +125,77 @@ describe("vault.info", () => {
       { owner: VAULT_OWNER, seq: 3_113_728 },
       undefined,
     );
+  });
+
+  it.each([
+    { mpt_issuance_id: SHARE_MPT_ID },
+    { DomainID: "D".repeat(64), mpt_issuance_id: SHARE_MPT_ID },
+  ])("accepts the compact shares response form %#", async (shares) => {
+    const compact = {
+      ...VAULT_INFO_FIXTURE,
+      vault: { ...VAULT_INFO_FIXTURE.vault, shares },
+    };
+    const request = vi.fn().mockResolvedValue(compact);
+
+    await expect(
+      operation().handler(fixtureContext(request), {
+        network: "devnet",
+        vault_id: VAULT_ID,
+      }),
+    ).resolves.toMatchObject({ vault: { shares } });
+  });
+
+  it.each([
+    {},
+    { DomainID: "D".repeat(64) },
+    { mpt_issuance_id: "A".repeat(47) },
+    { mpt_issuance_id: SHARE_MPT_ID, unexpected: true },
+    { Flags: 56, mpt_issuance_id: SHARE_MPT_ID },
+  ])("rejects a malformed or widened compact shares response %#", async (shares) => {
+    const request = vi.fn().mockResolvedValue({
+      ...VAULT_INFO_FIXTURE,
+      vault: { ...VAULT_INFO_FIXTURE.vault, shares },
+    });
+
+    await expect(
+      operation().handler(fixtureContext(request), {
+        network: "devnet",
+        vault_id: VAULT_ID,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it.each([
+    {
+      name: "compact issuance",
+      shares: { mpt_issuance_id: "F".repeat(48) },
+    },
+    {
+      name: "full issuance",
+      shares: {
+        ...VAULT_INFO_FIXTURE.vault.shares,
+        mpt_issuance_id: "F".repeat(48),
+      },
+    },
+    {
+      name: "full issuer",
+      shares: {
+        ...VAULT_INFO_FIXTURE.vault.shares,
+        Issuer: VAULT_OWNER,
+      },
+    },
+  ])("rejects a mismatched $name identity", async ({ shares }) => {
+    const request = vi.fn().mockResolvedValue({
+      ...VAULT_INFO_FIXTURE,
+      vault: { ...VAULT_INFO_FIXTURE.vault, shares },
+    });
+
+    await expect(
+      operation().handler(fixtureContext(request), {
+        network: "devnet",
+        vault_id: VAULT_ID,
+      }),
+    ).rejects.toThrow(/must match the vault/i);
   });
 
   it("strictly rejects unsupported networks, invalid selectors, and extra keys", () => {
@@ -179,5 +253,20 @@ describe("vault.info", () => {
         vault_id: VAULT_ID,
       }),
     ).rejects.toThrow();
+  });
+
+  it("rejects non-success and unknown top-level RPC metadata", async () => {
+    for (const fixture of [
+      { ...VAULT_INFO_FIXTURE, status: "error" },
+      { ...VAULT_INFO_FIXTURE, request_id: "unexpected" },
+    ]) {
+      const request = vi.fn().mockResolvedValue(fixture);
+      await expect(
+        operation().handler(fixtureContext(request), {
+          network: "devnet",
+          vault_id: VAULT_ID,
+        }),
+      ).rejects.toThrow();
+    }
   });
 });

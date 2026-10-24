@@ -14,6 +14,7 @@ const ROOT =
   rootFlag >= 0 ? resolve(process.cwd(), process.argv[rootFlag + 1]) : SCRIPT_ROOT;
 const OPS_DIR = resolve(ROOT, "src/ops");
 const VENUES_DIR = resolve(ROOT, "catalog/venues");
+const MERCHANTS_DIR = resolve(ROOT, "catalog/merchants");
 const SKILLS_DIR = resolve(ROOT, "ecosystem-skills");
 const GENERATED_OPS = resolve(OPS_DIR, "index.gen.ts");
 const GENERATED_MANIFEST = resolve(ROOT, "catalog/manifest.json");
@@ -412,6 +413,128 @@ async function readVenues() {
   return venues.sort((a, b) => a.id.localeCompare(b.id));
 }
 
+// This structural validator mirrors the fixed Merchant contract without
+// importing TypeScript into the plain-Node catalog build.
+function validateAp4mAsset(value, label) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  if (value.kind === "xrp") {
+    assertKeys(value, ["kind"], label);
+    return value;
+  }
+  if (value.kind === "iou") {
+    assertKeys(value, ["kind", "currency", "issuer"], label);
+    assertString(value.currency, `${label}.currency`);
+    assertString(value.issuer, `${label}.issuer`);
+    return value;
+  }
+  throw new Error(`${label}.kind is invalid`);
+}
+
+function validateMerchant(value, file) {
+  const label = relative(ROOT, file);
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must contain a merchant object`);
+  }
+  assertKeys(
+    value,
+    [
+      "id",
+      "name",
+      "network",
+      "base_url",
+      "xrpl_address",
+      "src_dpa_id",
+      "schemes",
+      "settle_asset",
+      "required_credential",
+      "products",
+      "wba_required",
+    ],
+    label,
+  );
+  for (const key of ["id", "name", "base_url", "xrpl_address", "src_dpa_id"]) {
+    assertString(value[key], `${label}.${key}`);
+  }
+  try {
+    new URL(value.base_url);
+  } catch {
+    throw new Error(`${label}.base_url must be a URL`);
+  }
+  if (!["mainnet", "testnet", "devnet", "lending-devnet"].includes(value.network)) {
+    throw new Error(`${label}.network is invalid`);
+  }
+  assertStringArray(value.schemes, `${label}.schemes`);
+  if (
+    value.schemes.length === 0 ||
+    value.schemes.some((scheme) => !["exact", "xrpl-paychan"].includes(scheme))
+  ) {
+    throw new Error(`${label}.schemes contains an invalid value`);
+  }
+  validateAp4mAsset(value.settle_asset, `${label}.settle_asset`);
+  if (
+    !value.required_credential ||
+    typeof value.required_credential !== "object" ||
+    Array.isArray(value.required_credential)
+  ) {
+    throw new Error(`${label}.required_credential must be an object`);
+  }
+  assertKeys(
+    value.required_credential,
+    ["issuer", "credential_type_hex"],
+    `${label}.required_credential`,
+  );
+  assertString(value.required_credential.issuer, `${label}.required_credential.issuer`);
+  assertString(
+    value.required_credential.credential_type_hex,
+    `${label}.required_credential.credential_type_hex`,
+  );
+  if (!Array.isArray(value.products) || value.products.length === 0) {
+    throw new Error(`${label}.products must be a non-empty array`);
+  }
+  value.products.forEach((product, index) => {
+    const productLabel = `${label}.products[${index}]`;
+    if (!product || typeof product !== "object" || Array.isArray(product)) {
+      throw new Error(`${productLabel} must be an object`);
+    }
+    assertKeys(
+      product,
+      ["sku", "name", "description", "price", "response_schema_id"],
+      productLabel,
+    );
+    for (const key of ["sku", "name", "description", "response_schema_id"]) {
+      assertString(product[key], `${productLabel}.${key}`);
+    }
+    if (!product.price || typeof product.price !== "object" || Array.isArray(product.price)) {
+      throw new Error(`${productLabel}.price must be an object`);
+    }
+    assertKeys(product.price, ["asset", "value"], `${productLabel}.price`);
+    validateAp4mAsset(product.price.asset, `${productLabel}.price.asset`);
+    assertString(product.price.value, `${productLabel}.price.value`);
+  });
+  if (typeof value.wba_required !== "boolean") {
+    throw new Error(`${label}.wba_required must be a boolean`);
+  }
+  return value;
+}
+
+async function readMerchants() {
+  const files = await filesIn(
+    MERCHANTS_DIR,
+    (name) => [".yaml", ".yml"].includes(extname(name)),
+  );
+  const merchants = [];
+  const ids = new Set();
+  for (const file of files) {
+    const merchant = validateMerchant(parseYaml(await readFile(file, "utf8")), file);
+    if (ids.has(merchant.id)) throw new Error(`Duplicate merchant: ${merchant.id}`);
+    ids.add(merchant.id);
+    merchants.push(merchant);
+  }
+  return merchants.sort((left, right) => left.id.localeCompare(right.id));
+}
+
 function playbookMetadata(content, file) {
   const lines = content.split(/\r?\n/);
   const heading = lines.find((line) => /^#\s+/.test(line));
@@ -462,12 +585,13 @@ function generatedIndex(modules) {
 }
 
 async function main() {
-  const [{ modules, metadata: ops }, venues, ecosystemSkills] = await Promise.all([
+  const [{ modules, metadata: ops }, venues, merchants, ecosystemSkills] = await Promise.all([
     discoverOps(),
     readVenues(),
+    readMerchants(),
     readEcosystemSkills(),
   ]);
-  const manifest = { version: 1, ops, venues, ecosystemSkills };
+  const manifest = { version: 1, ops, venues, merchants, ecosystemSkills };
 
   await Promise.all([
     mkdir(OPS_DIR, { recursive: true }),
@@ -478,7 +602,7 @@ async function main() {
     writeFile(GENERATED_MANIFEST, `${JSON.stringify(manifest, null, 2)}\n`, "utf8"),
   ]);
   process.stdout.write(
-    `Generated ${ops.length} ops, ${venues.length} venues, and ${ecosystemSkills.playbooks.length} local playbooks.\n`,
+    `Generated ${ops.length} ops, ${venues.length} venues, ${merchants.length} merchants, and ${ecosystemSkills.playbooks.length} local playbooks.\n`,
   );
 }
 

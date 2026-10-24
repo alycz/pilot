@@ -6,13 +6,18 @@ import {
   type OpContext,
   type OpDef,
 } from "../src/catalog/registry";
+import { DocsMcpError } from "../src/adapters/docs-mcp";
 import { XrplRpcError } from "../src/adapters/xrpl-rpc";
 import { MAX_OUTPUT_BYTES } from "../src/guard";
+import { ApprovalExpiredError } from "../src/executor/errors";
 import { execute } from "../src/executor/run";
 import {
+  LOCAL_EXTERNAL_MUTATION_DISABLED,
+  LOCAL_X402_OPERATION_DISABLED,
   ProviderCallLimitError,
   createHarborProvider,
 } from "../src/executor/providers";
+import { X402_SIGNING_PROFILE } from "../src/ops/x402";
 
 function feeOp(
   handler: OpDef["handler"] = (ctx) => ({
@@ -47,6 +52,125 @@ describe("registry-backed Harbor provider", () => {
     });
   });
 
+  it("blocks external mutation operations before their handlers in local read-only mode", async () => {
+    const handler = vi.fn(() => ({ shouldNotRun: true }));
+    const mutationOps = [
+      "account.link",
+      "account.revoke",
+      "tx.execute",
+      "tx.submit",
+    ].map(
+      (name): OpDef => ({
+        name,
+        family: name.split(".")[0]!,
+        summary: "test mutation",
+        args: z.object({}).strict(),
+        returns: "never",
+        caveats: [],
+        example: `await harbor.${name}({})`,
+        handler,
+      }),
+    );
+    const provider = createHarborProvider(
+      new OpRegistry([...mutationOps, feeOp(handler)]),
+      {
+        principal: "local-dev",
+        env: { HARBOR_LOCAL_READ_ONLY: "true" },
+      },
+    );
+
+    for (const operationName of mutationOps.map(({ name }) => name)) {
+      await expect(provider.invoke(operationName)).resolves.toEqual({
+        ok: false,
+        error: {
+          service: operationName,
+          kind: "error",
+          message: "External mutations are disabled in local read-only mode",
+          code: LOCAL_EXTERNAL_MUTATION_DISABLED,
+        },
+      });
+    }
+    expect(handler).not.toHaveBeenCalled();
+
+    await expect(provider.invoke("ledger.fee")).resolves.toMatchObject({
+      ok: true,
+    });
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it("allows only x402.pay in the local x402 signing profile", async () => {
+    const allowedHandler = vi.fn(() => ({ paid: true }));
+    const deniedHandler = vi.fn(() => ({ shouldNotRun: true }));
+    const operation = (name: string, handler: OpDef["handler"]): OpDef => ({
+      name,
+      family: name.split(".")[0]!,
+      summary: "profile boundary test",
+      args: z.object({}).strict(),
+      returns: "test result",
+      caveats: [],
+      example: `await harbor.${name}({})`,
+      handler,
+    });
+    const provider = createHarborProvider(
+      new OpRegistry([
+        operation("x402.pay", allowedHandler),
+        operation("policy.set", deniedHandler),
+        operation("future.rotate", deniedHandler),
+      ]),
+      {
+        principal: "named-principal",
+        localDevRequest: true,
+        env: {
+          HARBOR_LOCAL_X402_SIGNING_PROFILE: X402_SIGNING_PROFILE,
+        },
+      },
+    );
+
+    await expect(provider.invoke("x402.pay")).resolves.toMatchObject({
+      ok: true,
+      data: { paid: true },
+    });
+    expect(allowedHandler).toHaveBeenCalledOnce();
+
+    for (const operationName of [
+      "policy.set",
+      "future.rotate",
+      "unknown.operation",
+    ]) {
+      await expect(provider.invoke(operationName)).resolves.toEqual({
+        ok: false,
+        error: {
+          service: operationName,
+          kind: "error",
+          message: "Operation is disabled in the local x402 signing profile",
+          code: LOCAL_X402_OPERATION_DISABLED,
+        },
+      });
+    }
+    expect(deniedHandler).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["an enabled runtime without a profile marker", {
+      HARBOR_LOCAL_X402_RUNTIME_ENABLED: "true",
+    }],
+    ["an unrecognized profile marker", {
+      HARBOR_LOCAL_X402_SIGNING_PROFILE: "unreviewed-profile",
+    }],
+  ])("keeps the x402 allowlist closed for %s", async (_name, env) => {
+    const handler = vi.fn(() => ({ shouldNotRun: true }));
+    const provider = createHarborProvider(
+      new OpRegistry([feeOp(handler)]),
+      { principal: "named-principal", env },
+    );
+
+    await expect(provider.invoke("ledger.fee")).resolves.toMatchObject({
+      ok: false,
+      error: { code: LOCAL_X402_OPERATION_DISABLED },
+    });
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it("returns guarded envelopes and stops at the configured call limit", async () => {
     const provider = createHarborProvider(
       new OpRegistry([feeOp()]),
@@ -66,7 +190,9 @@ describe("registry-backed Harbor provider", () => {
     const provider = createHarborProvider(
       new OpRegistry([
         feeOp(() => {
-          throw new Error("delegate credential material");
+          throw Object.assign(new Error("delegate credential material"), {
+            code: "APPROVAL_EXPIRED",
+          });
         }),
       ]),
       ctx,
@@ -80,6 +206,60 @@ describe("registry-backed Harbor provider", () => {
         code: "OPERATION_FAILED",
       },
     });
+  });
+
+  it("preserves only the fixed approval-expired contract", async () => {
+    const provider = createHarborProvider(
+      new OpRegistry([
+        feeOp(() => {
+          throw new ApprovalExpiredError();
+        }),
+      ]),
+      ctx,
+    );
+
+    await expect(provider.invoke("ledger.fee")).resolves.toEqual({
+      ok: false,
+      error: {
+        service: "ledger.fee",
+        kind: "error",
+        message: "Approval expired",
+        code: "APPROVAL_EXPIRED",
+      },
+    });
+  });
+
+  it("preserves only allowlisted XRPL Docs failure metadata", async () => {
+    const provider = createHarborProvider(
+      new OpRegistry([
+        feeOp(() => {
+          throw new DocsMcpError(
+            "TRANSPORT_ERROR",
+            "sentinel secret endpoint and response",
+            { cause: new Error("sentinel cause") },
+            {
+              stage: "tools-call",
+              status: 503,
+              contentType: "other",
+              elapsedMs: 412,
+            },
+          );
+        }),
+      ]),
+      ctx,
+    );
+    const result = await provider.invoke("ledger.fee");
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        service: "docs",
+        kind: "error",
+        message: "XRPL docs request failed",
+        code: "DOCS_TRANSPORT_ERROR",
+        hint: "stage=tools-call;status=503;content_type=other;elapsed_ms=412",
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain("sentinel");
   });
 
   it("preserves only allowlisted XRPL transport metadata", async () => {
@@ -253,27 +433,52 @@ describe("QuickJS executor", () => {
   });
 
   it("does not return timeout until an admitted host operation settles", async () => {
-    let settled = false;
-    const registry = new OpRegistry([
-      feeOp(
-        () =>
-          new Promise((resolve) =>
-            setTimeout(() => {
-              settled = true;
-              resolve({ drops: "12" });
-            }, 25),
-          ),
-      ),
-    ]);
-    await expect(
-      execute("return await harbor.ledger.fee();", {
+    vi.useFakeTimers();
+    try {
+      let admit!: () => void;
+      let release!: () => void;
+      let settled = false;
+      const admitted = new Promise<void>((resolve) => {
+        admit = resolve;
+      });
+      const registry = new OpRegistry([
+        feeOp(
+          () =>
+            new Promise((resolve) => {
+              release = () => {
+                settled = true;
+                resolve({ drops: "12" });
+              };
+              admit();
+            }),
+        ),
+      ]);
+      const execution = execute("return await harbor.ledger.fee();", {
         ctx,
         registry,
         runtime: "quickjs",
         timeoutMs: 5,
-      }),
-    ).rejects.toThrow(/timed out/i);
-    expect(settled).toBe(true);
+      });
+      await admitted;
+
+      let returned = false;
+      void execution.then(
+        () => {
+          returned = true;
+        },
+        () => {
+          returned = true;
+        },
+      );
+      await vi.advanceTimersByTimeAsync(5);
+      expect(returned).toBe(false);
+
+      release();
+      await expect(execution).rejects.toThrow(/timed out/i);
+      expect(settled).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

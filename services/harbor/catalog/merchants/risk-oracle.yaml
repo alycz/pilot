@@ -1,0 +1,23 @@
+id: risk-oracle
+name: Risk Oracle
+network: testnet
+base_url: http://127.0.0.1:8794/m/risk-oracle
+xrpl_address: rPEPPER7kfTD9w2To4CQk6UCfuHM9c6GDY
+src_dpa_id: demo-dpa-risk-oracle
+schemes:
+  - xrpl-paychan
+settle_asset:
+  kind: xrp
+required_credential:
+  issuer: rDemoNetworkIssuer111111111111111111
+  credential_type_hex: 4150344D2D4167656E74
+products:
+  - sku: risk-score
+    name: Venue risk score
+    description: Typed venue risk score and factors for the AP4M demo.
+    price:
+      asset:
+        kind: xrp
+      value: "0.05"
+    response_schema_id: risk_score_v1
+wba_required: true

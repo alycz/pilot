@@ -34,12 +34,12 @@ describe('delegate key wrapping', () => {
 			iv: wrapped.iv,
 		};
 
-		const result = await withDelegateSigner(identity, stored, base64Key(7), (signer) => {
+		const result = await withDelegateSigner(identity, stored, base64Key(7), async (signer) => {
 			expect(Object.keys(signer).sort()).toEqual(['address', 'publicKey', 'sign']);
 			expect('seed' in signer).toBe(false);
 			expect('privateKey' in signer).toBe(false);
 
-			const signed = signer.sign({
+			const signed = await signer.sign({
 				TransactionType: 'OfferCancel',
 				Account: signer.address,
 				OfferSequence: 1,

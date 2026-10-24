@@ -1,11 +1,33 @@
 import type { OpContext } from "../catalog/registry";
-import type { Network, TxBuild } from "../contracts";
+import type { ExecutionCapability, ExecutionContract, Network, TxBuild } from "../contracts";
 import { requestXrpl, type XrplRpc } from "../adapters/xrpl-rpc";
 import {
   createStore,
   type BuildInsert,
   type BuildRow,
+  type LinkStatus,
 } from "./store";
+import {
+  LOCAL_TRADING_BUILD_ORIGIN,
+  localTradingMarkersPresent,
+} from "../local-trading";
+import {
+  LOCAL_TRADING_ONBOARDING_BUILD_ORIGIN,
+  localTradingOnboardingMarkersPresent,
+} from "../local-trading-onboarding";
+import {
+  LOCAL_TRADING_ISOLATED_V1_BUILD_ORIGIN,
+  isReviewedLocalTradingIsolatedV1Context,
+  localTradingIsolatedV1MarkersPresent,
+} from "../local-trading-isolated-v1";
+import {
+  LOCAL_TRADING_ISOLATED_ONBOARDING_V1_BUILD_ORIGIN,
+  isReviewedLocalTradingIsolatedOnboardingV1Context,
+  localTradingIsolatedOnboardingV1MarkersPresent,
+} from "../local-trading-isolated-onboarding-v1";
+import { isReviewedLocalTradingContext } from "../local-trading";
+import { isReviewedLocalTradingOnboardingContext } from "../local-trading-onboarding";
+import { isHarborDelegableTransactionType } from "./delegation";
 
 export type PreparedTransaction = Record<string, unknown>;
 export type XrplAmount =
@@ -45,11 +67,25 @@ export interface PreflightOptions {
 }
 
 export interface BuildStore {
-  insertBuild(input: BuildInsert): Promise<unknown>;
+  insertBuild(input: BuildInsert & Partial<V2BuildPersistence>): Promise<unknown>;
   getLink?(
     owner: string,
     network: Network,
-  ): Promise<{ permissions: string[] } | null>;
+  ): Promise<{ permissions: string[]; status: LinkStatus } | null>;
+}
+
+export interface V2BuildPersistence {
+  executionContract: "xrpl_execution_v2";
+  buildRevision: number;
+  unsignedTxDigest: string;
+  unsignedTxDigestAlg: "sha256-jcs-v1";
+  economicFingerprint: string;
+  economicFingerprintAlg: "sha256-jcs-economic-v1";
+  buildLedger: number;
+  firstInclusionLedger: number;
+  quoteLedger: number | null;
+  quoteValidThroughLedger: number | null;
+  executionCapability: ExecutionCapability;
 }
 
 export interface BuildContext extends OpContext {
@@ -74,7 +110,22 @@ export interface BuildInput {
   est_slippage_bps?: number;
   valuation_amounts?: readonly XrplAmount[];
   preflight?: PreflightOptions;
+  /**
+   * Bind a market-derived build to a recent validated ledger. The build's
+   * auto-filled ledger is `LastLedgerSequence - 4`; reject before simulation
+   * or persistence when the reference is newer or older than the allowed gap.
+   */
+  validated_ledger_reference?: {
+    ledger_index: number;
+    max_ledger_gap: number;
+  };
+  /** Refuse to persist a build unless the exact unsigned transaction simulates successfully. */
+  require_simulation_success?: boolean;
   now?: Date;
+  execution_contract?: ExecutionContract;
+  acquisition_balance_invariant?: NonNullable<
+    ExecutionCapability["acquisition_balance_invariant"]
+  >;
 }
 
 export interface UsdValuationInput {
@@ -98,7 +149,12 @@ export type BuildValidationCode =
   | "SENSITIVE_ARGUMENT"
   | "SIGNED_TRANSACTION"
   | "MAINNET_EXECUTION_DISABLED"
-  | "MISSING_SOURCE_TAG";
+  | "MISSING_SOURCE_TAG"
+  | "STALE_LEDGER_REFERENCE"
+  | "EXECUTION_CONTRACT_UNSUPPORTED"
+  | "EXECUTION_SNAPSHOT_STALE"
+  | "QUOTE_EXPIRED"
+  | "SIMULATION_FAILED";
 
 export class BuildValidationError extends Error {
   constructor(
@@ -110,6 +166,37 @@ export class BuildValidationError extends Error {
   }
 }
 
+export function assertExecutionContractSupported(
+  ctx: BuildContext,
+  requested: unknown,
+): ExecutionContract {
+  const executionContract = requested ?? "xrpl_execution_v1";
+  if (
+    executionContract !== "xrpl_execution_v1" &&
+    executionContract !== "xrpl_execution_v2"
+  ) {
+    throw new BuildValidationError(
+      "Unsupported execution contract",
+      "EXECUTION_CONTRACT_UNSUPPORTED",
+    );
+  }
+  if (
+    executionContract === "xrpl_execution_v2" &&
+    (localTradingIsolatedOnboardingV1MarkersPresent(ctx.env)
+      ? !isReviewedLocalTradingIsolatedOnboardingV1Context(ctx)
+      : localTradingIsolatedV1MarkersPresent(ctx.env)
+        ? !isReviewedLocalTradingIsolatedV1Context(ctx)
+      : !isReviewedLocalTradingContext(ctx) &&
+        !isReviewedLocalTradingOnboardingContext(ctx))
+  ) {
+    throw new BuildValidationError(
+      "xrpl_execution_v2 is restricted to an exact reviewed local trading profile",
+      "EXECUTION_CONTRACT_UNSUPPORTED",
+    );
+  }
+  return executionContract;
+}
+
 export const MAINNET_RLUSD_ISSUER =
   "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De";
 export const TESTNET_RLUSD_ISSUER =
@@ -119,7 +206,8 @@ export const RLUSD_HEX_CURRENCY =
 export const USD_MID_CACHE_MS = 60_000;
 
 const UINT32_MAX = 0xffff_ffff;
-const LAST_LEDGER_OFFSET = 4;
+const V1_LAST_LEDGER_OFFSET = 4;
+const V2_LAST_LEDGER_OFFSET = 64;
 const REQUIRE_AUTH_FLAG = 0x0004_0000;
 const SENSITIVE_KEY = /seed|secret|private|mnemonic/i;
 const FORBIDDEN_OUTPUT_KEYS = new Set([
@@ -718,9 +806,13 @@ export async function autofillUnsignedTransaction(
   ctx: BuildContext,
   network: Network,
   tx: PreparedTransaction,
+  executionContract: ExecutionContract = "xrpl_execution_v1",
 ): Promise<PreparedTransaction> {
   validatePreparedTransaction(tx);
-  const needsAccount = tx.Sequence === undefined || tx.LastLedgerSequence === undefined;
+  const needsAccount =
+    executionContract === "xrpl_execution_v2" ||
+    tx.Sequence === undefined ||
+    tx.LastLedgerSequence === undefined;
   const needsFee = tx.Fee === undefined;
   const [accountResult, feeResult] = await Promise.all([
     needsAccount
@@ -734,6 +826,15 @@ export async function autofillUnsignedTransaction(
       : Promise.resolve(undefined),
   ]);
   const filled = { ...tx };
+  if (
+    executionContract === "xrpl_execution_v2" &&
+    accountResult?.validated !== true
+  ) {
+    throw new BuildValidationError(
+      "v2 requires account_info from an explicitly validated ledger",
+      "INVALID_BUILD",
+    );
+  }
   if (filled.Sequence === undefined) {
     filled.Sequence = requiredUInt32(
       asAccountData(accountResult!).Sequence,
@@ -748,13 +849,35 @@ export async function autofillUnsignedTransaction(
         ? feeResult.ledger_current_index - 1
         : undefined);
     filled.LastLedgerSequence =
-      requiredUInt32(validatedLedger, "ledger_index") + LAST_LEDGER_OFFSET;
+      requiredUInt32(validatedLedger, "ledger_index") +
+      (executionContract === "xrpl_execution_v2"
+        ? V2_LAST_LEDGER_OFFSET
+        : V1_LAST_LEDGER_OFFSET);
   }
   validatePreparedTransaction(filled);
   return filled;
 }
 
 /** Simulate an unsigned JSON transaction and expose only TxBuild's safe fields. */
+const XRPL_ENGINE_RESULT_PATTERN =
+  /^(?:tes|tec|tef|tem|ter|tel)[A-Z][A-Z0-9_]{0,47}$/;
+
+function canonicalEngineResult(engineResult: unknown): string {
+  if (
+    typeof engineResult !== "string" ||
+    !XRPL_ENGINE_RESULT_PATTERN.test(engineResult)
+  ) {
+    throw new Error("simulate response has invalid engine_result");
+  }
+  return engineResult;
+}
+
+function localSimulationMessage(engineResult: string): string {
+  return engineResult === "tesSUCCESS"
+    ? "The simulated transaction would succeed."
+    : `XRPL simulation result: ${engineResult}.`;
+}
+
 export async function simulateUnsignedTransaction(
   ctx: BuildContext,
   network: Network,
@@ -768,15 +891,18 @@ export async function simulateUnsignedTransaction(
     binary: false,
   });
   if (
-    typeof result.engine_result !== "string" ||
     typeof result.engine_result_message !== "string" ||
     result.applied !== false
   ) {
     throw new Error("simulate response is missing required result fields");
   }
+  const engineResult = canonicalEngineResult(result.engine_result);
   return {
-    engine_result: result.engine_result,
-    engine_result_message: result.engine_result_message,
+    engine_result: engineResult,
+    // rippled's message is provider-controlled text. Preserve TxBuild's shape
+    // while exposing only a deterministic local rendering of the validated
+    // canonical engine-result code.
+    engine_result_message: localSimulationMessage(engineResult),
     applied: false,
   };
 }
@@ -982,6 +1108,7 @@ export async function persistBuild(
   ctx: BuildContext,
   build: TxBuild,
   createdAt: Date = new Date(),
+  v2Persistence?: V2BuildPersistence,
 ): Promise<void> {
   validatePreparedTransaction(build.tx_json, build.summary.account);
   const lastLedger = build.tx_json.LastLedgerSequence;
@@ -991,6 +1118,30 @@ export async function persistBuild(
       "INVALID_TRANSACTION",
     );
   }
+  let originProfile: BuildInsert["originProfile"];
+  if (localTradingIsolatedOnboardingV1MarkersPresent(ctx.env)) {
+    if (!isReviewedLocalTradingIsolatedOnboardingV1Context(ctx)) {
+      throw new BuildValidationError(
+        "Invalid local trading isolated v1 onboarding profile",
+        "INVALID_BUILD",
+      );
+    }
+    originProfile = LOCAL_TRADING_ISOLATED_ONBOARDING_V1_BUILD_ORIGIN;
+  } else if (localTradingIsolatedV1MarkersPresent(ctx.env)) {
+    if (!isReviewedLocalTradingIsolatedV1Context(ctx)) {
+      throw new BuildValidationError(
+        "Invalid local trading isolated v1 profile",
+        "INVALID_BUILD",
+      );
+    }
+    originProfile = LOCAL_TRADING_ISOLATED_V1_BUILD_ORIGIN;
+  } else if (localTradingOnboardingMarkersPresent(ctx.env)) {
+    originProfile = LOCAL_TRADING_ONBOARDING_BUILD_ORIGIN;
+  } else if (localTradingMarkersPresent(ctx.env)) {
+    originProfile = LOCAL_TRADING_BUILD_ORIGIN;
+  } else {
+    originProfile = null;
+  }
   await resolveStore(ctx).insertBuild({
     id: build.build_id,
     owner: build.summary.account,
@@ -999,7 +1150,122 @@ export async function persistBuild(
     summary: build.summary,
     lastLedgerSeq: lastLedger,
     createdAt: createdAt.toISOString(),
+    originProfile,
+    ...v2Persistence,
   });
+}
+
+export function canonicalizeJson(value: unknown): string {
+  if (value === null) return "null";
+  if (typeof value === "string" || typeof value === "boolean") {
+    return JSON.stringify(value);
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new TypeError("JCS does not permit non-finite numbers");
+    }
+    return JSON.stringify(value);
+  }
+  if (typeof value !== "object") {
+    throw new TypeError("JCS input must contain only JSON values");
+  }
+  if (Array.isArray(value)) return `[${value.map(canonicalizeJson).join(",")}]`;
+  return `{${Object.keys(value as Record<string, unknown>)
+    .sort()
+    .filter((key) => (value as Record<string, unknown>)[key] !== undefined)
+    .map((key) => `${JSON.stringify(key)}:${canonicalizeJson((value as Record<string, unknown>)[key])}`)
+    .join(",")}}`;
+}
+
+async function sha256Upper(value: unknown): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(canonicalizeJson(value)),
+  );
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("")
+    .toUpperCase();
+}
+
+export async function v2CanonicalBindings(
+  txJson: Readonly<Record<string, unknown>>,
+  owner: string,
+  network: Network,
+): Promise<{ unsignedTxDigest: string; economicFingerprint: string }> {
+  const unsignedExcluded = new Set(["SigningPubKey", "TxnSignature", "Signers"]);
+  const economicExcluded = new Set([
+    "Fee", "Sequence", "LastLedgerSequence", "SigningPubKey", "TxnSignature",
+    "Signers", "Delegate",
+  ]);
+  const unsignedTransaction = Object.fromEntries(
+    Object.entries(txJson).filter(([key]) => !unsignedExcluded.has(key)),
+  );
+  const economicTransaction = Object.fromEntries(
+    Object.entries(txJson).filter(([key]) => !economicExcluded.has(key)),
+  );
+  return {
+    unsignedTxDigest: await sha256Upper(unsignedTransaction),
+    economicFingerprint: await sha256Upper({ owner, network, transaction: economicTransaction }),
+  };
+}
+
+async function v2Capability(
+  input: BuildInput,
+  txJson: PreparedTransaction,
+): Promise<ExecutionCapability> {
+  const lastLedger = requiredUInt32(txJson.LastLedgerSequence, "LastLedgerSequence");
+  const buildLedger = lastLedger - V2_LAST_LEDGER_OFFSET;
+  const invariantLedger = input.acquisition_balance_invariant?.ledger_index;
+  const takerPays = txJson.TakerPays;
+  const acquiresOfficialTestnetRlusd =
+    input.network === "testnet" &&
+    txJson.TransactionType === "OfferCreate" &&
+    typeof takerPays === "object" &&
+    takerPays !== null &&
+    !Array.isArray(takerPays) &&
+    String((takerPays as Record<string, unknown>).currency).toUpperCase() ===
+      RLUSD_HEX_CURRENCY &&
+    (takerPays as Record<string, unknown>).issuer === TESTNET_RLUSD_ISSUER;
+  if (acquiresOfficialTestnetRlusd && invariantLedger === undefined) {
+    throw new BuildValidationError(
+      "official testnet RLUSD acquisition requires a validated balance invariant",
+      "INVALID_BUILD",
+    );
+  }
+  if (
+    invariantLedger !== undefined &&
+    (invariantLedger > buildLedger || buildLedger - invariantLedger > 1)
+  ) {
+    throw new BuildValidationError(
+      "official testnet RLUSD balance evidence must be from the build ledger or the immediately preceding validated ledger",
+      "EXECUTION_SNAPSHOT_STALE",
+    );
+  }
+  const bindings = await v2CanonicalBindings(txJson, input.owner, input.network);
+  const quoteLedger = input.validated_ledger_reference?.ledger_index;
+  return {
+    execution_contract: "xrpl_execution_v2",
+    build_revision: 1,
+    unsigned_tx_digest: bindings.unsignedTxDigest,
+    unsigned_tx_digest_alg: "sha256-jcs-v1",
+    economic_fingerprint: bindings.economicFingerprint,
+    economic_fingerprint_alg: "sha256-jcs-economic-v1",
+    build_ledger: buildLedger,
+    first_inclusion_ledger: buildLedger + 1,
+    last_ledger_sequence: lastLedger,
+    minimum_remaining_ledgers: 8,
+    approval_expires_in_seconds: 90,
+    ...(quoteLedger === undefined
+      ? {}
+      : {
+          quote_ledger: quoteLedger,
+          quote_valid_through_ledger: quoteLedger + 1,
+        }),
+    ...(input.acquisition_balance_invariant === undefined
+      ? {}
+      : { acquisition_balance_invariant: input.acquisition_balance_invariant }),
+  };
 }
 
 export function hasPreflightFailures(
@@ -1008,26 +1274,18 @@ export function hasPreflightFailures(
   return checks.some(({ pass }) => !pass);
 }
 
-const PROTOCOL_DELEGABLE_TRANSACTION_TYPES = new Set([
-  "OfferCreate",
-  "OfferCancel",
-  "TrustSet",
-  "AMMDeposit",
-  "AMMWithdraw",
-  "EscrowFinish",
-  "CheckCash",
-]);
-
 async function isDelegableBuild(
   store: BuildStore,
   owner: string,
   network: Network,
   transactionType: string,
 ): Promise<boolean> {
-  if (!PROTOCOL_DELEGABLE_TRANSACTION_TYPES.has(transactionType)) return false;
+  if (!isHarborDelegableTransactionType(transactionType)) return false;
   if (store.getLink === undefined) return false;
   const link = await store.getLink(owner, network);
-  return link?.permissions.includes(transactionType) ?? false;
+  return (
+    link?.status === "active" && link.permissions.includes(transactionType)
+  );
 }
 
 /** Main validate -> preflight -> autofill -> simulate -> principal-store pipeline. */
@@ -1035,6 +1293,10 @@ export async function buildTransaction(
   ctx: BuildContext,
   input: BuildInput,
 ): Promise<TxBuild> {
+  const executionContract = assertExecutionContractSupported(
+    ctx,
+    input.execution_contract,
+  );
   if (!ctx.principal?.trim()) {
     throw new BuildValidationError("principal is required", "INVALID_BUILD");
   }
@@ -1047,6 +1309,18 @@ export async function buildTransaction(
   if (!input.owner || !input.action || !Array.isArray(input.amounts)) {
     throw new BuildValidationError(
       "owner, action, and amounts are required",
+      "INVALID_BUILD",
+    );
+  }
+  if (input.tx_json.LastLedgerSequence !== undefined) {
+    throw new BuildValidationError(
+      "LastLedgerSequence is assigned by Harbor",
+      "INVALID_BUILD",
+    );
+  }
+  if (executionContract === "xrpl_execution_v2" && input.tx_json.Fee !== undefined) {
+    throw new BuildValidationError(
+      "Fee is assigned by Harbor for xrpl_execution_v2",
       "INVALID_BUILD",
     );
   }
@@ -1070,8 +1344,57 @@ export async function buildTransaction(
     preflightOptions,
     input.now,
   );
-  const txJson = await autofillUnsignedTransaction(ctx, input.network, tagged);
+  const txJson = await autofillUnsignedTransaction(
+    ctx,
+    input.network,
+    tagged,
+    executionContract,
+  );
+  if (input.validated_ledger_reference !== undefined) {
+    const { ledger_index: referenceLedger, max_ledger_gap: maxLedgerGap } =
+      input.validated_ledger_reference;
+    if (
+      !Number.isSafeInteger(referenceLedger) ||
+      referenceLedger < 1 ||
+      !Number.isSafeInteger(maxLedgerGap) ||
+      maxLedgerGap < 0
+    ) {
+      throw new BuildValidationError(
+        "validated ledger reference is invalid",
+        "INVALID_BUILD",
+      );
+    }
+    const lastLedgerSequence = requiredUInt32(
+      txJson.LastLedgerSequence,
+      "LastLedgerSequence",
+    );
+    const buildLedger =
+      lastLedgerSequence -
+      (executionContract === "xrpl_execution_v2"
+        ? V2_LAST_LEDGER_OFFSET
+        : V1_LAST_LEDGER_OFFSET);
+    const ledgerGap = buildLedger - referenceLedger;
+    const effectiveMaxGap =
+      executionContract === "xrpl_execution_v2" ? 1 : maxLedgerGap;
+    if (buildLedger < 1 || ledgerGap < 0 || ledgerGap > effectiveMaxGap) {
+      throw new BuildValidationError(
+        `Validated ledger reference is stale or mismatched (quote ${referenceLedger}, build ${buildLedger}, maximum gap ${effectiveMaxGap})`,
+        executionContract === "xrpl_execution_v2"
+          ? "QUOTE_EXPIRED"
+          : "STALE_LEDGER_REFERENCE",
+      );
+    }
+  }
   const simulate = await simulateUnsignedTransaction(ctx, input.network, txJson);
+  if (
+    input.require_simulation_success === true &&
+    simulate.engine_result !== "tesSUCCESS"
+  ) {
+    throw new BuildValidationError(
+      `Exact transaction simulation returned ${simulate.engine_result}`,
+      "SIMULATION_FAILED",
+    );
+  }
   const usdValue =
     input.valuation_amounts === undefined
       ? undefined
@@ -1084,6 +1407,10 @@ export async function buildTransaction(
         });
   const transactionType = txJson.TransactionType as string;
   const store = resolveStore(ctx);
+  const executionCapability =
+    executionContract === "xrpl_execution_v2"
+      ? await v2Capability(input, txJson)
+      : undefined;
   const build: TxBuild = {
     build_id: buildId,
     network: input.network,
@@ -1109,8 +1436,32 @@ export async function buildTransaction(
         : { est_slippage_bps: input.est_slippage_bps }),
       ...(usdValue === undefined ? {} : { usd_value: usdValue }),
     },
+    ...(executionCapability === undefined
+      ? {}
+      : { execution_capability: executionCapability }),
   };
-  await persistBuild({ ...ctx, store }, build, input.now);
+  await persistBuild(
+    { ...ctx, store },
+    build,
+    input.now,
+    executionCapability === undefined
+      ? undefined
+      : {
+          executionContract: "xrpl_execution_v2",
+          buildRevision: 1,
+          unsignedTxDigest: executionCapability.unsigned_tx_digest,
+          unsignedTxDigestAlg: executionCapability.unsigned_tx_digest_alg,
+          economicFingerprint: executionCapability.economic_fingerprint,
+          economicFingerprintAlg:
+            executionCapability.economic_fingerprint_alg,
+          buildLedger: executionCapability.build_ledger,
+          firstInclusionLedger: executionCapability.first_inclusion_ledger,
+          quoteLedger: executionCapability.quote_ledger ?? null,
+          quoteValidThroughLedger:
+            executionCapability.quote_valid_through_ledger ?? null,
+          executionCapability,
+        },
+  );
   return build;
 }
 

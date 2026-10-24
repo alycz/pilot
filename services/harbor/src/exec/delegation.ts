@@ -13,6 +13,33 @@ export const DEFAULT_DELEGATED_PERMISSIONS = [
 	'CheckCash',
 ] as const;
 
+/**
+ * Transaction types Harbor builders may mark delegable when the exact
+ * permission is present on the stored account link. This is intentionally
+ * wider than the default grant: cancel operations require an explicit custom
+ * grant and policy opt-in.
+ *
+ * XRPL transaction-type permissions and the non-delegable list:
+ * https://xrpl.org/docs/references/protocol/data-types/permission-values
+ */
+export const HARBOR_DELEGABLE_TRANSACTION_TYPES = [
+	'OfferCreate',
+	'OfferCancel',
+	'TrustSet',
+	'AMMDeposit',
+	'AMMWithdraw',
+	'EscrowFinish',
+	'EscrowCancel',
+	'CheckCash',
+	'CheckCancel',
+] as const;
+
+const harborDelegableTransactionTypes = new Set<string>(HARBOR_DELEGABLE_TRANSACTION_TYPES);
+
+export function isHarborDelegableTransactionType(transactionType: unknown): transactionType is typeof HARBOR_DELEGABLE_TRANSACTION_TYPES[number] {
+	return typeof transactionType === 'string' && harborDelegableTransactionTypes.has(transactionType);
+}
+
 /** Harbor policy never delegates permissions that can move value to another account. */
 export const NEVER_DELEGATED_PERMISSIONS = [
 	'Payment',

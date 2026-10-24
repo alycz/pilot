@@ -70,18 +70,41 @@ class LinkMemoryD1 {
   }
 
   first(sql: string, values: unknown[]): RawLink | null {
-    const normalized = normalize(sql);
+    const normalized = normalize(sql).replace(
+      "select *, hex(delegate_seed_enc) as delegate_seed_enc_hex, hex(iv) as iv_hex from ",
+      "select * from ",
+    );
     const select = normalized.match(/^select \* from links where (.+)$/);
     if (!select) throw new Error(`Unsupported first SQL: ${normalized}`);
     const columns = select[1]
       .split(" and ")
       .map((condition) => condition.trim().split(" = ")[0]);
-    return (
-      this.links.find((row) =>
-        columns.every((column, index) => row[column] === values[index]),
-      ) ?? null
+    const row = this.links.find((candidate) =>
+      columns.every((column, index) => candidate[column] === values[index]),
     );
+    if (!row) return null;
+    if (!sql.toLowerCase().includes("hex(delegate_seed_enc)")) return row;
+    return {
+      ...row,
+      delegate_seed_enc_hex: binaryHex(row.delegate_seed_enc),
+      iv_hex: binaryHex(row.iv),
+    };
   }
+}
+
+function binaryHex(value: unknown): string {
+  if (value instanceof ArrayBuffer) {
+    return Array.from(new Uint8Array(value), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("").toUpperCase();
+  }
+  if (ArrayBuffer.isView(value)) {
+    return Array.from(
+      new Uint8Array(value.buffer, value.byteOffset, value.byteLength),
+      (byte) => byte.toString(16).padStart(2, "0"),
+    ).join("").toUpperCase();
+  }
+  throw new Error("LinkMemoryD1 expected a binary value");
 }
 
 class LinkMemoryStatement {
@@ -177,10 +200,13 @@ function harness() {
     now: () => new Date("2026-10-18T10:00:00.000Z"),
     randomUUID: () => `link-${db.links.length + 1}`,
   };
-  const context = (principal: string): OpContext => ({
+  const context = (
+    principal: string,
+    env: Record<string, unknown> = {},
+  ): OpContext => ({
     principal,
     db: db as unknown as D1Database,
-    env: { HARBOR_KEK: "test-only-kek" },
+    env: { HARBOR_KEK: "test-only-kek", ...env },
     accountServices: services,
   });
 
@@ -248,32 +274,28 @@ describe("account operations", () => {
     assertNoSecretShapedOutput(result);
   });
 
-  it("uses the guarded built-in faucet path when no funding service is injected", async () => {
+  it("syncs a durable link best-effort without making account.link depend on KV", async () => {
     const h = harness();
-    const faucetFetch = vi.fn(async () => new Response("{}", { status: 200 }));
-    const services = { ...h.services };
-    delete services.fundDelegateAccount;
-    vi.stubGlobal("fetch", faucetFetch);
-    try {
-      await handleAccountLink({
-        ...h.context("alpha"),
-        accountServices: services,
-      } as OpContext, {
+    const link = vi.fn().mockRejectedValue(new Error("stand-in unavailable"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    h.services.quickNodeRegistry = { link, revoke: vi.fn() };
+
+    await expect(
+      handleAccountLink(h.context("alpha"), {
         owner: OWNER,
         network: "testnet",
-      });
-    } finally {
-      vi.unstubAllGlobals();
-    }
-
-    expect(faucetFetch).toHaveBeenCalledOnce();
-    expect(faucetFetch).toHaveBeenCalledWith(
-      "https://faucet.altnet.rippletest.net/accounts",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({ destination: ALPHA_DELEGATE }),
       }),
-    );
+    ).resolves.toMatchObject({ owner: OWNER, delegate: ALPHA_DELEGATE });
+
+    expect(h.db.links).toHaveLength(1);
+    expect(link).toHaveBeenCalledWith("testnet", OWNER, ALPHA_DELEGATE);
+    expect(warn).toHaveBeenCalledWith("kv_sync_failed", {
+      evt: "kv_sync_failed",
+      action: "patch",
+      list: "accounts",
+      code: "QN_KV_SYNC_FAILED",
+    });
+    warn.mockRestore();
   });
 
   it.each([
@@ -351,6 +373,98 @@ describe("account operations", () => {
     expect(h.db.links.map((row) => row.principal)).toEqual(["alpha", "beta"]);
   });
 
+  it.each([
+    { HARBOR_LOCAL_TRADING_ONBOARDING_RUNTIME_ENABLED: "true" },
+    { HARBOR_LOCAL_TRADING_ONBOARDING_RUNTIME_ENABLED: "false" },
+    { HARBOR_LOCAL_TRADING_ONBOARDING_SIGNING_PROFILE: "unreviewed" },
+  ])("persists and reuses one encrypted Testnet delegate without faucet access under onboarding marker %j", async (marker) => {
+    const h = harness();
+    const first = await handleAccountLink(h.context("alpha", marker), {
+      owner: OWNER,
+      network: "testnet",
+    });
+    const repeated = await handleAccountLink(h.context("alpha", marker), {
+      owner: OWNER,
+      network: "testnet",
+    });
+
+    expect(repeated.delegate).toBe(first.delegate);
+    expect(h.createWrappedDelegateKey).toHaveBeenCalledTimes(1);
+    expect(h.prepareTransaction).toHaveBeenCalledTimes(2);
+    expect(h.fundDelegateAccount).not.toHaveBeenCalled();
+    expect(h.db.links).toHaveLength(1);
+    expect(h.db.links[0]).toMatchObject({
+      principal: "alpha",
+      owner: OWNER,
+      network: "testnet",
+      delegate: ALPHA_DELEGATE,
+      status: "pending",
+    });
+    expect(h.db.links[0]?.delegate_seed_enc).toBeInstanceOf(ArrayBuffer);
+    assertNoSecretShapedOutput(first);
+  });
+
+  it("rejects any non-exact onboarding permission set before key creation, RPC, or persistence", async () => {
+    const h = harness();
+    await expect(handleAccountLink(h.context("alpha", {
+      HARBOR_LOCAL_TRADING_ONBOARDING_SIGNING_PROFILE: "malformed",
+    }), {
+      owner: OWNER,
+      network: "testnet",
+      permissions: ["TrustSet"],
+    })).rejects.toThrow(/exact reviewed delegated permissions/i);
+    expect(h.createWrappedDelegateKey).not.toHaveBeenCalled();
+    expect(h.prepareTransaction).not.toHaveBeenCalled();
+    expect(h.readDelegate).not.toHaveBeenCalled();
+    expect(h.fundDelegateAccount).not.toHaveBeenCalled();
+    expect(h.db.links).toEqual([]);
+  });
+
+  it.each([
+    ["widened", [...DEFAULT_PERMISSIONS, "Payment"]],
+    ["reordered", [...DEFAULT_PERMISSIONS].reverse()],
+  ])("rejects %s on-ledger onboarding permissions before link mutation", async (_case, permissions) => {
+    const h = harness();
+    const marker = {
+      HARBOR_LOCAL_TRADING_ONBOARDING_RUNTIME_ENABLED: "malformed",
+    };
+    await handleAccountLink(h.context("alpha", marker), {
+      owner: OWNER,
+      network: "testnet",
+    });
+    h.entries.set(`${OWNER}:${ALPHA_DELEGATE}`, {
+      LedgerEntryType: "Delegate",
+      Account: OWNER,
+      Authorize: ALPHA_DELEGATE,
+      Permissions: permissionObjects(permissions),
+      PreviousTxnLgrSeq: 999,
+    });
+
+    await expect(handleAccountStatus(h.context("alpha", marker), {
+      owner: OWNER,
+      network: "testnet",
+    })).rejects.toThrow(/exact reviewed delegated permissions/i);
+    expect(h.db.links[0]).toMatchObject({
+      permissions: JSON.stringify(DEFAULT_PERMISSIONS),
+      status: "pending",
+      last_ledger: null,
+    });
+  });
+
+  it("rejects onboarding Devnet before key generation, public RPC, persistence, or funding", async () => {
+    const h = harness();
+    await expect(handleAccountLink(h.context("alpha", {
+      HARBOR_LOCAL_TRADING_ONBOARDING_SIGNING_PROFILE: "unreviewed",
+    }), {
+      owner: OWNER,
+      network: "devnet",
+    })).rejects.toThrow(/only testnet/i);
+    expect(h.createWrappedDelegateKey).not.toHaveBeenCalled();
+    expect(h.prepareTransaction).not.toHaveBeenCalled();
+    expect(h.fundDelegateAccount).not.toHaveBeenCalled();
+    expect(h.db.links).toEqual([]);
+  });
+
   it("persists the wrapped delegate before preparation and does not fund after preparation fails", async () => {
     const h = harness();
     h.prepareTransaction.mockRejectedValueOnce(new Error("autofill unavailable"));
@@ -422,6 +536,8 @@ describe("account operations", () => {
 
   it("prepares an empty-permission revoke and preserves revoked status after removal", async () => {
     const h = harness();
+    const quickNodeRegistry = { link: vi.fn(), revoke: vi.fn() };
+    h.services.quickNodeRegistry = quickNodeRegistry;
     await handleAccountLink(h.context("alpha"), {
       owner: OWNER,
       network: "testnet",
@@ -458,6 +574,7 @@ describe("account operations", () => {
       },
     });
     expect(revoked.revoke_tx).not.toHaveProperty("TxnSignature");
+    expect(quickNodeRegistry.revoke).not.toHaveBeenCalled();
     assertNoSecretShapedOutput(revoked);
 
     h.entries.delete(`${OWNER}:${ALPHA_DELEGATE}`);
@@ -468,6 +585,11 @@ describe("account operations", () => {
     expect(status.status).toBe("revoked");
     expect(status.permissions).toEqual([]);
     expect(status.revoke_tx).toBeUndefined();
+    expect(quickNodeRegistry.revoke).toHaveBeenCalledWith(
+      "testnet",
+      OWNER,
+      ALPHA_DELEGATE,
+    );
   });
 
   it("does not reactivate a suspended link while its Delegate entry still exists", async () => {
@@ -754,6 +876,65 @@ describe("production XRPL delegation adapter", () => {
       "ledger_current",
       "account_info",
     ]);
+  });
+
+  it("uses the Worker fetch runtime when production funding has no transport override", async () => {
+    const h = harness();
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({ account_data: { Account: OWNER, Sequence: 7 } })
+      .mockResolvedValueOnce({ drops: { open_ledger_fee: "12" } })
+      .mockResolvedValueOnce({ ledger_current_index: 103 })
+      .mockRejectedValueOnce(
+        new XrplRpcError("missing", "actNotFound", "soft-empty"),
+      );
+    const originalFetch = globalThis.fetch;
+    const runtimeFetch = vi.fn(function (
+      this: typeof globalThis,
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ): Promise<Response> {
+      if (this !== globalThis) throw new TypeError("Illegal invocation");
+      return Promise.resolve(new Response(null, { status: 200 }));
+    });
+    globalThis.fetch = runtimeFetch as typeof globalThis.fetch;
+    const {
+      ledger: _ledger,
+      fundDelegateAccount: _fundDelegateAccount,
+      faucetFetch: _faucetFetch,
+      ...productionServices
+    } = h.services;
+    const ctx: OpContext = {
+      principal: "alpha",
+      db: h.db as unknown as D1Database,
+      env: { HARBOR_KEK: "test-only-kek" },
+      xrplRpc: { request },
+      accountServices: productionServices,
+    };
+
+    try {
+      const linked = await handleAccountLink(ctx, {
+        owner: OWNER,
+        network: "devnet",
+      });
+
+      expect(linked).toMatchObject({
+        delegate: ALPHA_DELEGATE,
+        network: "devnet",
+        status: "pending",
+      });
+      expect(runtimeFetch).toHaveBeenCalledWith(
+        "https://faucet.devnet.rippletest.net/accounts",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ destination: ALPHA_DELEGATE }),
+        },
+      );
+      expect(runtimeFetch.mock.instances[0]).toBe(globalThis);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it("rejects mainnet before issuing any production RPC request", async () => {

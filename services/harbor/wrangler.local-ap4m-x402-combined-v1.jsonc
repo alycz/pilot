@@ -1,0 +1,38 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "harbor-local-ap4m-x402-combined-v1-only",
+  "main": "src/server.ts",
+  "compatibility_date": "2026-10-06",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "harbor-local-x402-isolated-v1-only",
+      "database_id": "33333333-3333-3333-3333-333333333333",
+      "migrations_dir": "migrations-local-x402",
+      "remote": false
+    }
+  ],
+  "vars": {
+    "HARBOR_SOURCE_TAG": "2610240",
+    "EXEC_NETWORK": "testnet",
+    "MAINNET_EXECUTION": "false",
+    "EXECUTOR": "quickjs",
+    "HARBOR_LOCAL_DEV": "true",
+    "HARBOR_LOCAL_READ_ONLY": "true",
+    "HARBOR_LOCAL_AUTH_REQUIRED": "true",
+    "HARBOR_LOCAL_CRON_DISABLED": "true",
+    "HARBOR_LOCAL_X402": "true",
+    "HARBOR_LOCAL_X402_RUNTIME_ENABLED": "true",
+    "HARBOR_LOCAL_X402_SIGNING_PROFILE": "reviewed-testnet-isolated-v1",
+    "HARBOR_LOCAL_X402_ISOLATED_V1_RUNTIME_ENABLED": "true",
+    "HARBOR_LOCAL_X402_ISOLATED_V1_SIGNING_PROFILE": "reviewed-testnet-isolated-v1",
+    "HARBOR_LOCAL_AP4M_X402_COMBINED_V1_RUNTIME_ENABLED": "true",
+    "HARBOR_LOCAL_AP4M_X402_COMBINED_V1_SIGNING_PROFILE": "reviewed-testnet-ap4m-x402-combined-v1",
+    "AP4M_DEMO_ENABLED": "true",
+    "AP4M_PURCHASE_MODE": "mock",
+    "HARBOR_MOCK": "1"
+  }
+}

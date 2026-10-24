@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "verification": "stand-in-only",
+  "network_slug": "xrp-testnet",
+  "streams_dataset": "Ledger",
+  "webhook_delete_by_id_path": "/webhooks/rest/v1/webhooks/{id}",
+  "wallet_payload_shape": "stand-in-fixture-only"
+}

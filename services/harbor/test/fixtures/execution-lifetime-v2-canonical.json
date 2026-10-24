@@ -1,0 +1,52 @@
+{
+  "unsigned_tx_digest_alg": "sha256-jcs-v1",
+  "economic_fingerprint_alg": "sha256-jcs-economic-v1",
+  "binding_vector": {
+    "owner": "rJVUeRqDFNs2xqA7ncVE6ZoAhPUoaJJSQm",
+    "network": "testnet",
+    "transaction": {
+      "TransactionType": "TrustSet",
+      "Account": "rJVUeRqDFNs2xqA7ncVE6ZoAhPUoaJJSQm",
+      "LimitAmount": {
+        "currency": "USD",
+        "issuer": "rP9jPyP5kyvFRb6ZiRghAGw5u8SGAmU4bd",
+        "value": "100"
+      },
+      "Flags": 131072,
+      "SourceTag": 314,
+      "Fee": "12",
+      "Sequence": 22,
+      "LastLedgerSequence": 90000064
+    },
+    "unsigned_tx_digest": "2851107CEA9B5DADEBC92DF5E935C9F46E13C3BCB1332B310F5D45CADF6E38DD",
+    "economic_fingerprint": "CD2C22CB453E61C308A19330F419311842728B82EDA39061D186869B499283A7"
+  },
+  "vectors": [
+    {
+      "name": "nested-order-arrays-and-escaped-unicode",
+      "input": {
+        "z": 1,
+        "a": {
+          "β": "雪",
+          "a": "line\n\t\"\\",
+          "control": "\u0001"
+        },
+        "list": [3, 2, { "b": false, "a": null }]
+      },
+      "canonical": "{\"a\":{\"a\":\"line\\n\\t\\\"\\\\\",\"control\":\"\\u0001\",\"β\":\"雪\"},\"list\":[3,2,{\"a\":null,\"b\":false}],\"z\":1}",
+      "sha256_upper": "07B27C17429BAA7E306610D58E599B8D7EE010625738152BCC18F305E5879901"
+    },
+    {
+      "name": "ecmascript-number-serialization",
+      "input": {
+        "small": 0.000001,
+        "tiny": 1e-7,
+        "large": 1e30,
+        "negative": -12.5,
+        "zero": 0
+      },
+      "canonical": "{\"large\":1e+30,\"negative\":-12.5,\"small\":0.000001,\"tiny\":1e-7,\"zero\":0}",
+      "sha256_upper": "44AB26D50F01F7CC862D69B3055610D78699F5D126973A967E7BE2CAAB9EE32A"
+    }
+  ]
+}

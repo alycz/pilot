@@ -1,0 +1,54 @@
+{
+  "name": "delegate-set-grant",
+  "source": "Ledger XRP app 2.8.2 via Speculos",
+  "derivation_path": "44'/144'/0'/0/0",
+  "seed": "Speculos public default test seed",
+  "account": "ra7Zr8ddy9tB88RaXL8B87YkqhEJG2vkAJ",
+  "tx_json": {
+    "TransactionType": "DelegateSet",
+    "Sequence": 1,
+    "LastLedgerSequence": 99999999,
+    "Fee": "12",
+    "Account": "ra7Zr8ddy9tB88RaXL8B87YkqhEJG2vkAJ",
+    "Authorize": "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+    "Permissions": [
+      {
+        "Permission": {
+          "PermissionValue": "OfferCreate"
+        }
+      },
+      {
+        "Permission": {
+          "PermissionValue": "OfferCancel"
+        }
+      },
+      {
+        "Permission": {
+          "PermissionValue": "TrustSet"
+        }
+      },
+      {
+        "Permission": {
+          "PermissionValue": "AMMDeposit"
+        }
+      },
+      {
+        "Permission": {
+          "PermissionValue": "AMMWithdraw"
+        }
+      },
+      {
+        "Permission": {
+          "PermissionValue": "EscrowFinish"
+        }
+      },
+      {
+        "Permission": {
+          "PermissionValue": "CheckCash"
+        }
+      }
+    ]
+  },
+  "tx_blob": "1200402400000001201B05F5E0FF68400000000000000C7321038368B6F1151E0CD559126AE13910B8B8D790652EB5CC0B5019A63D2E6079296174473045022100FA71D26EA32557B49B8CAB4234D857676C6A634CEF78E0C31CB918EEB0D8B4F4022002A52667974D1C1B6C7DC8371A0CFF73D1DC1BCFEAE12FB439F1B7828D98446681143C0E955DFA24367806070434D8BE16A12E410C3B8514F667B0CA50CC7709A220B0561B85E53A48461FA8F01DEF203400000008E1EF203400000009E1EF203400000015E1EF203400000025E1EF203400000026E1EF203400000003E1EF203400000012E1F1",
+  "hash": "A6B1A0B7439D0BA7BB879A505A9980B904C30CE8B3E67C2E17ACF2D9A33FA19D"
+}

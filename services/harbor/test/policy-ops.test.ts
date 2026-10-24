@@ -18,8 +18,10 @@ import {
   PolicyGetArgsSchema,
   PolicySetArgsSchema,
   SafePolicySchema,
+  type PolicyServices,
   type PolicyStore,
 } from "../src/ops/policy";
+import type { QuickNodeRegistrySource } from "../src/quicknode/kv-registry";
 
 const OWNER = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
 const NOW = "2026-10-18T12:00:00.000Z";
@@ -120,6 +122,7 @@ describe("policy operations", () => {
     });
 
     expect(first).toEqual(DEFAULT_POLICY);
+    expect(first.x402_max_per_call_drops).toBe("10000");
     expect(first).not.toBe(DEFAULT_POLICY);
     expect(second).not.toBe(first);
     expect(first.allowed_tx_types).not.toBe(DEFAULT_POLICY.allowed_tx_types);
@@ -161,6 +164,52 @@ describe("policy operations", () => {
         network: "testnet",
       }),
     ).toEqual(configured);
+  });
+
+  it("refreshes policy/catalog lists after persistence and keeps KV best-effort", async () => {
+    const h = harness();
+    const ctx = h.context("alpha") as OpContext & {
+      policyServices: PolicyServices;
+    };
+    const refreshPolicyCatalog = vi
+      .fn()
+      .mockRejectedValue(new Error("stand-in unavailable"));
+    const source: QuickNodeRegistrySource = {
+      links: async () => [],
+      policies: async () => {
+        expect(h.rows.has(key("alpha", OWNER, "testnet"))).toBe(true);
+        return [
+          {
+            allowed_tx_types: ["OfferCreate"],
+            issuer_allowlist: [],
+          },
+        ];
+      },
+      payerAccounts: async () => [],
+      catalog: () => ({}),
+    };
+    ctx.policyServices.quickNodeRegistry = { refreshPolicyCatalog };
+    ctx.policyServices.quickNodeSource = source;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    await expect(
+      handlePolicySet(ctx, {
+        owner: OWNER,
+        network: "testnet",
+        policy: policy({ allowed_tx_types: ["OfferCreate"] }),
+      }),
+    ).resolves.toMatchObject({ allowed_tx_types: ["OfferCreate"] });
+    expect(refreshPolicyCatalog).toHaveBeenCalledWith(
+      "testnet",
+      expect.objectContaining({ tx_types: ["OfferCreate"], issuers: [] }),
+    );
+    expect(warn).toHaveBeenCalledWith("kv_sync_failed", {
+      evt: "kv_sync_failed",
+      action: "replace",
+      list: "tx_types",
+      code: "QN_KV_SYNC_FAILED",
+    });
+    warn.mockRestore();
   });
 
   it("updates an existing policy instead of inserting another row", async () => {

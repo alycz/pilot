@@ -42,7 +42,7 @@ const VaultAssetSchema = z.union([
   z.object({ mpt_issuance_id: MptIssuanceIdSchema }).strict(),
 ]);
 
-const VaultSharesSchema = z
+const FullVaultSharesSchema = z
   .object({
     AssetScale: z.number().int().min(0).max(18).optional(),
     DomainID: Hash256Schema.optional(),
@@ -63,6 +63,22 @@ const VaultSharesSchema = z
     mpt_issuance_id: MptIssuanceIdSchema.optional(),
   })
   .strict();
+
+// Some rippled builds return the embedded MPTokenIssuance ledger object above,
+// while others return only the share issuance identifier and, for permissioned
+// vaults, its domain. Keep both response forms strict so the compact variant
+// cannot become a route for unvalidated ledger fields.
+const CompactVaultSharesSchema = z
+  .object({
+    DomainID: Hash256Schema.optional(),
+    mpt_issuance_id: MptIssuanceIdSchema,
+  })
+  .strict();
+
+const VaultSharesSchema = z.union([
+  FullVaultSharesSchema,
+  CompactVaultSharesSchema,
+]);
 
 const VaultDescriptionSchema = z
   .object({
@@ -90,13 +106,33 @@ const VaultDescriptionSchema = z
     index: Hash256Schema,
     shares: VaultSharesSchema,
   })
-  .strict();
+  .strict()
+  .superRefine(({ Account, ShareMPTID, shares }, issueContext) => {
+    if (
+      shares.mpt_issuance_id !== undefined &&
+      shares.mpt_issuance_id !== ShareMPTID
+    ) {
+      issueContext.addIssue({
+        code: "custom",
+        path: ["shares", "mpt_issuance_id"],
+        message: "must match the vault ShareMPTID",
+      });
+    }
+    if ("Issuer" in shares && shares.Issuer !== Account) {
+      issueContext.addIssue({
+        code: "custom",
+        path: ["shares", "Issuer"],
+        message: "must match the vault Account",
+      });
+    }
+  });
 
 const VaultInfoRpcResultSchema = z
   .object({
     ledger_current_index: z.number().int().nonnegative().optional(),
     ledger_hash: Hash256Schema.optional(),
     ledger_index: z.number().int().nonnegative().optional(),
+    status: z.literal("success").optional(),
     validated: z.boolean().optional(),
     vault: VaultDescriptionSchema,
   })
@@ -133,7 +169,7 @@ const VaultSelectorSchema = z
     }
   });
 
-export type VaultInfo = z.infer<typeof VaultInfoRpcResultSchema> & {
+export type VaultInfo = Omit<z.infer<typeof VaultInfoRpcResultSchema>, "status"> & {
   network: DevVaultNetwork;
   risks: string[];
 };
@@ -156,7 +192,7 @@ export async function readVaultInfo(
   selector: { vault_id: string } | { owner: string; seq: number },
 ): Promise<VaultInfo> {
   const raw = await requestXrpl(ctx, network, "vault_info", selector);
-  const parsed = VaultInfoRpcResultSchema.parse(raw);
+  const { status: _status, ...parsed } = VaultInfoRpcResultSchema.parse(raw);
   return {
     network,
     ...parsed,

@@ -4,29 +4,155 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import catalogManifest from "../catalog/manifest.json";
 import generatedOps from "./ops/index.gen";
 import { OpRegistry, type CatalogManifestInput } from "./catalog/registry";
+import type { Network } from "./contracts";
+import { scheduled as runScheduled } from "./cron";
 import { createHarborProvider } from "./executor/providers";
+import { createLocalX402Service } from "./exec/x402-runtime";
+import {
+	createAp4mRuntimeServices,
+	type Ap4mRuntimeAdapter,
+} from "./exec/ap4m-runtime";
+import type { Ap4mPurchaseServices } from "./ops/ap4m";
+import type { X402Service } from "./x402-contract";
+import {
+	LOCAL_HARBOR_ORIGIN,
+	isLocalDevRequest,
+	probeLocalX402,
+} from "./local-x402";
+import {
+	isLocalX402IsolatedV1Request,
+	localX402IsolatedV1MarkersPresent,
+} from "./local-x402-isolated-v1";
+import {
+	isLocalTradingIsolatedV1Request,
+	localTradingIsolatedV1MarkersPresent,
+} from "./local-trading-isolated-v1";
+import {
+	isLocalTradingIsolatedOnboardingV1Request,
+	localTradingIsolatedOnboardingV1MarkersPresent,
+} from "./local-trading-isolated-onboarding-v1";
+import { localTradingSafetyMarkersPresent } from "./local-trading";
 import { createMcpServer } from "./mcp/tools";
-import { handleRestOperation } from "./rest";
+import {
+	handleQuickNodeWatchdog,
+	handleQuickNodeWalletWebhook,
+	handleRestOperation,
+	handleWbaDirectory,
+} from "./rest";
+import { createQuickNodeKvRegistryForRequest } from "./quicknode/kv-registry";
+import type {
+	WatchdogNetwork,
+	WatchdogPayerAuthority,
+} from "./quicknode/watchdog";
+import { KmsKekError, validateKmsConfig } from "./aws/kms";
+import { handleDemoModelQuotaRoute } from "./demo-model-quota-route";
 
 export interface Env {
 	DB: D1Database;
 	LOADER?: WorkerLoader;
 	HARBOR_API_KEYS?: string;
+	HARBOR_DEMO_QUOTA_ENABLED?: string;
+	HARBOR_DEMO_QUOTA_PRINCIPAL?: string;
+	HARBOR_DEMO_COST_POLICY?: string;
+	HARBOR_DEMO_POLICY_VERSION?: string;
+	HARBOR_DEMO_ALLOWED_MODELS?: string;
+	HARBOR_DEMO_GLOBAL_DAILY_OUTPUT_TOKENS?: string;
+	HARBOR_DEMO_GLOBAL_DAILY_REQUESTS?: string;
+	HARBOR_DEMO_WALLET_DAILY_OUTPUT_TOKENS?: string;
+	HARBOR_DEMO_WALLET_DAILY_REQUESTS?: string;
+	HARBOR_DEMO_RATE_WINDOW_SECONDS?: string;
+	HARBOR_DEMO_RATE_REQUESTS?: string;
+	HARBOR_DEMO_MAX_GLOBAL_CONCURRENCY?: string;
+	HARBOR_DEMO_MAX_WALLET_CONCURRENCY?: string;
+	HARBOR_DEMO_RESERVATION_TTL_SECONDS?: string;
+	HARBOR_DEMO_ABORT_GRACE_SECONDS?: string;
+	HARBOR_DEMO_MAX_INPUT_BYTES?: string;
+	HARBOR_DEMO_MAX_OUTPUT_TOKENS?: string;
+	HARBOR_DEMO_MAX_STEPS?: string;
 	EXECUTOR?: "dynamic" | "quickjs";
-	EXEC_NETWORK?: string;
+	EXEC_NETWORK?: Network;
 	MAINNET_EXECUTION?: string;
 	HARBOR_LOCAL_DEV?: string;
+	HARBOR_LOCAL_READ_ONLY?: string;
+	HARBOR_LOCAL_AUTH_REQUIRED?: string;
+	HARBOR_LOCAL_CRON_DISABLED?: string;
+	HARBOR_LOCAL_X402?: string;
+	HARBOR_LOCAL_X402_MERCHANT_PAY_TO?: string;
+	HARBOR_LOCAL_X402_RUNTIME_ENABLED?: string;
+	HARBOR_LOCAL_X402_SIGNING_PROFILE?: string;
+	HARBOR_LOCAL_X402_ISOLATED_V1_RUNTIME_ENABLED?: string;
+	HARBOR_LOCAL_X402_ISOLATED_V1_SIGNING_PROFILE?: string;
+	HARBOR_LOCAL_AP4M_X402_COMBINED_V1_RUNTIME_ENABLED?: string;
+	HARBOR_LOCAL_AP4M_X402_COMBINED_V1_SIGNING_PROFILE?: string;
+	HARBOR_LOCAL_TRADING_RUNTIME_ENABLED?: string;
+	HARBOR_LOCAL_TRADING_SIGNING_PROFILE?: string;
+	HARBOR_LOCAL_TRADING_ONBOARDING_RUNTIME_ENABLED?: string;
+	HARBOR_LOCAL_TRADING_ONBOARDING_SIGNING_PROFILE?: string;
+	HARBOR_LOCAL_TRADING_ISOLATED_V1_RUNTIME_ENABLED?: string;
+	HARBOR_LOCAL_TRADING_ISOLATED_V1_SIGNING_PROFILE?: string;
+	HARBOR_LOCAL_TRADING_ISOLATED_V1_ONBOARDING_RUNTIME_ENABLED?: string;
+	HARBOR_LOCAL_TRADING_ISOLATED_V1_ONBOARDING_SIGNING_PROFILE?: string;
+	HARBOR_KEK?: string;
+	HARBOR_SOURCE_TAG?: string;
+	HARBOR_MOCK?: string;
+	AP4M_DEMO_ENABLED?: string;
+	AP4M_PURCHASE_MODE?: string;
+	LIVE?: string;
+	KMS_MODE?: string;
+	HARBOR_KEK_CIPHERTEXT?: string;
+	AWS_REGION?: string;
+	AWS_ENDPOINT_OVERRIDE?: string;
+	AWS_ACCESS_KEY_ID?: string;
+	AWS_SECRET_ACCESS_KEY?: string;
+	AWS_SESSION_TOKEN?: string;
+	HARBOR_WBA_DIRECTORY_URL?: string;
+	WBA_SIGNING_JWK?: string;
+	AP4M_AGENT_ISSUER?: string;
+	AP4M_NETWORK_AUDIENCE?: string;
+	QN_MODE?: string;
+	QN_RUN_TAG?: string;
+	QN_WEBHOOK_SECURITY_TOKEN?: string;
+	QN_STREAM_SECURITY_TOKEN?: string;
+	QN_WATCHDOG_ACTION?: string;
+	QN_API_BASE?: string;
+	QN_API_KEY?: string;
+	/** Public-only Web Bot Auth JWK and XRPL credential linkage JSON. */
+	HARBOR_WBA_DIRECTORY_JSON?: string;
 }
 
 export type AuthResult =
 	| { ok: true; principal: string }
 	| { ok: false; response: Response };
 
-const appRegistry = new OpRegistry(generatedOps).loadCatalogManifest(
+const LOCAL_ONLY_OPERATION_NAMES = new Set([
+	"quicknode.test.registerLink",
+	"quicknode.test.deleteLink",
+]);
+
+const productionAppRegistry = new OpRegistry(
+	generatedOps.filter(
+		(operation) => !LOCAL_ONLY_OPERATION_NAMES.has(operation.name),
+	),
+).loadCatalogManifest(
+	catalogManifest as CatalogManifestInput,
+);
+const localAppRegistry = new OpRegistry(generatedOps).loadCatalogManifest(
 	catalogManifest as CatalogManifestInput,
 );
 
-type HarborRpcProps = { principal: string };
+export function selectRuntimeRegistry(
+	env: Pick<Env, "HARBOR_LOCAL_DEV">,
+	localDevRequest: boolean,
+): OpRegistry {
+	return env.HARBOR_LOCAL_DEV === "true" && localDevRequest
+		? localAppRegistry
+		: productionAppRegistry;
+}
+
+export type HarborRpcProps = {
+	principal: string;
+	localDevRequest: boolean;
+};
 
 // Dynamic Workers can receive only real Workers RPC bindings. A loopback
 // entrypoint gives the sandbox the single principal-scoped capability it needs
@@ -34,17 +160,27 @@ type HarborRpcProps = { principal: string };
 // https://developers.cloudflare.com/workers/runtime-apis/context/#exports
 export class HarborRpc extends WorkerEntrypoint<Env, HarborRpcProps> {
 	async invoke(operationName: string, args: unknown = {}): Promise<unknown> {
-		const provider = createHarborProvider(appRegistry, {
-			principal: this.ctx.props.principal,
-			db: this.env.DB,
-			env: this.env,
-		});
+		let ap4mServices: Ap4mPurchaseServices | undefined;
+		try {
+			ap4mServices = createAp4mRuntimeServices(this.env);
+		} catch {
+			if (operationName.startsWith("ap4m.")) {
+				return ap4mConfigurationEnvelope();
+			}
+		}
+		const provider = createHarborProvider(
+			selectRuntimeRegistry(this.env, this.ctx.props.localDevRequest === true),
+			{
+				principal: this.ctx.props.principal,
+				localDevRequest: this.ctx.props.localDevRequest === true,
+				db: this.env.DB,
+				env: this.env,
+				x402Service: createLocalX402Service(this.env),
+				...(ap4mServices === undefined ? {} : { ap4mServices }),
+			},
+		);
 		return provider.invoke(operationName, args);
 	}
-}
-
-function isLoopback(hostname: string): boolean {
-	return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
 }
 
 function equalCredential(left: string, right: string): boolean {
@@ -66,9 +202,48 @@ function configuredKeys(value: string | undefined): Map<string, string> {
 	return keys;
 }
 
-export function authenticate(request: Request, env: Env): AuthResult {
-	const url = new URL(request.url);
-	if (env.HARBOR_LOCAL_DEV === "true" && isLoopback(url.hostname)) {
+function isLegacyLocalDevRequest(request: Request, env: Env): boolean {
+	if (env.HARBOR_LOCAL_DEV !== "true") return false;
+	try {
+		const hostname = new URL(request.url).hostname;
+		return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+	} catch {
+		return false;
+	}
+}
+
+function targetsLocalX402Origin(request: Request): boolean {
+	try {
+		return new URL(request.url).origin === LOCAL_HARBOR_ORIGIN;
+	} catch {
+		return false;
+	}
+}
+
+function deriveLocalDevRequest(request: Request, env: Env): boolean {
+	if (localX402IsolatedV1MarkersPresent(env)) {
+		return isLocalX402IsolatedV1Request(request, env);
+	}
+	if (localTradingIsolatedOnboardingV1MarkersPresent(env)) {
+		return isLocalTradingIsolatedOnboardingV1Request(request, env);
+	}
+	if (localTradingIsolatedV1MarkersPresent(env)) {
+		return isLocalTradingIsolatedV1Request(request, env);
+	}
+	return isLocalDevRequest(request, env);
+}
+
+function authenticateWithLocalCapability(
+	request: Request,
+	env: Env,
+	localDevRequest: boolean,
+): AuthResult {
+	if (
+		isLegacyLocalDevRequest(request, env) &&
+		!localTradingSafetyMarkersPresent(env) &&
+		(!targetsLocalX402Origin(request) ||
+			(localDevRequest && env.HARBOR_LOCAL_X402_RUNTIME_ENABLED !== "true"))
+	) {
 		return { ok: true, principal: "local-dev" };
 	}
 
@@ -101,25 +276,222 @@ export function authenticate(request: Request, env: Env): AuthResult {
 	return { ok: true, principal };
 }
 
-export function createWorker(registry = appRegistry): ExportedHandler<Env> {
+function kmsConfigurationFailure(error: unknown): Response {
+	const known = error instanceof KmsKekError;
+	return Response.json(
+		{
+			ok: false,
+			error: {
+				service: "kms",
+				kind: "error",
+				message: known ? error.message : "KMS configuration is invalid",
+				code: known ? error.code : "KMS_CONFIGURATION_INVALID",
+			},
+		},
+		{ status: 503 },
+	);
+}
+
+function ap4mConfigurationEnvelope() {
 	return {
+		ok: false as const,
+		error: {
+			service: "ap4m",
+			kind: "error" as const,
+			message: "AP4M runtime configuration is invalid",
+			code: "AP4M_RUNTIME_CONFIGURATION_INVALID",
+		},
+	};
+}
+
+function ap4mConfigurationFailure(): Response {
+	return Response.json(
+		ap4mConfigurationEnvelope(),
+		{ status: 503, headers: { "cache-control": "no-store" } },
+	);
+}
+
+export function authenticate(request: Request, env: Env): AuthResult {
+	return authenticateWithLocalCapability(
+		request,
+		env,
+		deriveLocalDevRequest(request, env),
+	);
+}
+
+export type LocalX402ServiceFactory = (env: Env) => X402Service;
+export type LocalX402Probe = typeof probeLocalX402;
+export type Ap4mRuntimeFactory = (env: Env) => Ap4mPurchaseServices | undefined;
+
+function changed(result: D1Result): number {
+	return Number(result.meta.changes ?? 0);
+}
+
+/** D1-backed payer boundary injected into the pre-authenticated watchdog route. */
+export function createWatchdogPayerAuthority(
+	db: D1Database,
+	network: string | undefined,
+): WatchdogPayerAuthority {
+	return {
+		async isPayer(account, selectedNetwork) {
+			return (await db
+				.prepare(
+					`SELECT 1 AS present FROM x402_payers
+					  WHERE network = ? AND payer = ? LIMIT 1`,
+				)
+				.bind(selectedNetwork, account)
+				.first<{ present: number }>())?.present === 1;
+		},
+		async ownsTransaction(hash) {
+			return (await db
+				.prepare(
+					`SELECT 1 AS present FROM (
+					  SELECT hash AS tx_hash FROM x402_payments WHERE hash = ?
+					  UNION ALL
+					  SELECT tx_hash FROM ap4m_purchase_attempts WHERE tx_hash = ?
+					) LIMIT 1`,
+				)
+				.bind(hash, hash)
+				.first<{ present: number }>())?.present === 1;
+		},
+		async disable(account, _reason, at) {
+			if (network !== "testnet" && network !== "devnet") return false;
+			const selectedNetwork: WatchdogNetwork = network;
+			const result = await db
+				.prepare(
+					`UPDATE x402_payers SET status = 'disabled', updated_at = ?
+					  WHERE network = ? AND payer = ? AND status <> 'disabled'`,
+				)
+				.bind(at, selectedNetwork, account)
+				.run();
+			return changed(result) === 1;
+		},
+	};
+}
+
+export function createAp4mRuntimeFactory(
+	adapters: Readonly<{
+		mock?: Ap4mRuntimeAdapter;
+		live?: Ap4mRuntimeAdapter;
+	}> = {},
+): Ap4mRuntimeFactory {
+	return (env) => createAp4mRuntimeServices(env, adapters);
+}
+
+export function createWorker(
+	registry?: OpRegistry,
+	localX402Service: LocalX402ServiceFactory = createLocalX402Service,
+	localX402Probe: LocalX402Probe = probeLocalX402,
+	ap4mRuntime: Ap4mRuntimeFactory = createAp4mRuntimeFactory(),
+): ExportedHandler<Env> {
+	return {
+		scheduled(controller, env, executionContext): Promise<void> {
+			if (
+				env.HARBOR_LOCAL_READ_ONLY === "true" ||
+				localTradingSafetyMarkersPresent(env)
+			) {
+				return Promise.resolve();
+			}
+			return runScheduled(controller, env, executionContext);
+		},
 		async fetch(request, env, executionContext): Promise<Response> {
+			try {
+				validateKmsConfig(env);
+			} catch (error) {
+				return kmsConfigurationFailure(error);
+			}
 			const url = new URL(request.url);
+			const localDevRequest = deriveLocalDevRequest(request, env);
+			const requestRegistry =
+				registry ?? selectRuntimeRegistry(env, localDevRequest);
 			if (url.pathname === "/health") {
-				return Response.json({ ok: true, service: "harbor" });
+				return Response.json({
+					ok: true,
+					service: "harbor",
+					health: "process",
+					handoff_readiness: "not_evaluated",
+				});
+			}
+			if (url.pathname === "/local/x402/probe") {
+				if (
+					!localDevRequest ||
+					env.HARBOR_LOCAL_X402 !== "true" ||
+					localTradingSafetyMarkersPresent(env)
+				) {
+					return new Response("Not Found", { status: 404 });
+				}
+				if (request.method !== "GET") {
+					return new Response("Method Not Allowed", {
+						status: 405,
+						headers: { allow: "GET" },
+					});
+				}
+				return Response.json(await localX402Probe(localDevRequest), {
+					headers: { "cache-control": "no-store" },
+				});
+			}
+			if (
+				url.pathname ===
+				"/.well-known/http-message-signatures-directory"
+			) {
+				return handleWbaDirectory(request, env.HARBOR_WBA_DIRECTORY_JSON);
+			}
+			if (url.pathname === "/hooks/quicknode/wallet") {
+				return handleQuickNodeWalletWebhook(request, {
+					db: env.DB,
+					env,
+					waitUntil: (promise) => executionContext.waitUntil(promise),
+				});
+			}
+			if (url.pathname === "/hooks/quicknode/watchdog") {
+				return handleQuickNodeWatchdog(request, {
+					db: env.DB,
+					env,
+					waitUntil: (promise) => executionContext.waitUntil(promise),
+					registry: createQuickNodeKvRegistryForRequest({ env, request }),
+					payer: createWatchdogPayerAuthority(env.DB, env.EXEC_NETWORK),
+				});
 			}
 
-			const auth = authenticate(request, env);
+			const auth = authenticateWithLocalCapability(
+				request,
+				env,
+				localDevRequest,
+			);
 			if (!auth.ok) return auth.response;
 
-			const ctx = { principal: auth.principal, db: env.DB, env, request };
+			const demoQuotaResponse = await handleDemoModelQuotaRoute(request, {
+				principal: auth.principal,
+				localDevRequest,
+				database: env.DB,
+				environment: env,
+			});
+			if (demoQuotaResponse) return demoQuotaResponse;
+
+			let ap4mServices: Ap4mPurchaseServices | undefined;
+			try {
+				ap4mServices = ap4mRuntime(env);
+			} catch {
+				if (url.pathname.startsWith("/api/ops/ap4m.")) {
+					return ap4mConfigurationFailure();
+				}
+			}
+			const ctx = {
+				principal: auth.principal,
+				localDevRequest,
+				db: env.DB,
+				env,
+				request,
+				x402Service: localX402Service(env),
+				...(ap4mServices === undefined ? {} : { ap4mServices }),
+			};
 			if (url.pathname.startsWith("/api/ops/")) {
 				const opName = url.pathname.slice("/api/ops/".length);
-				return handleRestOperation(request, opName, ctx, registry);
+				return handleRestOperation(request, opName, ctx, requestRegistry);
 			}
 
 			if (url.pathname === "/mcp") {
-				const provider = createHarborProvider(registry, ctx);
+				const provider = createHarborProvider(requestRegistry, ctx);
 				const exports = (executionContext.exports ?? {}) as unknown as {
 					HarborRpc?: (options: { props: HarborRpcProps }) => {
 						invoke(operationName: string, args?: unknown): Promise<unknown>;
@@ -127,11 +499,13 @@ export function createWorker(registry = appRegistry): ExportedHandler<Env> {
 				};
 				const rpc =
 					env.LOADER && env.EXECUTOR !== "quickjs" && exports.HarborRpc
-						? exports.HarborRpc({ props: { principal: auth.principal } })
+						? exports.HarborRpc({
+								props: { principal: auth.principal, localDevRequest },
+							})
 						: { invoke: provider.invoke };
 				const server = createMcpServer({
 					ctx,
-					registry,
+					registry: requestRegistry,
 					runtime: env.EXECUTOR ?? "auto",
 					loader: env.LOADER,
 					rpc,

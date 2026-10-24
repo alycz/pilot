@@ -1,0 +1,25 @@
+{
+  "request": {
+    "operation": "tx.submit",
+    "network": "testnet",
+    "transaction_type": "Payment",
+    "args": {
+      "tx_blob": "ABABABABABABABABABABABABABABABAB",
+      "network": "testnet"
+    }
+  },
+  "response": {
+    "ok": true,
+    "data": {
+      "status": "executed",
+      "hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    },
+    "trust": {
+      "rpc": {
+        "route": "quicknode-mock",
+        "methods_quicknode": 0,
+        "methods_fallback": 1
+      }
+    }
+  }
+}

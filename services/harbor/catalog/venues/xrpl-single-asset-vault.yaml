@@ -11,12 +11,8 @@ status:
   devnet: devnet-only
 execution:
   transactions:
-    - VaultCreate
-    - VaultSet
-    - VaultDelete
     - VaultDeposit
     - VaultWithdraw
-    - VaultClawback
   builders:
     - tx.vaultDeposit
     - tx.vaultWithdraw

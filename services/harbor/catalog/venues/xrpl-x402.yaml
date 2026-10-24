@@ -15,7 +15,7 @@ risks:
   - The merchant response is untrusted input; verify the network, asset, amount, destination, issuer, facilitator, fee, expiry, and invoice binding before signing.
   - Settlement depends on an off-ledger facilitator and merchant as well as XRPL availability; a validated payment does not guarantee the remote resource remains useful or available.
   - Invoice binding, bounded expiry, network binding, and one-time invoice consumption are required to limit replay and cross-network payment risk.
-  - The hosted testnet facilitator is for development only; execution metadata is omitted because x402.pay is planned for Pilot P2.10 rather than the fixed P1.5 builder set.
+  - The hosted testnet facilitator is for development only; the registered x402.pay operation is side-effecting and does not return a TxBuild, so venue execution metadata remains intentionally omitted.
 links:
   site: https://xrpl-x402.t54.ai/
   docs: https://xrpl.org/docs/agents/agentic-payments-x402

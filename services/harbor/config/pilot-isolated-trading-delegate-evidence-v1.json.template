@@ -1,0 +1,39 @@
+{
+  "account_status": {
+    "owner": "<AUTHENTICATED_PILOT_OWNER_PUBLIC_ADDRESS>",
+    "network": "testnet",
+    "delegate": "<ACTIVE_ISOLATED_TRADING_DELEGATE_PUBLIC_ADDRESS>",
+    "permissions": [
+      "OfferCreate",
+      "OfferCancel",
+      "TrustSet",
+      "AMMDeposit",
+      "AMMWithdraw",
+      "EscrowFinish",
+      "CheckCash"
+    ],
+    "status": "active"
+  },
+  "onboarding_readiness": {
+    "ready": true,
+    "scope": {
+      "owner": "<AUTHENTICATED_PILOT_OWNER_PUBLIC_ADDRESS>",
+      "network": "testnet"
+    },
+    "checks": {
+      "reviewed_runtime": true,
+      "exact_active_link": true,
+      "exact_persisted_policy": true,
+      "usable_encrypted_delegate": true,
+      "validated_trust_set": true,
+      "usable_trust_line": true
+    },
+    "evidence": {
+      "delegate": "<ACTIVE_ISOLATED_TRADING_DELEGATE_PUBLIC_ADDRESS>",
+      "link_ledger_index": 1,
+      "trust_set_hash": "<64_UPPERCASE_HEX_TRANSACTION_HASH>",
+      "trust_set_ledger_index": 1,
+      "trust_line_ledger_index": 1
+    }
+  }
+}

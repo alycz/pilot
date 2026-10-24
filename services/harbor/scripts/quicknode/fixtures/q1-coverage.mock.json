@@ -1,0 +1,28 @@
+{
+  "network": "testnet",
+  "source": "standin-fixture",
+  "generated_at": "2026-10-21T20:00:00.000Z",
+  "methods": {
+    "account_info": "supported",
+    "account_lines": "supported",
+    "account_objects": "supported",
+    "account_tx": "supported",
+    "amm_info": "supported",
+    "book_changes": "supported",
+    "book_offers": "supported",
+    "feature": "supported",
+    "fee": "supported",
+    "get_aggregate_price": "supported",
+    "ledger": "supported",
+    "ledger_current": "supported",
+    "ledger_data": "supported",
+    "ledger_entry": "supported",
+    "path_find": "supported",
+    "ripple_path_find": "supported",
+    "server_info": "supported",
+    "simulate": "supported",
+    "submit": "supported",
+    "tx": "supported",
+    "vault_info": "supported"
+  }
+}

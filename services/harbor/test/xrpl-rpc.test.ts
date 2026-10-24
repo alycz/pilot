@@ -9,6 +9,7 @@ import {
   requestXrpl,
   resolveXrplNetwork,
   XRPL_NETWORKS,
+  XRPL_RPC_MAX_RESPONSE_BYTES,
   XRPL_RPC_RETRIES,
   XRPL_RPC_TIMEOUT_MS,
   XrplRpcError,
@@ -32,6 +33,18 @@ class FixtureTransport implements XrplTransport {
     this.requests.push(request);
     return this.fixture(request, this.requests.length);
   }
+}
+
+function jsonRpcRequest(): XrplTransportRequest {
+  return {
+    network: "testnet",
+    kind: "json-rpc",
+    url: "https://example.test/rpc",
+    command: "fee",
+    params: {},
+    timeoutMs: 8_000,
+    signal: new AbortController().signal,
+  };
 }
 
 describe("XRPL network configuration", () => {
@@ -77,6 +90,42 @@ describe("XRPL network configuration", () => {
 });
 
 describe("XRPL transports", () => {
+  it("preserves the Worker-global receiver for the default fetch", async () => {
+    const originalFetch = globalThis.fetch;
+    const workerFetch = vi.fn(function (
+      this: typeof globalThis,
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ): Promise<Response> {
+      if (this !== globalThis) {
+        throw new TypeError("Illegal invocation");
+      }
+      return Promise.resolve(
+        Response.json({ result: { status: "success", ledger_index: 42 } }),
+      );
+    });
+    globalThis.fetch = workerFetch as typeof globalThis.fetch;
+
+    try {
+      const transport = new JsonRpcTransport();
+      await expect(
+        transport.request({
+          network: "testnet",
+          kind: "json-rpc",
+          url: "https://example.test/rpc",
+          command: "fee",
+          params: {},
+          timeoutMs: 8_000,
+          signal: new AbortController().signal,
+        }),
+      ).resolves.toMatchObject({ result: { ledger_index: 42 } });
+      expect(workerFetch).toHaveBeenCalledOnce();
+      expect(workerFetch.mock.instances[0]).toBe(globalThis);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("formats JSON-RPC requests as a one-item params array", async () => {
     const fetcher = vi.fn(async () =>
       Response.json({ result: { status: "success", ledger_index: 42 } }),
@@ -105,6 +154,62 @@ describe("XRPL transports", () => {
     expect(JSON.parse(String(init?.body))).toEqual({
       method: "account_info",
       params: [{ account: "rExample", ledger_index: "validated" }],
+    });
+  });
+
+  it("rejects and cancels a response whose declared length exceeds the cap", async () => {
+    let canceled = false;
+    const body = new ReadableStream<Uint8Array>({
+      cancel() {
+        canceled = true;
+      },
+    });
+    const transport = new JsonRpcTransport(
+      vi.fn(async () =>
+        new Response(body, {
+          headers: {
+            "content-length": String(XRPL_RPC_MAX_RESPONSE_BYTES + 1),
+          },
+        }),
+      ),
+    );
+
+    await expect(transport.request(jsonRpcRequest())).rejects.toMatchObject({
+      code: "XRPL_RESPONSE_TOO_LARGE",
+      retryable: false,
+    });
+    expect(canceled).toBe(true);
+  });
+
+  it("cancels a chunked response as soon as the streamed body exceeds the cap", async () => {
+    let canceled = false;
+    const chunk = new Uint8Array(XRPL_RPC_MAX_RESPONSE_BYTES / 2 + 1);
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(chunk);
+        controller.enqueue(chunk);
+      },
+      cancel() {
+        canceled = true;
+      },
+    });
+    const transport = new JsonRpcTransport(
+      vi.fn(async () => new Response(body)),
+    );
+
+    await expect(transport.request(jsonRpcRequest())).rejects.toMatchObject({
+      code: "XRPL_RESPONSE_TOO_LARGE",
+    });
+    expect(canceled).toBe(true);
+  });
+
+  it("rejects invalid UTF-8 even when replacement decoding would form JSON", async () => {
+    const transport = new JsonRpcTransport(
+      vi.fn(async () => new Response(new Uint8Array([0x22, 0x80, 0x22]))),
+    );
+
+    await expect(transport.request(jsonRpcRequest())).rejects.toMatchObject({
+      code: "XRPL_MALFORMED_RESPONSE",
     });
   });
 
@@ -224,6 +329,81 @@ describe("XRPL response normalization", () => {
       expect(error).not.toHaveProperty("request");
     }
   });
+
+  it.each(["txnNotFound", "transactionNotFound"])(
+    "preserves searched_all=true for %s without retaining other response data",
+    (code) => {
+      const fixture = {
+        result: {
+          status: "error",
+          error: code,
+          searched_all: true,
+          ledger_index: 123,
+          error_message: "Transaction not found for secret-value",
+          request: { command: "tx", passphrase: "secret-value" },
+        },
+      };
+
+      try {
+        normalizeXrplResponse(fixture);
+        throw new Error("expected normalization to throw");
+      } catch (error) {
+        expect(error).toBeInstanceOf(XrplRpcError);
+        expect(error).toMatchObject({
+          code,
+          kind: "soft-empty",
+          retryable: false,
+          searchedAll: true,
+        });
+        expect(String(error)).not.toContain("secret-value");
+        expect(error).not.toHaveProperty("searched_all");
+        expect(error).not.toHaveProperty("request");
+        expect(error).not.toHaveProperty("ledger_index");
+        expect(error).not.toHaveProperty("error_message");
+      }
+    },
+  );
+
+  it("preserves a top-level searched_all boolean from a bounded tx error", () => {
+    expect(() =>
+      normalizeXrplResponse({
+        searched_all: true,
+        result: { status: "error", error: "txnNotFound" },
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "txnNotFound",
+        kind: "soft-empty",
+        searchedAll: true,
+      }),
+    );
+  });
+
+  it.each([
+    ["boolean false", "txnNotFound", false, false],
+    ["string true", "transactionNotFound", "true", undefined],
+    ["numeric true", "txnNotFound", 1, undefined],
+    ["unrelated error", "actNotFound", true, undefined],
+  ])(
+    "does not accept %s searched_all as true",
+    (_description, code, searchedAll, expected) => {
+      try {
+        normalizeXrplResponse({
+          result: {
+            status: "error",
+            error: code,
+            searched_all: searchedAll,
+          },
+        });
+        throw new Error("expected normalization to throw");
+      } catch (error) {
+        expect(error).toBeInstanceOf(XrplRpcError);
+        expect(error).toHaveProperty("searchedAll", expected);
+        expect(error).not.toHaveProperty("searchedAll", true);
+        expect(error).not.toHaveProperty("searched_all");
+      }
+    },
+  );
 
   it("rejects malformed fixture responses", () => {
     expect(() => normalizeXrplResponse([])).toThrowError(

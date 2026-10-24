@@ -7,13 +7,15 @@ category:
   - liquidity
 status:
   mainnet: live
+  testnet: live
+  devnet: live
 reads:
   - book_offers
 risks:
+  - Live status describes the protocol amendments, not Harbor execution support; this venue intentionally has no execution metadata.
   - "Access depends on valid credentials and a permissioned domain whose owner can change accepted credentials; expired, deleted, or newly excluded credentials can invalidate offers."
   - "Permissioned liquidity cannot use AMMs or aggregate across multiple permissioned domains in one transaction."
-  - "Execution metadata is omitted because the fixed Harbor builder set has no permissioned-domain-aware OfferCreate or Payment builder."
-  - "Testnet and Devnet status is omitted because the cited XRPL pages do not publish a static per-network availability matrix."
+  - "Execution metadata is omitted because Harbor's strict OfferCreate and Payment builders do not accept or emit DomainID, and its OfferCreate builder does not support hybrid offers."
 links:
   site: https://xrpl.org/docs/concepts/tokens/decentralized-exchange/permissioned-dexes
   docs: https://xrpl.org/docs/references/protocol/transactions/types/offercreate

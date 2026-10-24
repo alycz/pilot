@@ -1,0 +1,28 @@
+id: venue-yield-desk
+name: Venue Yield Desk
+network: testnet
+base_url: http://127.0.0.1:8794/m/venue-yield-desk
+xrpl_address: rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh
+src_dpa_id: demo-dpa-venue-yield-desk
+schemes:
+  - exact
+  - xrpl-paychan
+settle_asset:
+  kind: iou
+  currency: RLUSD
+  issuer: rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV
+required_credential:
+  issuer: rDemoNetworkIssuer111111111111111111
+  credential_type_hex: 4150344D2D4167656E74
+products:
+  - sku: yield-report
+    name: Venue yield report
+    description: Typed venue yield and risk metrics for the AP4M demo.
+    price:
+      asset:
+        kind: iou
+        currency: RLUSD
+        issuer: rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV
+      value: "1"
+    response_schema_id: yield_report_v1
+wba_required: true

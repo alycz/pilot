@@ -11,6 +11,8 @@ describe("running Harbor Worker", () => {
 		await expect(response.json()).resolves.toEqual({
 			ok: true,
 			service: "harbor",
+			health: "process",
+			handoff_readiness: "not_evaluated",
 		});
 	});
 });

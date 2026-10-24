@@ -41,7 +41,7 @@ import { LandingBrand, LandingNav } from "./landing-nav";
 /* ------------------------------------------------------------------ */
 
 const builderSteps = [
-  { n: "1", title: "Fetch prices and balances", risk: "Stale or outdated prices", fix: "Prices read live from the ledger" },
+  { n: "1", title: "Fetch prices and balances", risk: "Stale or outdated prices", fix: "Live ledger reads require an explicitly configured provider" },
   { n: "2", title: "Write the transaction", risk: "Wrong amount or token", fix: "Exact trade built and simulated" },
   { n: "3", title: "Check the user's limits", risk: "Limit gets skipped", fix: "Your limits enforced every time" },
   { n: "4", title: "Approve and sign", risk: "Wrong trade gets signed", fix: "Approval tied to the exact trade" },
@@ -49,7 +49,7 @@ const builderSteps = [
 ] as const;
 
 const traderSteps = [
-  { n: "1", today: "Check prices", where: "on a charts website", icon: BarChart3, wrong: "Prices copied by hand", fix: "Agent reads the live market" },
+  { n: "1", today: "Check prices", where: "on a charts website", icon: BarChart3, wrong: "Prices copied by hand", fix: "Agent reads fixtures until live market access is configured" },
   { n: "2", today: "Ask what to trade", where: "in an AI chatbot", icon: MessageSquare, wrong: "Can't see your limits", fix: "Proposes a trade within your limits" },
   { n: "3", today: "Retype the trade", where: "into your wallet app", icon: KeyRound, wrong: "Easy to mistype the trade", fix: "You approve the exact details" },
   { n: "4", today: "Check if it went through", where: "on a ledger lookup site", icon: Search, wrong: "No record of what or why", fix: "Confirmed and recorded on the ledger" },
@@ -113,7 +113,7 @@ const pilotFlow = [
 ] as const;
 
 const pilotFeatures = [
-  { title: "An AI trading agent built for XRPL", body: "Ask from any page about your account and the market. The agent reads quotes, order books, AMM pools and the venue catalog live from the ledger." },
+  { title: "An AI trading agent built for XRPL", body: "Ask from any page about your account and the market. The public preview uses bounded fixtures; quotes, order books and AMM pools use live ledger reads only after a provider profile is explicitly configured and accepted." },
   { title: "Proposals with the exact details", body: "Choose one-time, recurring or autonomous. Every proposal arrives as a card with the asset, amount, route, fee and policy result." },
   { title: "Trades follow your limits", body: "Approvals show the exact details, and you sign that transaction, not a summary of it. Per-trade caps, a daily budget and an issuer allowlist are checked every time." },
   { title: "Confirms and remembers", body: "Pilot reads the result back from the ledger, then remembers your choices for the next trade." },
@@ -187,22 +187,22 @@ const safety = [
 
 const roadmap: readonly { phase: string; title: string; active: boolean; items: readonly string[] }[] = [
   {
-    phase: "Today · Testnet",
-    title: "Built and open source",
+    phase: "Today · public preview",
+    title: "Implemented, mock-first and open source",
     active: true,
-    items: ["Live end-to-end trades in the Pilot app", "64 XRPL operations over MCP and REST", "Ledger, QuickNode, AWS and Mastercard integrations", "Self-improving memory in an Obsidian vault"],
+    items: ["End-to-end transaction flows run with explicit fixtures; no live trade is claimed", "64 XRPL operation contracts over MCP and REST", "Ledger, QuickNode, AWS and Mastercard adapters are default-off", "Owner-reviewed memory flows use an Obsidian-format vault"],
   },
   {
     phase: "Next",
-    title: "Launch on Mainnet",
+    title: "Complete live acceptance gates",
     active: false,
-    items: ["Security audit, then launch on XRPL Mainnet", "Closed beta with traders already using AI", "Public trade journal, verifiable on the ledger", "First developer partners on the MCP and API"],
+    items: ["Hardware-wallet and Testnet execution acceptance", "Configured-provider smoke tests with no implicit fallback", "Security review before any Mainnet decision", "Publish verifiable Testnet evidence when those checks pass"],
   },
   {
     phase: "Later",
-    title: "Full platform launch",
+    title: "Optional live rollout",
     active: false,
-    items: ["Open to every AI model and DEX trader", "Hosted MCP and API for any XRPL app", "Strategy templates: DCA, rebalancing, ladders", "Integrate lending and staking as they launch on XRPL"],
+    items: ["Enable reviewed providers only after account-specific acceptance", "Consider Mainnet only after audit and explicit authorization", "Hosted MCP and API for approved XRPL apps", "Expand strategy templates behind the same limits and approvals"],
   },
 ];
 
@@ -370,7 +370,7 @@ function ProductPreview() {
         </span>
         <span className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1.5 border border-executed/30 bg-executed/10 px-1.5 py-0.5 text-xs text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))] rounded">
-            <span aria-hidden="true" className="h-1.5 w-1.5 bg-executed" /> Testnet
+            <span aria-hidden="true" className="h-1.5 w-1.5 bg-executed" /> Testnet fixture
           </span>
         </span>
       </div>
@@ -415,7 +415,7 @@ function ProductPreview() {
 }
 
 const previewChecks = [
-  { label: "Network", value: "Testnet · allowed" },
+  { label: "Network", value: "Testnet fixture · allowed" },
   { label: "Issuer", value: "RLUSD · allowlisted" },
   { label: "Slippage", value: "1% · max 1%" },
   { label: "Size", value: "$500 · owner signs" },
@@ -715,10 +715,10 @@ function Pilot() {
 }
 
 const integrationCards = [
-  { href: "/integrations/mastercard", name: "Mastercard AP4M", line: "Pilot buys data on its own, only inside a spending permission you sign once." },
-  { href: "/integrations/aws", name: "AWS", line: "Ledger text is screened before the AI reads it, and signing keys stay locked in AWS." },
-  { href: "/integrations/quicknode", name: "QuickNode", line: "A faster line to the ledger, with a watchdog that freezes misused keys." },
-  { href: "/integrations/ledger", name: "Ledger", line: "Routine trades run on their own; anything bigger waits for your Ledger." },
+  { href: "/integrations/mastercard", name: "Mastercard AP4M", line: "The bounded adapter and explainer are implemented; provider calls and payments stay off until separately configured and accepted." },
+  { href: "/integrations/aws", name: "AWS", line: "Mock screening and AgentCore contracts are implemented; AWS credentials and live calls are off by default." },
+  { href: "/integrations/quicknode", name: "QuickNode", line: "The native XRPL adapter and watchdog contracts are implemented; provider calls are off by default." },
+  { href: "/integrations/ledger", name: "Ledger", line: "Sign-only approval flows are implemented; physical-device acceptance is separate and Ledger is off by default." },
 ] as const;
 
 function IntegrationsOverview() {
@@ -726,8 +726,8 @@ function IntegrationsOverview() {
     <Section
       id="integrations"
       eyebrow="Integrations"
-      title="Built with the infrastructure you already trust."
-      lede="Each integration adds one thing Pilot couldn't do safely on its own. Open one to watch a request run through it."
+      title="Integration contracts, with live provider access off by default."
+      lede="Open one to inspect its bounded explainer or fixture flow. The current public runtime makes no provider calls or transactions."
     >
       <ul data-reveal-stagger className="grid gap-px border border-border bg-border sm:grid-cols-2 lg:grid-cols-4 rounded-xl overflow-hidden">
         {integrationCards.map((card) => (
@@ -813,11 +813,11 @@ function Architecture() {
       id="architecture"
       eyebrow="Other apps · One engine, many apps"
       title="Developers can build any XRPL app on Pilot's MCP and API."
-      lede="DEX, AMM and ledger data, live and one call away. It's open source, so no one starts from scratch, and the same limits and approvals Pilot uses are built in. Dashed boxes are examples; no outside apps use it yet."
+      lede="DEX, AMM and ledger-read contracts are available through one API. The public runtime uses bounded fixtures; live reads require an explicitly configured provider. The same limits and approvals remain built in, and dashed boxes are examples—no outside apps use them yet."
     >
       <ArchitectureDiagram />
       <p className="mt-4 border-l-2 border-primary/40 pl-3 text-sm font-medium text-muted-foreground">
-        RPC, confirmations and agent-key monitoring on QuickNode
+        QuickNode RPC, confirmation and key-monitoring contracts · provider calls default-off
       </p>
     </Section>
   );
@@ -893,7 +893,7 @@ function Safety() {
       </ol>
       <p className="mt-6 flex items-center gap-2.5 text-[13px] text-[color-mix(in_oklab,var(--approval)_80%,var(--foreground))]">
         <span aria-hidden="true" className="h-1.5 w-1.5 bg-approval" />
-        Live on Testnet today. Mainnet launches after a security audit.
+        Public runtime: explicit mock/default-off. Live Testnet execution and physical-wallet acceptance remain separate gates.
       </p>
     </Section>
   );
@@ -901,7 +901,7 @@ function Safety() {
 
 function Roadmap() {
   return (
-    <Section id="roadmap" eyebrow="Roadmap and traction" title="Pilot is live on Testnet. Mainnet with real users is next.">
+    <Section id="roadmap" eyebrow="Roadmap and readiness" title="Core flows are implemented; live providers and transaction acceptance remain gated.">
       <ol data-reveal-stagger className="grid gap-6 lg:grid-cols-3">
         {roadmap.map((column) => (
           <li key={column.phase} className="flex flex-col">
@@ -934,7 +934,7 @@ function FinalCta() {
   return (
     <section aria-labelledby="cta-title" className="relative overflow-hidden border-b border-border">
       <div className="relative mx-auto max-w-3xl px-4 py-20 text-center sm:px-6 sm:py-28">
-        <p className="label-mono">Start on Testnet</p>
+        <p className="label-mono">Explore the public preview</p>
         <h2 id="cta-title" className="mt-4 text-balance text-[1.75rem] font-semibold leading-tight tracking-[-0.02em] text-foreground sm:text-[2rem] font-display">
           Research, approve and confirm your next XRPL trade, inside limits you set.
         </h2>
@@ -962,7 +962,7 @@ function Footer() {
     <footer className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
         <LandingBrand />
-        <p className="label-mono">Pilot developer APIs · Live on XRPL Testnet</p>
+        <p className="label-mono">Pilot developer APIs · Mock/default-off preview</p>
       </div>
       <nav aria-label="Footer">
         <ul className="flex flex-wrap gap-x-5 gap-y-2 pointer-coarse:gap-y-0">

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "digestAlgorithm": "sha256-exact-service-subtree-v1",
+  "servicePrefix": "services/harbor/",
+  "trackedPathCount": 486,
+  "treeSha256": "50786638c7543223500223ebff65c24b6ebb4efe0d9f017baf4bc618374f794f",
+  "digestExcludes": [
+    "services/harbor/integrity/manifest.json"
+  ],
+  "requiredPaths": [
+    "services/harbor/.node-version",
+    "services/harbor/package.json",
+    "services/harbor/package-lock.json",
+    "services/harbor/src/contracts.ts",
+    "services/harbor/wrangler.jsonc",
+    "services/harbor/integrity/manifest.json",
+    "services/harbor/scripts/integrity/verify.mjs",
+    "services/harbor/status/.gitignore"
+  ]
+}

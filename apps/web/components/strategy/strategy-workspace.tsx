@@ -25,7 +25,7 @@ function StandaloneStrategyWorkspace({ client }: { client?: StrategyClient }) {
 export function StrategyWorkspaceView({ controller, onStart }: { controller: StrategyController; onStart?: () => void }) {
   const { context, draft, setDraft, screen, setScreen, strategy, view, busy, error, pendingMutation, pendingGlobalKill, globalKill, globalKillError, blocked } = controller;
   if (context === undefined) return <Loading />;
-  if (context.mode === "demo") return <StrategySignedOutDemo realModeStatus={context.realModeStatus} onCheckRealMode={() => void controller.refresh()} onStart={onStart} />;
+  if (context.mode === "demo") return <StrategySignedOutDemo realModeStatus={context.realModeStatus} onStart={onStart} />;
 
   return <div className="min-w-0">
     {view && screen === "status" ? <StrategyStatus strategy={view} /> : null}

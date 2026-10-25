@@ -16,6 +16,7 @@ import {
 } from "./contracts";
 import { loadStoredBacktestRuns, saveBacktestRun } from "./storage";
 import { BACKTEST_SESSION_INVALIDATED_EVENT } from "./session-lifecycle-guard";
+import { createSignedOutDemoRun, withDemoComparisons, type DemoBacktestRun } from "./signed-out-demo";
 
 type Draft = Record<keyof BacktestRunRequest, string>;
 
@@ -50,6 +51,10 @@ export function requestFromDraft(draft: Draft): BacktestRunRequest {
 
 export function BacktestsClient() {
   const [draft, setDraft] = useState<Draft>(INITIAL_DRAFT);
+  const [dataMode, setDataMode] = useState<"demo" | "historical">("demo");
+  const [demoRuns, setDemoRuns] = useState<readonly DemoBacktestRun[]>(() => [
+    createSignedOutDemoRun(requestFromDraft(INITIAL_DRAFT), 1),
+  ]);
   const [bundle, setBundle] = useState<BacktestRunBundle>();
   const [saved, setSaved] = useState<readonly StoredBacktestRun[]>([]);
   const [compareRunId, setCompareRunId] = useState("");
@@ -63,6 +68,9 @@ export function BacktestsClient() {
       controllerRef.current?.abort();
       setBundle(undefined);
       setSaved([]);
+      setDemoRuns([createSignedOutDemoRun(requestFromDraft(INITIAL_DRAFT), 1)]);
+      setDraft(INITIAL_DRAFT);
+      setDataMode("demo");
       setCompareRunId("");
       setStatus("idle");
       setError(undefined);
@@ -74,12 +82,21 @@ export function BacktestsClient() {
     };
   }, []);
 
-  const model = useMemo(() => ({
-    ...(bundle?.viewModel ?? BACKTESTS_FIXTURE_VIEW_MODEL),
-    savedRuns: savedRunRows(bundle, saved),
-  }), [bundle, saved]);
-  const baseline = saved.find(({ bundle: candidate }) => candidate.chatEvidence.runId === compareRunId)?.bundle;
-  const comparison = bundle && baseline ? compareRunEvidence(bundle, baseline) : undefined;
+  const currentDemo = demoRuns[0]!;
+  const model = useMemo(() => dataMode === "demo"
+    ? withDemoComparisons(currentDemo, demoRuns)
+    : ({
+        ...(bundle?.viewModel ?? BACKTESTS_FIXTURE_VIEW_MODEL),
+        savedRuns: savedRunRows(bundle, saved),
+      }), [bundle, currentDemo, dataMode, demoRuns, saved]);
+  const historicalBaseline = saved.find(({ bundle: candidate }) => candidate.chatEvidence.runId === compareRunId)?.bundle;
+  const historicalComparison = bundle && historicalBaseline ? compareRunEvidence(bundle, historicalBaseline) : undefined;
+  const demoBaseline = demoRuns.find((candidate) => candidate.runId === compareRunId);
+  const comparisonDetail = dataMode === "demo"
+    ? demoBaseline
+      ? `Sample comparison: ${demoBaseline.label}. Both runs use the same synthetic fixture; differences come only from editable simulation inputs.`
+      : undefined
+    : historicalComparison?.detail;
 
   function update<K extends keyof Draft>(key: K, value: Draft[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -95,6 +112,13 @@ export function BacktestsClient() {
     } catch (cause) {
       setStatus("error");
       setError(cause instanceof Error ? cause.message : "Backtest inputs are invalid.");
+      return;
+    }
+    if (dataMode === "demo") {
+      const next = createSignedOutDemoRun(request, demoRuns.length + 1);
+      setDemoRuns((current) => [next, ...current].slice(0, 8));
+      setCompareRunId(currentDemo.runId);
+      setStatus("complete");
       return;
     }
     const controller = new AbortController();
@@ -127,7 +151,7 @@ export function BacktestsClient() {
     }
   }
 
-  const chatHref = bundle ? `/chat?${encodeBacktestChatReference({
+  const chatHref = dataMode === "historical" && bundle ? `/chat?${encodeBacktestChatReference({
     version: "v1",
     runId: bundle.chatEvidence.runId,
     resultFingerprint: bundle.chatEvidence.resultFingerprint,
@@ -135,20 +159,53 @@ export function BacktestsClient() {
     strategyVersion: bundle.chatEvidence.strategyVersion,
   })}` : undefined;
 
+  function resetDemo() {
+    controllerRef.current?.abort();
+    const initial = createSignedOutDemoRun(requestFromDraft(INITIAL_DRAFT), 1);
+    setDraft(INITIAL_DRAFT);
+    setDemoRuns([initial]);
+    setCompareRunId("");
+    setError(undefined);
+    setStatus("idle");
+  }
+
+  function chooseMode(mode: "demo" | "historical") {
+    controllerRef.current?.abort();
+    setDataMode(mode);
+    setCompareRunId("");
+    setError(undefined);
+    setStatus("idle");
+  }
+
   return (
     <>
       <section aria-labelledby="backtest-config-title" className="bg-background px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <form onSubmit={(event) => void run(event)} className="mx-auto max-w-6xl space-y-6 rounded-xl border border-border bg-card p-4 shadow-sm sm:p-6">
+          <div className="flex flex-col gap-4 rounded-xl border border-primary/30 bg-primary/[0.05] p-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="label-mono text-primary">{dataMode === "demo" ? "Demo · simulated sample results" : "Historical research · external public data"}</p>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+                {dataMode === "demo"
+                  ? "Try the complete workflow immediately. A fixed synthetic price path is calculated in this browser; no wallet, account, model, provider, signing service, or execution endpoint is used."
+                  : "This optional lane requests public historical market-level data. Provider and validation failures remain visible and never fall back to the sample demo."}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <button type="button" aria-pressed={dataMode === "demo"} onClick={() => chooseMode("demo")} className={`min-h-11 rounded-md border px-3 text-xs font-medium ${dataMode === "demo" ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-foreground"}`}>Sample demo</button>
+              <button type="button" aria-pressed={dataMode === "historical"} onClick={() => chooseMode("historical")} className={`min-h-11 rounded-md border px-3 text-xs font-medium ${dataMode === "historical" ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-foreground"}`}>Historical data</button>
+              <Link href="/onboarding" className="inline-flex min-h-11 items-center rounded-md border border-border px-3 text-xs font-medium text-foreground">Connect wallet (optional)</Link>
+            </div>
+          </div>
           <div>
             <p className="label-mono">Configure a bounded experiment</p>
-            <h2 id="backtest-config-title" className="mt-1 text-lg font-medium">Validated daily bars · deterministic calculation</h2>
-            <p className="mt-2 max-w-3xl text-xs leading-5 text-muted-foreground">Data loads only when you run the experiment. Provider failures stay visible; Pilot never silently substitutes fixture data.</p>
-            <p className="mt-3 inline-flex rounded-md border border-info/30 bg-info/5 px-2.5 py-1.5 text-xs font-medium text-info">External public historical data · not verified for executable liquidity</p>
+            <h2 id="backtest-config-title" className="mt-1 text-lg font-medium">{dataMode === "demo" ? "Synthetic sample path · deterministic browser calculation" : "Validated daily bars · deterministic calculation"}</h2>
+            <p className="mt-2 max-w-3xl text-xs leading-5 text-muted-foreground">{dataMode === "demo" ? "Edit supported parameters and run repeatedly. Sample state is local to this page, resets on reload or session change, and can never authorize a real action." : "Data loads only when you run the experiment. Provider failures stay visible; Pilot never silently substitutes fixture data."}</p>
+            <p className="mt-3 inline-flex rounded-md border border-info/30 bg-info/5 px-2.5 py-1.5 text-xs font-medium text-info">{dataMode === "demo" ? "Synthetic sample data · not historical, live, or executable" : "External public historical data · not verified for executable liquidity"}</p>
           </div>
           <fieldset disabled={status === "running"} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 disabled:opacity-70">
             <legend className="sr-only">Backtest configuration</legend>
-            <ReadOnlyField id="source" label="Dataset" value="Kraken XRP / USD daily bars" help="Public, read-only, no API key. Redistribution rights remain under review." />
-            <ReadOnlyField id="strategy-id" label="Strategy" value="Long-only allocation band v1" help="No leverage, shorts, optimizer, or generated code." />
+            <ReadOnlyField id="source" label="Dataset" value={dataMode === "demo" ? "Synthetic XRP / USD sample path" : "Kraken XRP / USD daily bars"} help={dataMode === "demo" ? "Repository-owned fixture; no provider or network call." : "Public, read-only, no API key. Redistribution rights remain under review."} />
+            <ReadOnlyField id="strategy-id" label="Strategy" value={dataMode === "demo" ? "Long-only allocation band sample" : "Long-only allocation band v1"} help="No leverage, shorts, optimizer, or generated code." />
             <Field id="start-day" label="Start day" type="date" value={draft.startDay} onChange={(value) => update("startDay", value)} help="UTC daily bucket." />
             <Field id="end-day" label="End day" type="date" value={draft.endDay} onChange={(value) => update("endDay", value)} help="Maximum 720 inclusive daily buckets." />
             <Field id="oos-day" label="Out-of-sample start" type="date" value={draft.outOfSampleStartDay} onChange={(value) => update("outOfSampleStartDay", value)} help="Parameters freeze before this date." />
@@ -170,16 +227,17 @@ export function BacktestsClient() {
           </fieldset>
           <div className="flex flex-wrap items-center gap-3">
             <button type="submit" disabled={status === "running"} className="inline-flex min-h-11 items-center justify-center rounded-md bg-primary px-4 font-mono text-xs font-medium uppercase tracking-wide text-primary-foreground transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-wait disabled:opacity-60 motion-reduce:transition-none">
-              {status === "running" ? "Validating and running…" : "Run deterministic backtest"}
+              {status === "running" ? "Validating and running…" : dataMode === "demo" ? "Run simulated sample" : "Run deterministic backtest"}
             </button>
+            {dataMode === "demo" ? <button type="button" onClick={resetDemo} className="inline-flex min-h-11 items-center rounded-md border border-border bg-background px-4 text-xs font-medium text-foreground">Reset sample</button> : null}
             {chatHref ? <Link href={chatHref} className="inline-flex min-h-11 items-center rounded-md border border-border bg-background px-4 font-mono text-xs uppercase tracking-wide transition hover:bg-primary/[0.07] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary motion-reduce:transition-none">Explain saved evidence in chat</Link> : null}
-            <p aria-live="polite" className="text-xs text-muted-foreground">{status === "complete" ? "Validated run saved for this tab session." : status === "running" ? "Reading public data and calculating on the server…" : ""}</p>
+            <p aria-live="polite" className="text-xs text-muted-foreground">{status === "complete" ? dataMode === "demo" ? "Sample result recalculated locally. No evidence or authority was saved." : "Validated run saved for this tab session." : status === "running" ? "Reading public data and calculating on the server…" : ""}</p>
           </div>
-          {error ? <p role="alert" className="rounded-xl border border-destructive/35 bg-destructive/[0.06] px-4 py-3 text-sm text-destructive">{error} No historical result was substituted.</p> : null}
-          {bundle && saved.length > 1 ? (
+          {error ? <p role="alert" className="rounded-xl border border-destructive/35 bg-destructive/[0.06] px-4 py-3 text-sm text-destructive">{error} {dataMode === "demo" ? "The prior sample remains unchanged." : "No historical result was substituted."}</p> : null}
+          {(dataMode === "demo" ? demoRuns.length > 1 : Boolean(bundle && saved.length > 1)) ? (
             <div className="grid gap-3 rounded-xl border border-border bg-surface px-4 py-4 sm:grid-cols-[minmax(0,18rem)_1fr] sm:items-end">
-              <label htmlFor="comparison-run" className="text-xs"><span className="label-mono text-[10px]">Compare saved run</span><select id="comparison-run" value={compareRunId} onChange={(event) => setCompareRunId(event.target.value)} className="mt-2 min-h-11 w-full rounded-md border border-border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"><option value="">Choose a prior run</option>{saved.filter(({ bundle: item }) => item.chatEvidence.runId !== bundle.chatEvidence.runId).map(({ bundle: item }) => <option key={item.chatEvidence.runId} value={item.chatEvidence.runId}>{item.savedRun.label}</option>)}</select></label>
-              <p role="status" className="text-xs leading-5 text-muted-foreground">{comparison?.detail ?? "Choose a prior run. Incompatible datasets, strategies, currencies, or periods remain blocked."}</p>
+              <label htmlFor="comparison-run" className="text-xs"><span className="label-mono text-[10px]">Compare {dataMode === "demo" ? "sample" : "saved"} run</span><select id="comparison-run" value={compareRunId} onChange={(event) => setCompareRunId(event.target.value)} className="mt-2 min-h-11 w-full rounded-md border border-border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"><option value="">Choose a prior run</option>{dataMode === "demo" ? demoRuns.slice(1).map((item) => <option key={item.runId} value={item.runId}>{item.label}</option>) : saved.filter(({ bundle: item }) => item.chatEvidence.runId !== bundle?.chatEvidence.runId).map(({ bundle: item }) => <option key={item.chatEvidence.runId} value={item.chatEvidence.runId}>{item.savedRun.label}</option>)}</select></label>
+              <p role="status" className="text-xs leading-5 text-muted-foreground">{comparisonDetail ?? `Choose a prior ${dataMode === "demo" ? "sample" : "saved"} run. Incompatible datasets, strategies, currencies, or periods remain blocked.`}</p>
             </div>
           ) : null}
         </form>

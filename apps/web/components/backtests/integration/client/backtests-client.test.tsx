@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { BacktestsClient } from "./backtests-client";
 
 describe("BacktestsClient", () => {
-  it("renders labeled controls without fetching during SSR", () => {
+  it("renders an immediate signed-out sample without fetching during SSR", () => {
     const fetcher = vi.fn();
     vi.stubGlobal("fetch", fetcher);
     const markup = renderToStaticMarkup(createElement(BacktestsClient));
@@ -13,11 +13,17 @@ describe("BacktestsClient", () => {
     for (const label of ["Dataset", "Start day", "Out-of-sample start", "Starting XRP", "Venue fee", "Hypothesis"]) {
       expect(markup).toContain(label);
     }
-    expect(markup).toContain("Run deterministic backtest");
-    expect(markup).toContain("External public historical data · not verified for executable liquidity");
+    expect(markup).toContain("Run simulated sample");
+    expect(markup).toContain("Demo · simulated sample results");
+    expect(markup).toContain("Synthetic sample data · not historical, live, or executable");
+    expect(markup).toContain("Sample strategy return");
+    expect(markup).toContain("Sample hold benchmark");
+    expect(markup).toContain("Synthetic next-sample fill");
+    expect(markup).toContain("Reset sample");
+    expect(markup).toContain("Connect wallet (optional)");
     expect(markup).toContain("rounded-xl");
     expect(markup).toContain("rounded-md");
-    expect(markup).toContain("never silently substitutes fixture data");
+    expect(markup).toContain("no wallet, account, model, provider, signing service, or execution endpoint is used");
     expect(markup).not.toContain("Explain saved evidence in chat");
     vi.unstubAllGlobals();
   });

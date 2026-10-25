@@ -9,10 +9,10 @@ import {
   Gauge,
   Play,
   RotateCcw,
-  RefreshCw,
   Scale,
   ShieldCheck,
   SkipForward,
+  Square,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -20,11 +20,14 @@ import React, { useCallback, useEffect, useState } from "react";
 
 import {
   createDemoState,
+  createDemoLifecycleState,
   DEFAULT_DEMO_POLICY,
   DEMO_MARKET_EVENTS,
   isDemoComplete,
   stepDemoState,
+  transitionDemoLifecycle,
   type DemoDecision,
+  type DemoLifecycleState,
   type DemoOutcome,
   type DemoPolicy,
 } from "./strategy-demo-model";
@@ -68,15 +71,14 @@ const strategyKinds: readonly { icon: LucideIcon; title: string; body: string; e
  */
 export function StrategySignedOutDemo({
   realModeStatus = "Signed out · connect a Testnet budget account when you are ready for actual setup.",
-  onCheckRealMode,
   onStart,
 }: {
   realModeStatus?: string;
-  onCheckRealMode?: () => void;
   onStart?: () => void;
 } = {}) {
   const [policy, setPolicy] = useState<DemoPolicy>(DEFAULT_DEMO_POLICY);
   const [state, setState] = useState(() => createDemoState(DEFAULT_DEMO_POLICY));
+  const [lifecycle, setLifecycle] = useState(createDemoLifecycleState);
   const [playing, setPlaying] = useState(false);
   const current = state.history.at(-1)!;
   const complete = isDemoComplete(state);
@@ -86,25 +88,34 @@ export function StrategySignedOutDemo({
   }, [policy]);
 
   useEffect(() => {
-    if (!playing || complete) return;
+    if (!playing || complete || lifecycle.phase !== "running") return;
     const timer = window.setInterval(advance, 1_800);
     return () => window.clearInterval(timer);
-  }, [advance, complete, playing]);
+  }, [advance, complete, lifecycle.phase, playing]);
 
   useEffect(() => {
-    if (complete) setPlaying(false);
-  }, [complete]);
+    if (!complete || lifecycle.phase !== "running") return;
+    setPlaying(false);
+    setLifecycle((value) => transitionDemoLifecycle(value, "complete"));
+  }, [complete, lifecycle.phase]);
 
   const updatePolicy = (patch: Partial<DemoPolicy>) => {
     const next = { ...policy, ...patch };
     setPolicy(next);
     setState(createDemoState(next));
+    setLifecycle(createDemoLifecycleState());
     setPlaying(false);
   };
 
   const reset = () => {
     setState(createDemoState(policy));
+    setLifecycle((value) => transitionDemoLifecycle(value, "reset"));
     setPlaying(false);
+  };
+
+  const transition = (action: "review" | "edit" | "approve" | "pause" | "resume" | "stop") => {
+    setLifecycle((value) => transitionDemoLifecycle(value, action));
+    if (action === "pause" || action === "stop" || action === "edit") setPlaying(false);
   };
 
   return (
@@ -165,35 +176,42 @@ export function StrategySignedOutDemo({
         <section aria-labelledby="strategy-run-title" className="border border-border bg-card rounded-xl overflow-hidden">
           <header className="flex flex-col gap-4 border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="label-mono">Watch one run</p>
+              <p className="label-mono">Signed-out demo · deterministic fixture</p>
               <h2 id="strategy-run-title" className="mt-1 text-xl font-normal tracking-[-0.01em] text-foreground">Rebalance XRP and RLUSD</h2>
             </div>
-            <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Playback">
+            <div className="flex flex-wrap items-center gap-2">
+              <span role="status" className="rounded-xl border border-primary/30 bg-primary-soft px-3 py-1.5 text-[13px] font-medium text-[color-mix(in_oklab,var(--primary)_85%,var(--foreground))]">
+                Demo · {lifecycle.phase}
+              </span>
               <span className="mr-1 font-mono text-[11px] tabular-nums text-muted-foreground">{state.cursor + 1} / {DEMO_MARKET_EVENTS.length}</span>
               <button type="button" onClick={reset} className="bracket bracket-light inline-flex h-10 items-center gap-2 border border-border px-3.5 text-[13px] transition hover:bg-white/[0.05] motion-reduce:transition-none pointer-coarse:h-11 rounded-md">
-                <RotateCcw className="size-3.5" aria-hidden="true" />Reset
-              </button>
-              <button type="button" disabled={complete || playing} onClick={advance} className="bracket bracket-light inline-flex h-10 items-center gap-2 border border-border px-3.5 text-[13px] transition hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none pointer-coarse:h-11 rounded-md">
-                <SkipForward className="size-3.5" aria-hidden="true" />Next event
-              </button>
-              <button
-                type="button"
-                aria-pressed={playing}
-                disabled={complete}
-                onClick={() => setPlaying((value) => !value)}
-                className="inline-flex h-10 items-center gap-2 bg-primary px-3.5 text-[13px] text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none pointer-coarse:h-11 rounded-md"
-              >
-                {playing ? <CirclePause className="size-3.5" aria-hidden="true" /> : <Play className="size-3.5" aria-hidden="true" />}
-                {playing ? "Pause" : "Play"}
+                <RotateCcw className="size-3.5" aria-hidden="true" />Reset demo
               </button>
             </div>
           </header>
 
-          {/* Your rule */}
-          <div className="grid gap-6 border-b border-border px-5 py-5 sm:grid-cols-2">
+          <DemoLifecyclePanel
+            lifecycle={lifecycle}
+            policy={policy}
+            complete={complete}
+            playing={playing}
+            onReview={() => transition("review")}
+            onEdit={() => transition("edit")}
+            onApprove={() => transition("approve")}
+            onAdvance={advance}
+            onTogglePlayback={() => setPlaying((value) => !value)}
+            onPause={() => transition("pause")}
+            onResume={() => transition("resume")}
+            onStop={() => transition("stop")}
+          />
+
+          <fieldset disabled={lifecycle.phase !== "draft"} className="grid gap-6 border-b border-border px-5 py-5 sm:grid-cols-2">
+            <legend className="sr-only">Editable simulated strategy limits</legend>
             <RangeControl label="Target XRP share" value={policy.targetXrpPercent} min={30} max={70} suffix="%" onChange={(value) => updatePolicy({ targetXrpPercent: value })} />
             <RangeControl label="Allowed drift either way" value={policy.driftPercent} min={2} max={15} suffix="%" onChange={(value) => updatePolicy({ driftPercent: value })} />
-          </div>
+            <RangeControl label="Maximum per simulated trade" value={policy.maxOrderValue} min={5} max={50} step={5} suffix=" RLUSD" onChange={(value) => updatePolicy({ maxOrderValue: value })} />
+            <RangeControl label="Maximum simulated daily value" value={policy.maxDailyValue} min={20} max={150} step={5} suffix=" RLUSD" onChange={(value) => updatePolicy({ maxDailyValue: value })} />
+          </fieldset>
 
           <div className="grid min-w-0 lg:grid-cols-[minmax(0,1fr)_19rem]">
             <div className="min-w-0 space-y-6 p-5 lg:border-r lg:border-border">
@@ -226,7 +244,6 @@ export function StrategySignedOutDemo({
             <p role="note" className="mt-3 border-l-2 border-approval/50 pl-3 text-xs leading-5 text-muted-foreground">{realModeStatus}</p>
           </div>
           <div className="flex shrink-0 flex-col gap-2">
-            {onCheckRealMode ? <button type="button" onClick={onCheckRealMode} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-border px-3 text-sm transition hover:bg-surface motion-reduce:transition-none"><RefreshCw className="size-3.5" aria-hidden="true" />Check real-mode availability</button> : null}
             <Link href="/onboarding" className="bracket bracket-light inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-4 text-[13px] text-primary-foreground transition hover:bg-primary/90">
               Connect account for Testnet setup <ArrowRight className="size-3.5" aria-hidden="true" />
             </Link>
@@ -237,14 +254,130 @@ export function StrategySignedOutDemo({
   );
 }
 
-function RangeControl({ label, value, min, max, suffix, onChange }: { label: string; value: number; min: number; max: number; suffix: string; onChange: (value: number) => void }) {
+function DemoLifecyclePanel({
+  lifecycle,
+  policy,
+  complete,
+  playing,
+  onReview,
+  onEdit,
+  onApprove,
+  onAdvance,
+  onTogglePlayback,
+  onPause,
+  onResume,
+  onStop,
+}: {
+  lifecycle: DemoLifecycleState;
+  policy: DemoPolicy;
+  complete: boolean;
+  playing: boolean;
+  onReview: () => void;
+  onEdit: () => void;
+  onApprove: () => void;
+  onAdvance: () => void;
+  onTogglePlayback: () => void;
+  onPause: () => void;
+  onResume: () => void;
+  onStop: () => void;
+}) {
+  const phaseCopy = {
+    draft: ["Edit the sample mandate", "Choose bounded fixture limits, then review the exact sample before starting."],
+    review: ["Review the simulated approval", "This is the explicit user-approval step. It records only local demo state."],
+    running: ["Simulated strategy running", "Advance the fixed event sequence manually or let the browser play it locally."],
+    paused: ["Simulated strategy paused", "No event advances while paused. Resume or stop this local sample."],
+    stopped: ["Simulated strategy stopped", "The sample is terminal and nothing remains scheduled. Reset to run it again."],
+  }[lifecycle.phase];
+
+  return (
+    <section aria-labelledby="demo-lifecycle-title" className="grid border-b border-border lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="space-y-4 px-5 py-5 lg:border-r lg:border-border">
+        <div>
+          <p className="label-mono">User-approved sample lifecycle</p>
+          <h3 id="demo-lifecycle-title" className="mt-1 text-lg font-medium text-foreground">{phaseCopy[0]}</h3>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">{phaseCopy[1]}</p>
+        </div>
+
+        {lifecycle.phase === "review" ? (
+          <dl className="grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-2">
+            <Metric label="Target and band" value={`${policy.targetXrpPercent}% ± ${policy.driftPercent}%`} />
+            <Metric label="Per trade" value={`${policy.maxOrderValue.toFixed(0)} RLUSD`} />
+            <Metric label="Daily sample cap" value={`${policy.maxDailyValue.toFixed(0)} RLUSD`} />
+            <Metric label="Authority" value="Local fixture only" />
+          </dl>
+        ) : null}
+
+        <p role="note" className="rounded-xl border border-primary/25 bg-primary-soft px-3 py-2 text-xs leading-5 text-muted-foreground">
+          Demo only. Approval never opens a wallet, creates a mandate, starts a scheduler, calls a provider, submits an order, or becomes real authority after login. Reloading clears this state.
+        </p>
+
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Simulated strategy lifecycle controls">
+          {lifecycle.phase === "draft" ? (
+            <button type="button" onClick={onReview} className="inline-flex min-h-11 items-center gap-2 rounded-md bg-primary px-4 text-[13px] font-medium text-primary-foreground transition hover:bg-primary/90">
+              <ShieldCheck className="size-3.5" aria-hidden="true" />Review simulated mandate
+            </button>
+          ) : null}
+          {lifecycle.phase === "review" ? (
+            <>
+              <button type="button" onClick={onEdit} className="inline-flex min-h-11 items-center rounded-md border border-border px-4 text-[13px] transition hover:bg-surface">Back to edit</button>
+              <button type="button" onClick={onApprove} className="inline-flex min-h-11 items-center gap-2 rounded-md bg-primary px-4 text-[13px] font-medium text-primary-foreground transition hover:bg-primary/90">
+                <Play className="size-3.5" aria-hidden="true" />Approve and start simulation
+              </button>
+            </>
+          ) : null}
+          {lifecycle.phase === "running" ? (
+            <>
+              <button type="button" disabled={complete || playing} onClick={onAdvance} className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border px-3.5 text-[13px] transition hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50">
+                <SkipForward className="size-3.5" aria-hidden="true" />Next fixture event
+              </button>
+              <button type="button" aria-pressed={playing} disabled={complete} onClick={onTogglePlayback} className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border px-3.5 text-[13px] transition hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50">
+                {playing ? <CirclePause className="size-3.5" aria-hidden="true" /> : <Play className="size-3.5" aria-hidden="true" />}
+                {playing ? "Stop auto advance" : "Auto advance"}
+              </button>
+              <button type="button" onClick={onPause} className="inline-flex min-h-11 items-center gap-2 rounded-md border border-approval/35 px-3.5 text-[13px] text-approval transition hover:bg-approval/[0.06]">
+                <CirclePause className="size-3.5" aria-hidden="true" />Pause strategy
+              </button>
+              <button type="button" onClick={onStop} className="inline-flex min-h-11 items-center gap-2 rounded-md border border-blocked/35 px-3.5 text-[13px] text-blocked transition hover:bg-blocked/[0.06]">
+                <Square className="size-3.5" aria-hidden="true" />Stop strategy
+              </button>
+            </>
+          ) : null}
+          {lifecycle.phase === "paused" ? (
+            <>
+              <button type="button" onClick={onResume} className="inline-flex min-h-11 items-center gap-2 rounded-md bg-primary px-4 text-[13px] font-medium text-primary-foreground transition hover:bg-primary/90">
+                <Play className="size-3.5" aria-hidden="true" />Resume simulated strategy
+              </button>
+              <button type="button" onClick={onStop} className="inline-flex min-h-11 items-center gap-2 rounded-md border border-blocked/35 px-3.5 text-[13px] text-blocked transition hover:bg-blocked/[0.06]">
+                <Square className="size-3.5" aria-hidden="true" />Stop strategy
+              </button>
+            </>
+          ) : null}
+        </div>
+      </div>
+
+      <aside aria-labelledby="demo-lifecycle-events-title" className="min-w-0 px-5 py-5">
+        <h3 id="demo-lifecycle-events-title" className="label-mono">Simulated event timeline</h3>
+        <ol className="mt-3 space-y-3" aria-live="polite">
+          {lifecycle.events.map((event, index) => (
+            <li key={`${event.id}-${index}`} className="border-l-2 border-primary/35 pl-3">
+              <p className="text-[13px] font-medium text-foreground">{index + 1}. {event.label}</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">{event.detail}</p>
+            </li>
+          ))}
+        </ol>
+      </aside>
+    </section>
+  );
+}
+
+function RangeControl({ label, value, min, max, step = 1, suffix, onChange }: { label: string; value: number; min: number; max: number; step?: number; suffix: string; onChange: (value: number) => void }) {
   return (
     <label className="block min-w-0">
       <span className="flex items-baseline justify-between gap-3">
         <span className="label-mono">{label}</span>
         <output className="text-xl font-normal tabular-nums text-foreground">{value}{suffix}</output>
       </span>
-      <input aria-label={label} aria-valuetext={`${value}${suffix}`} className="mt-3 h-8 w-full accent-[var(--primary)]" type="range" min={min} max={max} step={1} value={value} onChange={(event) => onChange(Number(event.target.value))} />
+      <input aria-label={label} aria-valuetext={`${value}${suffix}`} className="mt-3 h-8 w-full accent-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-55" type="range" min={min} max={max} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} />
       <span className="flex justify-between font-mono text-[10px] text-muted-foreground"><span>{min}{suffix}</span><span>{max}{suffix}</span></span>
     </label>
   );

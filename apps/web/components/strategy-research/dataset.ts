@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
-
 import { z } from "zod";
+
+import { canonicalJson, sha256Hex } from "../../lib/sha256-sync";
 
 export const STRATEGY_DATASET_SCHEMA_VERSION = "pilot.strategy-dataset.v2" as const;
 
@@ -215,13 +215,6 @@ export type HistoricalDatasetTrust = Readonly<{
   }>[];
 }>;
 
-function canonicalJson(input: unknown): string {
-  if (input === null || typeof input !== "object") return JSON.stringify(input);
-  if (Array.isArray(input)) return `[${input.map(canonicalJson).join(",")}]`;
-  const record = input as Record<string, unknown>;
-  return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(",")}}`;
-}
-
 function digestPayload(dataset: StrategyDataset): unknown {
   const provenance: Omit<StrategyDataset["provenance"], "content_digest"> = {
     source_label: dataset.provenance.source_label,
@@ -237,7 +230,7 @@ function digestPayload(dataset: StrategyDataset): unknown {
 /** SHA-256 over the canonical complete dataset, excluding only the digest field itself. */
 export function strategyDatasetContentDigest(input: unknown): string {
   const dataset = StrategyDatasetSchema.parse(input);
-  return createHash("sha256").update(canonicalJson(digestPayload(dataset)), "utf8").digest("hex");
+  return sha256Hex(canonicalJson(digestPayload(dataset)));
 }
 
 export function parseStrategyDataset(
@@ -245,9 +238,7 @@ export function parseStrategyDataset(
   historicalTrust?: HistoricalDatasetTrust,
 ): StrategyDataset {
   const dataset = StrategyDatasetSchema.parse(input);
-  const computedDigest = createHash("sha256")
-    .update(canonicalJson(digestPayload(dataset)), "utf8")
-    .digest("hex");
+  const computedDigest = sha256Hex(canonicalJson(digestPayload(dataset)));
   if (computedDigest !== dataset.provenance.content_digest) {
     throw new TypeError("dataset content digest does not match its canonical payload");
   }

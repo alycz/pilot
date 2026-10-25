@@ -40,6 +40,7 @@ import {
   type WorkAgreementRecovery,
   type WorkAgreementTermsRequest,
 } from "./work-agreement-runtime-client";
+import { WorkAgreementFixtureViewComponent } from "./work-agreement-fixture-view";
 import { WorkAgreementView, type WorkAgreementDraft } from "./work-agreement-view";
 
 const IDLE_DEVICE: LedgerDeviceState = Object.freeze({ interaction: "none", busy: false });
@@ -78,6 +79,12 @@ export function assertWorkAgreementOperationContext(
       currentSession.network !== "testnet" || currentSession.account !== context.owner) {
     throw new StaleWorkAgreementOperationError();
   }
+}
+
+export function shouldRenderWorkAgreementDemo(
+  session: WalletSessionStatus | null | undefined,
+): boolean {
+  return session !== undefined && !session?.authenticated;
 }
 
 export class WorkAgreementAttemptGate {
@@ -308,7 +315,9 @@ function trackingRecovery(
 
 export function WorkAgreementWorkspace() {
   const [config, setConfig] = useState<PublicPilotConfig | null>();
-  const [session, setSession] = useState<WalletSessionStatus | null>();
+  // Start in explicit demo mode. A verified authenticated session replaces it
+  // after the session check; the local fixture never survives that transition.
+  const [session, setSession] = useState<WalletSessionStatus | null>(null);
   const [wallet, setWallet] = useState<PilotWallet>();
   const [accountIndex, setAccountIndex] = useState(0);
   const [ledgerTransport, setLedgerTransport] = useState<"webhid" | "virtual">();
@@ -822,6 +831,13 @@ export function WorkAgreementWorkspace() {
       setError(undefined);
     }
   };
+
+  // An unauthenticated or not-yet-verified session receives a local-only demo.
+  // It unmounts as soon as an authenticated session appears, so fixture state
+  // cannot cross into the owner-bound workspace or become approval authority.
+  if (shouldRenderWorkAgreementDemo(session)) {
+    return <WorkAgreementFixtureViewComponent />;
+  }
 
   return (
     <>

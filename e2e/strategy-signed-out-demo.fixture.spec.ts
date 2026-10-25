@@ -128,11 +128,6 @@ test("signed-out visitors can explore deterministic bounded decisions without co
   await expect(decision).toContainText(/hold/i);
   const initialDecision = await decision.textContent();
 
-  const step = page.getByRole("button", { name: "Next event" });
-  await step.click();
-  await expect(decision).not.toHaveText(initialDecision ?? "");
-  await expect(decision).toContainText(/trade|blocked/i);
-
   const target = page.getByRole("slider", { name: /target.*xrp/i });
   const drift = page.getByRole("slider", { name: /drift|band/i });
   await expect(target).toBeVisible();
@@ -146,10 +141,20 @@ test("signed-out visitors can explore deterministic bounded decisions without co
   await target.fill("50");
   await drift.fill("5");
 
-  const reset = page.getByRole("button", { name: "Reset" });
+  await page.getByRole("button", { name: "Review simulated mandate" }).click();
+  await expect(page.getByRole("heading", { name: "Review the simulated approval" })).toBeVisible();
+  await page.getByRole("button", { name: "Approve and start simulation" }).click();
+  const step = page.getByRole("button", { name: "Next fixture event" });
+  await step.click();
+  await expect(decision).not.toHaveText(initialDecision ?? "");
+  await expect(decision).toContainText(/trade|blocked/i);
+
+  const reset = page.getByRole("button", { name: "Reset demo" });
   await reset.click();
   await expect(decision).toContainText(/hold/i);
 
+  await page.getByRole("button", { name: "Review simulated mandate" }).click();
+  await page.getByRole("button", { name: "Approve and start simulation" }).click();
   await step.click();
   await expect(decision).toContainText(/trade/i);
   await page.reload();
@@ -160,20 +165,23 @@ test("signed-out visitors can explore deterministic bounded decisions without co
     session: Object.keys(window.sessionStorage).filter((key) => /strategy.*demo|demo.*strategy/i.test(key)),
   }))).toEqual({ local: [], session: [] });
 
-  const play = page.getByRole("button", { name: "Play" });
+  await page.getByRole("button", { name: "Review simulated mandate" }).click();
+  await page.getByRole("button", { name: "Approve and start simulation" }).click();
+  const play = page.getByRole("button", { name: "Auto advance" });
   await play.click();
-  const pause = page.getByRole("button", { name: "Pause" });
+  const pause = page.getByRole("button", { name: "Pause strategy" });
   await expect(pause).toBeVisible();
   await expect.poll(async () => decision.textContent()).not.toBe(initialDecision);
   await pause.click();
   const pausedDecision = await decision.textContent();
   await page.waitForTimeout(1_500);
   await expect(decision).toHaveText(pausedDecision ?? "");
+  await page.getByRole("button", { name: "Resume simulated strategy" }).click();
 
   // Repeated stepping remains bounded by the finite sample timeline and never
   // falls through to a real strategy endpoint.
   for (let index = 0; index < 8; index += 1) {
-    if (await step.isEnabled()) await step.click();
+    if (await step.count() > 0 && await step.isEnabled()) await step.click();
   }
   await expect(page.getByRole("region", { name: /event timeline/i })).toBeVisible();
   expect(boundary.mutations).toEqual([]);
@@ -206,13 +214,15 @@ test("mobile reduced-motion demo remains manual, keyboard operable, and containe
   await page.waitForTimeout(1_500);
   await expect(decision).toHaveText(before ?? "");
 
-  const step = page.getByRole("button", { name: "Next event" });
+  await page.getByRole("button", { name: "Review simulated mandate" }).click();
+  await page.getByRole("button", { name: "Approve and start simulation" }).click();
+  const step = page.getByRole("button", { name: "Next fixture event" });
   await step.focus();
   await expect(step).toBeFocused();
   await step.press("Enter");
   await expect(decision).not.toHaveText(before ?? "");
 
-  const reset = page.getByRole("button", { name: "Reset" });
+  const reset = page.getByRole("button", { name: "Reset demo" });
   await reset.focus();
   await reset.press("Space");
   await expect(decision).toContainText(/hold/i);

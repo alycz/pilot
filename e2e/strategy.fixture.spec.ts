@@ -406,7 +406,9 @@ test("same-page wallet changes isolate and reset signed-out simulation state", a
 
   await page.goto("/strategy");
   const decision = page.getByRole("status", { name: /^decision:/i });
-  await page.getByRole("button", { name: "Next event" }).click();
+  await page.getByRole("button", { name: "Review simulated mandate" }).click();
+  await page.getByRole("button", { name: "Approve and start simulation" }).click();
+  await page.getByRole("button", { name: "Next fixture event" }).click();
   await expect(decision).toContainText(/trade/i);
 
   const activeA = strategyFor(ACCOUNT_A, "active", 2);

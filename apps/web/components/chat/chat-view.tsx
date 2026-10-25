@@ -11,7 +11,7 @@ import {
   type LedgerDeviceState,
   type PilotWallet,
 } from "@pilot/wallet";
-import { ArrowLeftRight, ArrowUp, BarChart3, Bot, FlaskConical, Info, Landmark, type LucideIcon, Navigation2, Scale, ShieldAlert, Square, UserRound, Wallet } from "lucide-react";
+import { ArrowLeftRight, ArrowUp, BarChart3, Bot, Info, Landmark, type LucideIcon, Navigation2, Scale, ShieldAlert, Square, UserRound, Wallet } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -1217,6 +1217,7 @@ function ChatViewInner() {
                             <div className="pilot-card-enter"><DeclinedCard event={event} /></div>
                           ) : turn.source === "demo" ? (
                             <IntentCard
+                              demoPresentation
                               event={event}
                               realLedgerReceipt={false}
                               hideSigningNote
@@ -1253,12 +1254,6 @@ function ChatViewInner() {
                               ) : null}
                             </>
                           )}
-                          {turn.source === "demo" ? (
-                            <p className="flex items-center gap-1.5 rounded-b-xl border border-t-0 border-border bg-white/[0.02] px-3 py-1.5 text-xs text-muted-foreground">
-                              <FlaskConical className="h-3 w-3 text-primary" aria-hidden="true" />
-                              Simulated · no wallet or ledger transaction
-                            </p>
-                          ) : null}
                         </div>
                       );
                     })}

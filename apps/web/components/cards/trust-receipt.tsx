@@ -6,6 +6,7 @@ type CardTrust = NonNullable<CardEvent["trust"]>;
 
 export type TrustReceiptProps = {
   appearance?: "default" | "light";
+  presentation?: "default" | "demo";
   trust?: CardEvent["trust"] | null;
 };
 
@@ -34,7 +35,7 @@ function countLabel(value: number, noun: string): string {
   return `${value} ${noun}${value === 1 ? "" : "s"}`;
 }
 
-function screenChip(screen: CardTrust["screen"]): ReceiptChip | null {
+function screenChip(screen: CardTrust["screen"], presentation: NonNullable<TrustReceiptProps["presentation"]> = "default"): ReceiptChip | null {
   if (
     !screen ||
     !Number.isInteger(screen.fields_checked) ||
@@ -52,7 +53,7 @@ function screenChip(screen: CardTrust["screen"]): ReceiptChip | null {
       label = "Screened by Bedrock Guardrails";
       break;
     case "mock":
-      label = "Screened by Bedrock Guardrails (mock)";
+      label = presentation === "demo" ? "Bedrock Guardrails" : "Screened by Bedrock Guardrails (mock)";
       break;
     case "unavailable":
       label = "Guardrail screening unavailable";
@@ -81,7 +82,7 @@ function screenChip(screen: CardTrust["screen"]): ReceiptChip | null {
   };
 }
 
-function modelChip(model: CardTrust["model"]): ReceiptChip | null {
+function modelChip(model: CardTrust["model"], presentation: NonNullable<TrustReceiptProps["presentation"]> = "default"): ReceiptChip | null {
   if (!model || typeof model.id !== "string" || model.id.trim() === "") return null;
 
   let label: string;
@@ -90,7 +91,7 @@ function modelChip(model: CardTrust["model"]): ReceiptChip | null {
       label = "Model · Amazon Bedrock";
       break;
     case "bedrock-mock":
-      label = "Model · Amazon Bedrock (mock)";
+      label = presentation === "demo" ? "Amazon Bedrock" : "Model · Amazon Bedrock (mock)";
       break;
     case "openrouter":
       label = "Model · OpenRouter";
@@ -107,7 +108,7 @@ function modelChip(model: CardTrust["model"]): ReceiptChip | null {
   };
 }
 
-function signerChip(signer: CardTrust["signer"]): ReceiptChip | null {
+function signerChip(signer: CardTrust["signer"], presentation: NonNullable<TrustReceiptProps["presentation"]> = "default"): ReceiptChip | null {
   if (!signer) return null;
 
   let label: string;
@@ -118,7 +119,7 @@ function signerChip(signer: CardTrust["signer"]): ReceiptChip | null {
       showKeyReference = true;
       break;
     case "aws-kms-kek":
-      label = "Key protected by AWS KMS";
+      label = presentation === "demo" ? "AWS KMS" : "Key protected by AWS KMS";
       showKeyReference = true;
       break;
     case "local":
@@ -144,7 +145,7 @@ function signerChip(signer: CardTrust["signer"]): ReceiptChip | null {
   };
 }
 
-function rpcChip(route: CardTrust["rpc"]): ReceiptChip | null {
+function rpcChip(route: CardTrust["rpc"], presentation: NonNullable<TrustReceiptProps["presentation"]> = "default"): ReceiptChip | null {
   switch (route) {
     case "quicknode":
       return {
@@ -157,7 +158,7 @@ function rpcChip(route: CardTrust["rpc"]): ReceiptChip | null {
       return {
         id: "rpc",
         icon: Router,
-        label: "RPC · QuickNode (mock)",
+        label: presentation === "demo" ? "QuickNode RPC" : "RPC · QuickNode (mock)",
         detail: <p>This is local stand-in evidence, not a live QuickNode request.</p>,
       };
     case "fallback":
@@ -172,7 +173,7 @@ function rpcChip(route: CardTrust["rpc"]): ReceiptChip | null {
   }
 }
 
-function confirmationChip(confirmation: CardTrust["confirmation"]): ReceiptChip | null {
+function confirmationChip(confirmation: CardTrust["confirmation"], presentation: NonNullable<TrustReceiptProps["presentation"]> = "default"): ReceiptChip | null {
   if (
     !confirmation ||
     !Number.isInteger(confirmation.latency_ms) ||
@@ -195,7 +196,9 @@ function confirmationChip(confirmation: CardTrust["confirmation"]): ReceiptChip 
   return {
     id: "confirmation",
     icon: CheckCircle2,
-    label: `Confirmed · QuickNode webhook${mock ? " (mock)" : ""} · ${latency}`,
+    label: presentation === "demo" && mock
+      ? "QuickNode webhook"
+      : `Confirmed · QuickNode webhook${mock ? " (mock)" : ""} · ${latency}`,
     detail: mock ? (
       <p>This is local stand-in evidence, not a live QuickNode webhook.</p>
     ) : (
@@ -204,14 +207,16 @@ function confirmationChip(confirmation: CardTrust["confirmation"]): ReceiptChip 
   };
 }
 
-function watchChip(watch: CardTrust["watch"]): ReceiptChip | null {
+function watchChip(watch: CardTrust["watch"], presentation: NonNullable<TrustReceiptProps["presentation"]> = "default"): ReceiptChip | null {
   if (!watch || watch.provider === "off") return null;
 
   const mock = watch.provider === "quicknode-mock";
   return {
     id: "watch",
     icon: RadioTower,
-    label: `Watched · QuickNode Streams${mock ? " (mock)" : ""}`,
+    label: presentation === "demo" && mock
+      ? "QuickNode Streams"
+      : `Watched · QuickNode Streams${mock ? " (mock)" : ""}`,
     detail: (
       <p>
         {mock ? "Local stand-in monitoring" : "QuickNode Streams monitoring"} is {watch.status}.
@@ -254,11 +259,11 @@ function TrustChip({
  * Render only structured trust metadata. Tool output and screened field values
  * are deliberately not accepted by this component.
  */
-export function TrustReceipt({ appearance = "default", trust }: TrustReceiptProps) {
+export function TrustReceipt({ appearance = "default", presentation = "default", trust }: TrustReceiptProps) {
   if (!trust || typeof trust !== "object") return null;
 
-  const awsChips = [screenChip(trust.screen), modelChip(trust.model), signerChip(trust.signer)];
-  const quickNodeChips = [rpcChip(trust.rpc), confirmationChip(trust.confirmation), watchChip(trust.watch)];
+  const awsChips = [screenChip(trust.screen, presentation), modelChip(trust.model, presentation), signerChip(trust.signer, presentation)];
+  const quickNodeChips = [rpcChip(trust.rpc, presentation), confirmationChip(trust.confirmation, presentation), watchChip(trust.watch, presentation)];
   const chips = [...awsChips, ...quickNodeChips].filter(
     (chip): chip is ReceiptChip => chip !== null,
   );
@@ -266,7 +271,9 @@ export function TrustReceipt({ appearance = "default", trust }: TrustReceiptProp
 
   const hasAws = awsChips.some((chip) => chip !== null);
   const hasQuickNode = quickNodeChips.some((chip) => chip !== null);
-  const receiptLabel = hasAws && hasQuickNode
+  const receiptLabel = presentation === "demo"
+    ? "Demo capability preview"
+    : hasAws && hasQuickNode
     ? "AWS and QuickNode trust receipt"
     : hasQuickNode
       ? "QuickNode trust receipt"
@@ -274,6 +281,9 @@ export function TrustReceipt({ appearance = "default", trust }: TrustReceiptProp
 
   return (
     <section aria-label={receiptLabel} className="min-w-0">
+      {presentation === "demo" ? (
+        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-primary">Demo</p>
+      ) : null}
       <ul className="flex min-w-0 flex-wrap items-start gap-2" role="list">
         {chips.map((chip) => <TrustChip appearance={appearance} chip={chip} key={chip.id} />)}
       </ul>

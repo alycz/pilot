@@ -112,7 +112,7 @@ test("renders the logged-out QuickNode demo", async ({ page }) => {
   await installAuthFixture(page, false);
   await submitPrompt(page);
   const turn = submittedTurn(page);
-  await assertAndCaptureChat(page, turn, "qn5-logged-out-demo");
+  await assertAndCaptureChat(page, turn, "qn5-logged-out-demo", true);
 });
 
 test("renders the logged-out QuickNode account panel", async ({ page }) => {
@@ -186,12 +186,23 @@ async function assertAndCaptureChat(
   page: Page,
   turn: Locator,
   prefix: string,
+  demoPresentation = false,
 ) {
-  const receipt = turn.getByLabel("AWS and QuickNode trust receipt");
+  const receipt = turn.getByLabel(demoPresentation
+    ? "Demo capability preview"
+    : "AWS and QuickNode trust receipt");
   await expect(receipt).toBeVisible({ timeout: 15_000 });
-  await expect(receipt.getByText("RPC · QuickNode (mock)", { exact: true })).toBeVisible();
-  await expect(receipt.getByText("Confirmed · QuickNode webhook (mock) · 4.2 s", { exact: true })).toBeVisible();
-  await expect(receipt.getByText("Watched · QuickNode Streams (mock)", { exact: true })).toBeVisible();
+  if (demoPresentation) {
+    await expect(receipt.getByText("Demo", { exact: true })).toHaveCount(1);
+    await expect(receipt.getByText("QuickNode RPC", { exact: true })).toBeVisible();
+    await expect(receipt.getByText("QuickNode webhook", { exact: true })).toBeVisible();
+    await expect(receipt.getByText("QuickNode Streams", { exact: true })).toBeVisible();
+    await expect(receipt.getByText(/\(mock\)/)).toHaveCount(0);
+  } else {
+    await expect(receipt.getByText("RPC · QuickNode (mock)", { exact: true })).toBeVisible();
+    await expect(receipt.getByText("Confirmed · QuickNode webhook (mock) · 4.2 s", { exact: true })).toBeVisible();
+    await expect(receipt.getByText("Watched · QuickNode Streams (mock)", { exact: true })).toBeVisible();
+  }
   const banner = turn.getByRole("alert", { name: "QuickNode Streams freeze notice" });
   await expect(banner).toBeVisible();
   await expect(banner.getByRole("link", { name: "Revoke on-ledger" })).toHaveAttribute("href", "/onboarding?action=revoke");

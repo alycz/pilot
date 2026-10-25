@@ -170,6 +170,10 @@ describe("readAgentCoreConfig", () => {
     })).toThrow("AGENTCORE_RUNTIME_JWT_AUDIENCES_JSON");
     expect(() => readAgentCoreConfig({
       ...base,
+      AGENTCORE_RUNTIME_JWT_CLIENT_CLAIM: "azp",
+    })).toThrow("must be client_id");
+    expect(() => readAgentCoreConfig({
+      ...base,
       AGENTCORE_RUNTIME_JWT_REVOCATION_MODE: "checker",
     })).toThrow("AGENTCORE_RUNTIME_JWT_REVOCATION_TIMEOUT_MS");
   });

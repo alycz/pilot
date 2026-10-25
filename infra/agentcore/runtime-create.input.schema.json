@@ -168,7 +168,7 @@
             "AGENTCORE_GATEWAY_JWT_ALLOWED_SUBJECTS_JSON": { "type": "string", "minLength": 3, "maxLength": 8192 },
             "AGENTCORE_GATEWAY_JWT_ALLOWED_CLIENTS_JSON": { "type": "string", "minLength": 3, "maxLength": 8192 },
             "AGENTCORE_GATEWAY_JWT_REQUIRED_SCOPES_JSON": { "type": "string", "minLength": 3, "maxLength": 8192 },
-            "AGENTCORE_GATEWAY_JWT_CLIENT_CLAIM": { "enum": ["client_id", "azp"] },
+            "AGENTCORE_GATEWAY_JWT_CLIENT_CLAIM": { "const": "client_id" },
             "AGENTCORE_GATEWAY_JWT_TENANT_CLAIM": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,127}$" },
             "AGENTCORE_GATEWAY_JWT_DEPLOYMENT_TENANT_ID": { "type": "string", "pattern": "^[A-Za-z0-9_.:/-]{1,255}$" },
             "AGENTCORE_GATEWAY_JWT_ALGORITHMS_JSON": { "enum": ["[\"RS256\"]", "[\"ES256\"]", "[\"RS256\",\"ES256\"]", "[\"ES256\",\"RS256\"]"] },

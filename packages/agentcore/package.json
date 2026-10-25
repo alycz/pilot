@@ -21,6 +21,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "acceptance:identity:offline": "vitest run test/identity-acceptance.test.ts --reporter=verbose",
+    "acceptance:identity:live": "tsx scripts/run-identity-acceptance.ts --live",
     "test:runtime-http": "vitest run test/runtime-http.test.ts test/runtime-entry.test.ts test/runtime-production.test.ts",
     "start:runtime": "tsx src/runtime-entry.ts"
   },

@@ -272,8 +272,8 @@ export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
           setPairStates((current) => ({
             ...current,
             [pair.id]: {
-              ...(current[pair.id] ?? { snapshot: null }),
-              status: current[pair.id]?.snapshot ? "ready" : "error",
+              status: "error",
+              snapshot: null,
               error: marketReadError(bookFailure),
               ...(retryMs ? { retryAt: Date.now() + retryMs } : {}),
             },

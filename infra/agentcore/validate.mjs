@@ -185,7 +185,7 @@ const validateRuntimeAccountBinding = (createDocument, updateDocument, label) =>
   const clients = exactStringList(environment.AGENTCORE_GATEWAY_JWT_ALLOWED_CLIENTS_JSON, 1, `${label}: JWT clients`);
   const scopes = exactStringList(environment.AGENTCORE_GATEWAY_JWT_REQUIRED_SCOPES_JSON, 16, `${label}: JWT scopes`);
   const algorithms = exactStringList(environment.AGENTCORE_GATEWAY_JWT_ALGORITHMS_JSON, 2, `${label}: JWT algorithms`, new Set(["RS256", "ES256"]));
-  assert(["client_id", "azp"].includes(environment.AGENTCORE_GATEWAY_JWT_CLIENT_CLAIM), `${label}: JWT client claim is invalid`);
+  assert(environment.AGENTCORE_GATEWAY_JWT_CLIENT_CLAIM === "client_id", `${label}: JWT client claim must be client_id`);
   assert(/^[A-Za-z][A-Za-z0-9_.:-]{0,127}$/.test(environment.AGENTCORE_GATEWAY_JWT_TENANT_CLAIM), `${label}: JWT tenant claim is invalid`);
   assert(typeof environment.AGENTCORE_GATEWAY_JWT_DEPLOYMENT_TENANT_ID === "string" && environment.AGENTCORE_GATEWAY_JWT_DEPLOYMENT_TENANT_ID.length >= 1 && environment.AGENTCORE_GATEWAY_JWT_DEPLOYMENT_TENANT_ID.length <= 256, `${label}: JWT deployment tenant is invalid`);
   assert(algorithms.length >= 1, `${label}: at least one asymmetric JWT algorithm is required`);

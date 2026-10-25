@@ -178,6 +178,7 @@ const liveEnvironment = Object.freeze({
   AGENTCORE_GATEWAY_JWT_REVOCATION_MODE: "expiry_only",
   AGENTCORE_REPLAY_TABLE: "pilot-agentcore-replay",
   AGENTCORE_REPLAY_DEPLOYMENT_ID: "pilot-runtime-identity-acceptance",
+  AGENTCORE_IDENTITY_ACCEPTANCE_OWNER: "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
 });
 
 describe("AgentCore identity offline acceptance", () => {
@@ -225,15 +226,11 @@ describe("AgentCore identity offline acceptance", () => {
     }));
     scenarios.push(await scenario("client-binding", async () => {
       await rejectedToken({ client_id: "another-client" });
-      const azpConfig: AgentCoreProductionRuntimeConfig = {
-        ...identityAcceptanceConfig,
-        jwtPolicy: { ...identityAcceptanceConfig.jwtPolicy, clientClaim: "azp" },
-      };
       const value = compose({
         token: signIdentityAcceptanceJwt({ client_id: undefined, azp: IDENTITY_ACCEPTANCE_CLIENT }),
-        config: azpConfig,
       });
-      await expect(value.invoker.invoke(identityAcceptanceInvocation, context())).resolves.toBeDefined();
+      await expect(value.invoker.invoke(identityAcceptanceInvocation, context()))
+        .rejects.toMatchObject({ code: "authorization" });
     }));
     scenarios.push(await scenario("tenant-binding", async () => {
       await rejectedToken({ tenant_id: "wallet-tenant" });

@@ -78,6 +78,7 @@ describe("AgentCore Runtime executable configuration", () => {
     ["duplicate audience", { AGENTCORE_GATEWAY_JWT_AUDIENCES_JSON: '["same","same"]' }],
     ["multiple subjects", { AGENTCORE_GATEWAY_JWT_ALLOWED_SUBJECTS_JSON: '["pilot-runtime","other-runtime"]' }],
     ["multiple clients", { AGENTCORE_GATEWAY_JWT_ALLOWED_CLIENTS_JSON: '["pilot-client","other-client"]' }],
+    ["azp client claim", { AGENTCORE_GATEWAY_JWT_CLIENT_CLAIM: "azp" }],
     ["unsupported algorithm", { AGENTCORE_GATEWAY_JWT_ALGORITHMS_JSON: '["HS256"]' }],
     ["unbounded concurrency", { AGENTCORE_RUNTIME_MAX_CONCURRENT_REQUESTS: "33" }],
     ["static token fallback", { AGENTCORE_WORKLOAD_ACCESS_TOKEN: "must-not-be-used" }],

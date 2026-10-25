@@ -147,8 +147,8 @@ export function readAgentCoreRuntimeEnvironment(env: Env = process.env): AgentCo
   const allowedClients = exactList(env, "AGENTCORE_GATEWAY_JWT_ALLOWED_CLIENTS_JSON", 1);
   const requiredScopes = exactList(env, "AGENTCORE_GATEWAY_JWT_REQUIRED_SCOPES_JSON", 16);
   const clientClaim = required(env, "AGENTCORE_GATEWAY_JWT_CLIENT_CLAIM");
-  if (clientClaim !== "client_id" && clientClaim !== "azp") {
-    throw new Error("AGENTCORE_GATEWAY_JWT_CLIENT_CLAIM must be client_id or azp");
+  if (clientClaim !== "client_id") {
+    throw new Error("AGENTCORE_GATEWAY_JWT_CLIENT_CLAIM must be client_id");
   }
   const algorithms = exactList(
     env,
@@ -185,7 +185,7 @@ export function readAgentCoreRuntimeEnvironment(env: Env = process.env): AgentCo
     allowedSubjects,
     allowedClients,
     requiredScopes,
-    clientClaim,
+    clientClaim: "client_id",
     tenantClaim: identifier(env, "AGENTCORE_GATEWAY_JWT_TENANT_CLAIM", CLAIM),
     algorithms,
     clockToleranceSeconds: integer(

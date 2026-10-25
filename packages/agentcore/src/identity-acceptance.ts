@@ -54,7 +54,7 @@ export type AgentCoreIdentityLivePreflight = Readonly<{
   allowedSubjects: readonly string[];
   allowedClients: readonly string[];
   requiredScopes: readonly string[];
-  clientClaim: "client_id" | "azp";
+  clientClaim: "client_id";
   tenantClaim: string;
   deploymentTenantId: string;
   gatewayAlgorithms: readonly string[];
@@ -66,6 +66,7 @@ export type AgentCoreIdentityLivePreflight = Readonly<{
   gatewayRevocationMode: "expiry_only" | "checker";
   replayTableName: string;
   replayDeploymentId: string;
+  acceptanceOwner: string;
 }>;
 
 export type AgentCoreIdentityAcceptancePreflight =
@@ -266,8 +267,8 @@ export function readAgentCoreIdentityAcceptancePreflight(input: Readonly<{
     throw new Error("AGENTCORE_GATEWAY_JWT_JWKS_URL must share the issuer origin");
   }
   const clientClaim = required(env, "AGENTCORE_GATEWAY_JWT_CLIENT_CLAIM", 9);
-  if (clientClaim !== "client_id" && clientClaim !== "azp") {
-    throw new Error("AGENTCORE_GATEWAY_JWT_CLIENT_CLAIM must be client_id or azp");
+  if (clientClaim !== "client_id") {
+    throw new Error("AGENTCORE_GATEWAY_JWT_CLIENT_CLAIM must be client_id");
   }
   const runtimeAlgorithms = exactList(env, "AGENTCORE_RUNTIME_JWT_ALGORITHMS_JSON", 2);
   const gatewayAlgorithms = exactList(env, "AGENTCORE_GATEWAY_JWT_ALGORITHMS_JSON", 2);
@@ -327,7 +328,7 @@ export function readAgentCoreIdentityAcceptancePreflight(input: Readonly<{
     allowedSubjects: exactList(env, "AGENTCORE_GATEWAY_JWT_ALLOWED_SUBJECTS_JSON", 1),
     allowedClients: exactList(env, "AGENTCORE_GATEWAY_JWT_ALLOWED_CLIENTS_JSON", 1),
     requiredScopes: exactList(env, "AGENTCORE_GATEWAY_JWT_REQUIRED_SCOPES_JSON", 1),
-    clientClaim,
+    clientClaim: "client_id",
     tenantClaim: identifier(env, "AGENTCORE_GATEWAY_JWT_TENANT_CLAIM", CLAIM, 128),
     deploymentTenantId: identifier(env, "AGENTCORE_GATEWAY_JWT_DEPLOYMENT_TENANT_ID"),
     gatewayAlgorithms,
@@ -339,6 +340,12 @@ export function readAgentCoreIdentityAcceptancePreflight(input: Readonly<{
     gatewayRevocationMode,
     replayTableName: identifier(env, "AGENTCORE_REPLAY_TABLE", /^[A-Za-z0-9_.-]{3,255}$/, 255),
     replayDeploymentId: identifier(env, "AGENTCORE_REPLAY_DEPLOYMENT_ID", IDENTIFIER, 128),
+    acceptanceOwner: identifier(
+      env,
+      "AGENTCORE_IDENTITY_ACCEPTANCE_OWNER",
+      /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/,
+      35,
+    ),
   });
 }
 

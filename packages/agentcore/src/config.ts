@@ -127,8 +127,8 @@ function runtimeJwtConfig(env: Env): Readonly<{
   runtimeJwtPolicy: AgentCoreJwtPolicy;
 }> {
   const clientClaim = required(env, "AGENTCORE_RUNTIME_JWT_CLIENT_CLAIM", 16);
-  if (clientClaim !== "client_id" && clientClaim !== "azp") {
-    throw new Error("AGENTCORE_RUNTIME_JWT_CLIENT_CLAIM must be client_id or azp");
+  if (clientClaim !== "client_id") {
+    throw new Error("AGENTCORE_RUNTIME_JWT_CLIENT_CLAIM must be client_id");
   }
   const tenantClaim = required(env, "AGENTCORE_RUNTIME_JWT_TENANT_CLAIM", 128);
   if (!/^[A-Za-z][A-Za-z0-9_.:-]{0,127}$/.test(tenantClaim)) {
@@ -159,7 +159,7 @@ function runtimeJwtConfig(env: Env): Readonly<{
       allowedSubjects: exactList(env, "AGENTCORE_RUNTIME_JWT_ALLOWED_SUBJECTS_JSON", 1),
       allowedClients: exactList(env, "AGENTCORE_RUNTIME_JWT_ALLOWED_CLIENTS_JSON", 1),
       requiredScopes: exactList(env, "AGENTCORE_RUNTIME_JWT_REQUIRED_SCOPES_JSON", 1),
-      clientClaim,
+      clientClaim: "client_id",
       tenantClaim,
       algorithms: exactList(
         env,

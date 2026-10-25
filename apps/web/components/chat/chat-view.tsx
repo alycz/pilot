@@ -11,10 +11,9 @@ import {
   type LedgerDeviceState,
   type PilotWallet,
 } from "@pilot/wallet";
-import { ArrowLeftRight, ArrowUp, BarChart3, Bot, FlaskConical, Info, Landmark, type LucideIcon, Navigation2, Scale, ShieldAlert, Square, UserRound, Wallet } from "lucide-react";
+import { ArrowLeftRight, ArrowUp, BarChart3, Bot, FlaskConical, Info, Landmark, type LucideIcon, Navigation2, RotateCcw, Scale, ShieldAlert, Square, UserRound, Wallet } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 
 import {
   ApprovalModal,
@@ -31,11 +30,9 @@ import { DeviceStatus } from "@/components/ledger/device-status";
 import { DEMO_STRATEGY_PROMPTS } from "@/components/strategy/demo-strategy";
 import { StrategyHubProvider, useStrategyHub } from "@/components/strategy/strategy-hub";
 import { StrategyManagerPanel } from "@/components/strategy/strategy-manager-panel";
-import { StrategySidebarBlock } from "@/components/strategy/strategy-sidebar";
 import { ledgerFlowName } from "@/components/ledger/provenance";
 import { useHarnessPageContext } from "@/components/harness-chat/page-context-provider";
 import { useHarnessWalletSession } from "@/components/harness-chat/session-context";
-import { SHELL_SIDEBAR_FOOTER_SLOT_ID } from "@/components/shell";
 import {
   createChatWalletActionProof,
   createBrowserHarborClient,
@@ -289,10 +286,6 @@ function ChatViewInner() {
     approvalWalletRef.current = undefined;
   }, []);
 
-  const [sidebarSlot, setSidebarSlot] = useState<HTMLElement | null>(null);
-  useEffect(() => {
-    setSidebarSlot(document.getElementById(SHELL_SIDEBAR_FOOTER_SLOT_ID));
-  }, [pathname]);
   const sessionUi = chatSessionUi(publicConfig, walletSession);
   const walletReady = sessionUi.ready;
   const x402Scope = useMemo<X402OperationScope | undefined>(() => {
@@ -1332,13 +1325,11 @@ function ChatViewInner() {
 
         <div className="pilot-chat-composer fixed inset-x-0 bottom-0 z-20 bg-gradient-to-t from-background from-70% to-transparent px-3 pb-3 pt-6 sm:px-4 sm:pb-4 lg:left-64 [@media(max-height:520px)]:pb-2 [@media(max-height:520px)]:pt-2">
           <div className="mx-auto max-w-4xl">
-            {!demoMode && pendingX402 ? <div className="mb-2 flex items-center justify-between gap-3 border border-approval/25 bg-approval/8 px-3 py-2 text-xs text-approval rounded-xl"><span>{pendingX402.phase === "paid_journal_pending" ? "Payment is validated; durable journal recovery is pending." : pendingX402.phase === "recovering" ? "x402 settlement recovery is pending." : "An x402 recovery identity is reserved."}</span><button type="button" disabled={running || !walletReady} onClick={() => void submit(X402_RECOVERY_PROMPT, { x402: true, expectedOperationId: pendingX402.operation_id, requestMode: "one_time" })} className="font-semibold underline disabled:opacity-40">Resume same operation</button></div> : null}
             {!demoMode && x402RecoveryError ? <p className="mb-2 px-1 text-xs text-blocked">{x402RecoveryError}</p> : null}
             {!demoMode && sessionUi.notice === "onboarding" ? <p className="mb-2 px-1 text-xs text-muted-foreground">Live chat is locked until a wallet proves control through <a className="font-semibold text-primary hover:underline" href="/onboarding">onboarding</a>.</p> : null}
             {!demoMode && sessionUi.notice === "unavailable" ? <p className="mb-2 px-1 text-xs text-blocked">Wallet session status is unavailable. Reload the page to retry.</p> : null}
             {!demoMode && sessionUi.notice === "proof" ? <p className="mb-2 px-1 text-xs text-blocked">Local wallet proof prerequisites are not configured. Set the server-only session secret and replay-state directory, then reload.</p> : null}
             {!demoMode && sessionUi.notice === "configuration" ? <p className="mb-2 px-1 text-xs text-blocked">Pilot configuration is unavailable. Reload the page to retry.</p> : null}
-            {!demoMode ? <div className="mb-2 flex min-w-0 flex-wrap gap-2 pb-1"><button type="button" disabled={running || !walletReady || !x402Scope} onClick={() => void submit("Purchase the approved local Testnet premium venue comparison.", { x402: true, requestMode: "one_time" })} className="bracket bracket-light inline-flex max-w-full border border-primary/20 bg-primary-soft px-3 py-1.5 text-[11px] text-primary hover:border-primary/40 disabled:opacity-40 rounded-xl">Premium comparison · x402</button></div> : null}
             <form onSubmit={(event) => { event.preventDefault(); send(draft); }} className="bracket bracket-focus min-w-0 border border-border-strong bg-card rounded-xl">
               <textarea
                 ref={textareaRef}
@@ -1369,6 +1360,18 @@ function ChatViewInner() {
                     <span className="truncate font-mono">{sessionUi.label}</span>
                   </p>
                 ) : null}
+                {!demoMode && pendingX402 ? (
+                  <button
+                    type="button"
+                    disabled={running || !walletReady}
+                    onClick={() => void submit(X402_RECOVERY_PROMPT, { x402: true, expectedOperationId: pendingX402.operation_id, requestMode: "one_time" })}
+                    aria-label={`Resume pending x402 recovery. ${pendingX402.phase === "paid_journal_pending" ? "Payment is validated and durable journal recovery is pending." : pendingX402.phase === "recovering" ? "Settlement recovery is pending." : "A recovery identity is reserved."}`}
+                    className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-approval/30 bg-approval/8 px-2.5 text-xs font-medium text-approval transition hover:bg-approval/15 disabled:cursor-not-allowed disabled:opacity-45 pointer-coarse:h-11"
+                  >
+                    <RotateCcw className="size-3.5" aria-hidden="true" />
+                    <span className="hidden sm:inline">Resume recovery</span>
+                  </button>
+                ) : null}
                 <div className="ml-auto flex shrink-0 items-center gap-1.5">
                   <RequestModeControl value={requestMode} resolution={draftRequestMode} disabled={running} onChange={setRequestMode} />
                   {running ? (
@@ -1382,13 +1385,6 @@ function ChatViewInner() {
           </div>
         </div>
       </section>
-
-      {sidebarSlot && !demoMode ? createPortal(
-        <section aria-label="Session context">
-          <StrategySidebarBlock onStart={startStrategy} />
-        </section>,
-        sidebarSlot,
-      ) : null}
 
       <StrategyManagerPanel onStart={startStrategy} />
 

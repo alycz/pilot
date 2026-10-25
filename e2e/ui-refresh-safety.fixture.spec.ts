@@ -67,6 +67,90 @@ test("chat URL state only opens reviewable UI and consumes a prepared draft", as
   expect(authorityRequests).toEqual([]);
 });
 
+test("workspace cleanup removes bulky promos while preserving bounded x402 recovery", async ({ page }) => {
+  const mockOwner = "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59";
+  const operationId = "x402-cleanup-recovery-001";
+  let submittedOperation: unknown;
+  await page.addInitScript(({ owner, operation }) => {
+    const scope = {
+      owner,
+      network: "testnet",
+      resource: "compare",
+      max_price_drops: "5000",
+      receiver: "rnSXTVWEhMKhECNUEENzUi9QuMFoFpKghr",
+    } as const;
+    localStorage.setItem(
+      `pilot:x402:pending:v1:${scope.network}:${scope.owner}:${scope.resource}`,
+      JSON.stringify({
+        version: 2,
+        ...scope,
+        operation_id: operation,
+        payload_fingerprint: JSON.stringify(scope),
+        phase: "recovering",
+        created_at: "2026-10-25T00:00:00.000Z",
+      }),
+    );
+  }, { owner: mockOwner, operation: operationId });
+  await page.route("**/api/config/public", (route) => route.fulfill({ json: {
+    network: "testnet",
+    stableAsset: { currency: "RLUSD", issuer: "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" },
+    devSignerEnabled: false,
+    walletActionProofRequired: false,
+    walletActionProofConfigured: false,
+    mockMode: true,
+  } }));
+  await page.route("**/api/auth/wallet/session", (route) => route.fulfill({ json: { authenticated: false } }));
+  await page.route("**/api/auth/openrouter/session", (route) => route.fulfill({ json: { mode: "none", connected: false } }));
+  await page.route("**/api/chat", async (route) => {
+    submittedOperation = (await route.request().postDataJSON() as Record<string, unknown>).operation_id;
+    await fulfillPilotStream(route, { text: "Recovery reused the existing fixture operation identity." });
+  });
+
+  await page.goto(pilotRoutes.chat);
+
+  await expect(page.getByRole("region", { name: "Session context" })).toHaveCount(0);
+  await expect(page.getByText("Nothing running. Describe a strategy in chat and Pilot drafts it for you.")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Premium comparison · x402" })).toHaveCount(0);
+  await expect(page.getByText("x402 settlement recovery is pending.")).toHaveCount(0);
+
+  const recovery = page.getByRole("button", { name: /Resume pending x402 recovery/ });
+  await expect(recovery).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(recovery).toBeVisible();
+  const recoveryBox = await recovery.boundingBox();
+  expect(recoveryBox).not.toBeNull();
+  expect((recoveryBox?.x ?? 0) + (recoveryBox?.width ?? 0)).toBeLessThanOrEqual(390);
+  await recovery.click();
+  await expect(page.getByText("Recovery reused the existing fixture operation identity.")).toBeVisible();
+  expect(submittedOperation).toBe(operationId);
+});
+
+test("map uses compact truthful status without the catalog banner controls", async ({ page }) => {
+  await page.route("**/api/config/public", (route) => route.fulfill({ json: {
+    network: "testnet",
+    stableAsset: { currency: "RLUSD", issuer: "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" },
+    devSignerEnabled: false,
+    walletActionProofRequired: false,
+    walletActionProofConfigured: false,
+    mockMode: true,
+  } }));
+  await page.route("**/api/auth/wallet/session", (route) => route.fulfill({ json: { authenticated: false } }));
+
+  await page.goto(pilotRoutes.map);
+
+  await expect(page.getByRole("region", { name: "Map data status" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Refresh context" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Refresh catalog" })).toHaveCount(0);
+  const status = page.getByRole("status", { name: /Demo catalog · simulated Harbor/ });
+  await expect(status).toBeVisible();
+  await expect(status).toHaveText("Demo catalog · simulated Harbor");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(status).toBeVisible();
+  const statusBox = await status.boundingBox();
+  expect(statusBox).not.toBeNull();
+  expect((statusBox?.x ?? 0) + (statusBox?.width ?? 0)).toBeLessThanOrEqual(390);
+});
+
 test("a market detail publishes only bounded untrusted reference context", async ({ page }) => {
   await installFixtureChatPrerequisites(page);
   let submittedPageContext: unknown;

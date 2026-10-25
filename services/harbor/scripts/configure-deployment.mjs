@@ -126,6 +126,7 @@ export function buildFreeQuickJsConfig(input) {
 			AP4M_EVM_EVENT_MODE: "off",
 			GUARDRAILS_MODE: "off",
 			HARBOR_DEMO_QUOTA_ENABLED: "0",
+			HARBOR_HOSTED_STATE_ENABLED: "0",
 		},
 	};
 }

@@ -42,7 +42,6 @@ import {
   isExactLocalX402HarborUrl,
 } from "@pilot/harbor-client";
 import {
-  createVaultFromEnv,
   parsePolicyNote,
   resolveActiveAp4mMandate,
   renderUntrustedPreferenceContext,
@@ -86,6 +85,7 @@ import {
   renderUntrustedWorkflowLessonContext,
   workflowLessonTargetFromFeedback,
 } from "../../../lib/workflow-lessons";
+import { createAppVaultFromEnv } from "../../../lib/vault-service";
 import { verifyLocalChatWalletActionProof } from "../../../lib/wallet-action-proof";
 import {
   assertProfileRequestBoundary,
@@ -218,7 +218,11 @@ export interface ChatHandlerDependencies {
   loadPolicy?: () => Promise<Policy | undefined> | Policy | undefined;
   onValidated?: (execution: ValidatedExecution) => Promise<void> | void;
   onX402Delivered?: (result: X402DeliveredResult) => Promise<X402JournalReceipt> | X402JournalReceipt;
-  verifyLocalWalletProof?: (request: Request, requestBody: string) => Promise<void> | void;
+  verifyLocalWalletProof?: (
+    request: Request,
+    requestBody: string,
+    environment?: Readonly<Record<string, string | undefined>>,
+  ) => Promise<void> | void;
   /** Default-off factory receives the request plus authenticated server-derived scope. */
   hermesWorkflowAdvisorForRequest?: (input: {
     request: Request;
@@ -852,7 +856,7 @@ function agentCoreResearchMessages(messages: readonly PilotUIMessage[]): PilotUI
 let vaultServicePromise: Promise<VaultService> | undefined;
 
 function vaultService(): Promise<VaultService> {
-  vaultServicePromise ??= Promise.resolve(createVaultFromEnv());
+  vaultServicePromise ??= Promise.resolve(createAppVaultFromEnv());
   return vaultServicePromise;
 }
 
@@ -1759,6 +1763,7 @@ export function createChatHandler(dependencies: ChatHandlerDependencies = {}) {
         await (dependencies.verifyLocalWalletProof ?? verifyLocalChatWalletActionProof)(
           request,
           requestBody,
+          environment,
         );
       } catch {
         return errorResponse(

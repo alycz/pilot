@@ -25,6 +25,22 @@ export type SqliteBacktestQuotaConfig = Readonly<{
   sessionMaximum: number;
 }>;
 
+export type HarborD1BacktestQuotaConfig = Readonly<{
+  backend: "harbor-d1";
+  policyVersion: typeof BACKTEST_QUOTA_POLICY_VERSION;
+  accountMaximum: number;
+  sessionMaximum: number;
+}>;
+
+export type BacktestQuotaConfig = SqliteBacktestQuotaConfig | HarborD1BacktestQuotaConfig;
+
+export type BacktestQuotaFactoryDependencies = Readonly<{
+  createHarborD1Quota?: (
+    config: HarborD1BacktestQuotaConfig,
+    environment: Environment,
+  ) => BacktestExternalReadQuota;
+}>;
+
 function configurationError(message: string): never {
   throw new BacktestQuotaError("QUOTA_UNAVAILABLE", `backtest external-read quota is misconfigured: ${message}`);
 }
@@ -69,20 +85,20 @@ function isServerless(environment: Environment): boolean {
 }
 
 /**
- * External reads are disabled unless this complete, durable single-host
- * contract is configured. Serverless/multi-host deployments require a future
- * shared atomic adapter implementing BacktestExternalReadQuota.
+ * External reads are disabled unless either the complete private single-host
+ * contract or the exact shared Harbor D1 contract is configured.
  */
 export function readBacktestQuotaConfig(
   environment: Environment = process.env,
-): SqliteBacktestQuotaConfig | null {
+): BacktestQuotaConfig | null {
   const enabled = environment.BACKTEST_EXTERNAL_READS_ENABLED;
   if (enabled === undefined || enabled === "0") return null;
   if (enabled !== "1") return configurationError("BACKTEST_EXTERNAL_READS_ENABLED must be exactly 0 or 1");
-  if (environment.BACKTEST_QUOTA_BACKEND !== "sqlite-single-host") {
-    return configurationError("BACKTEST_QUOTA_BACKEND must be sqlite-single-host");
+  const backend = environment.BACKTEST_QUOTA_BACKEND;
+  if (backend !== "sqlite-single-host" && backend !== "harbor-d1") {
+    return configurationError("BACKTEST_QUOTA_BACKEND must be sqlite-single-host or harbor-d1");
   }
-  if (isServerless(environment)) {
+  if (backend === "sqlite-single-host" && isServerless(environment)) {
     return configurationError("sqlite-single-host quota cannot enable external reads on serverless deployments");
   }
   if (environment.BACKTEST_QUOTA_POLICY_VERSION !== BACKTEST_QUOTA_POLICY_VERSION) {
@@ -93,13 +109,20 @@ export function readBacktestQuotaConfig(
   if (sessionMaximum > accountMaximum) {
     return configurationError("session hourly runs cannot exceed account hourly runs");
   }
-  return Object.freeze({
-    backend: "sqlite-single-host",
-    stateDirectory: validateStateDirectory(environment.BACKTEST_QUOTA_STATE_DIR),
-    policyVersion: BACKTEST_QUOTA_POLICY_VERSION,
-    accountMaximum,
-    sessionMaximum,
-  });
+  return backend === "sqlite-single-host"
+    ? Object.freeze({
+      backend,
+      stateDirectory: validateStateDirectory(environment.BACKTEST_QUOTA_STATE_DIR),
+      policyVersion: BACKTEST_QUOTA_POLICY_VERSION,
+      accountMaximum,
+      sessionMaximum,
+    })
+    : Object.freeze({
+      backend,
+      policyVersion: BACKTEST_QUOTA_POLICY_VERSION,
+      accountMaximum,
+      sessionMaximum,
+    });
 }
 
 class UnavailableBacktestQuota implements BacktestExternalReadQuota {
@@ -271,10 +294,14 @@ export class SqliteBacktestExternalReadQuota implements BacktestExternalReadQuot
 
 export function createConfiguredBacktestQuota(
   environment: Environment = process.env,
+  dependencies: BacktestQuotaFactoryDependencies = {},
 ): BacktestExternalReadQuota {
   try {
     const config = readBacktestQuotaConfig(environment);
-    return config ? new SqliteBacktestExternalReadQuota(config) : new UnavailableBacktestQuota();
+    if (!config) return new UnavailableBacktestQuota();
+    return config.backend === "sqlite-single-host"
+      ? new SqliteBacktestExternalReadQuota(config)
+      : dependencies.createHarborD1Quota?.(config, environment) ?? new UnavailableBacktestQuota();
   } catch {
     return new UnavailableBacktestQuota();
   }

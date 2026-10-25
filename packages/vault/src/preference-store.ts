@@ -18,10 +18,15 @@ import {
 import { workflowLessonPath } from "./workflow-lessons";
 import { assertNoSensitiveContent } from "./security";
 
-const MAX_PREFERENCE_STATE_BYTES = 1_048_576;
+export const MAX_PREFERENCE_STATE_BYTES = 1_048_576;
+
+export type StructuredPreferenceStorageKind = "local" | "remote";
 
 export interface StructuredPreferenceStore {
-  readonly localPrivateStorage: true;
+  /** Truthful private-storage capability; callers must not infer remote durability from local storage. */
+  readonly privateStorage: StructuredPreferenceStorageKind;
+  /** @deprecated Use privateStorage; retained for compatible local-store capability checks. */
+  readonly localPrivateStorage?: true;
   read(scope: StructuredPreferenceScope): Promise<string | null>;
   compareAndSwap(
     scope: StructuredPreferenceScope,
@@ -53,6 +58,7 @@ function within(root: string, target: string): boolean {
 type LockOwner = { pid: number; token: string };
 
 export class FsStructuredPreferenceStore implements StructuredPreferenceStore {
+  readonly privateStorage = "local" as const;
   readonly localPrivateStorage = true as const;
   private rootPromise?: Promise<string>;
 

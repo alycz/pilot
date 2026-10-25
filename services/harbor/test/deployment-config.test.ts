@@ -55,6 +55,7 @@ describe("Free/QuickJS deployment configuration", () => {
 			AP4M_EVM_EVENT_MODE: "off",
 			GUARDRAILS_MODE: "off",
 			HARBOR_DEMO_QUOTA_ENABLED: "0",
+			HARBOR_HOSTED_STATE_ENABLED: "0",
 		});
 	});
 
@@ -114,7 +115,7 @@ describe("Free/QuickJS deployment configuration", () => {
 		expect(result.stderr).toContain("missing --profile");
 	});
 
-	it("pins an exact migration profile through 0010 and excludes later feature migrations", async () => {
+	it("pins the exact base migrations plus hosted state without enabling intervening features", async () => {
 		expect(FREE_QUICKJS_MIGRATIONS).toEqual([
 			"0001_init.sql",
 			"0002_build_capability_isolation.sql",
@@ -128,8 +129,9 @@ describe("Free/QuickJS deployment configuration", () => {
 			"0008_quicknode_rpc_counters.sql",
 			"0009_aws_kms_delegate_keys.sql",
 			"0010_ap4m_channel_purchase.sql",
+			"0017_hosted_pilot_state.sql",
 		]);
-		expect(FREE_QUICKJS_MIGRATIONS.every((name) => Number(name.slice(0, 4)) <= 10)).toBe(true);
+		expect(FREE_QUICKJS_MIGRATIONS.some((name) => /^001[1-6]_/.test(name))).toBe(false);
 		await expect(validateIsolatedMigrationProfile(serviceRoot, "free-quickjs"))
 			.resolves.toEqual({
 				migrationNames: FREE_QUICKJS_MIGRATIONS,

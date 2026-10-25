@@ -115,6 +115,20 @@ describe("backtest run API", () => {
     }
   });
 
+  it("does not refund or repeat a committed reservation when the provider fails", async () => {
+    const quota = { reserve: vi.fn() };
+    const run = vi.fn(async () => {
+      throw new BacktestPipelineError("PROVIDER_UNAVAILABLE", "provider failed after reservation");
+    });
+    const response = await createBacktestRunPostHandler(run, dependencies({ quota }))(new Request(
+      "http://local/api/research/backtests/run",
+      { method: "POST", body: JSON.stringify(VALID_INPUT) },
+    ));
+    expect(response.status).toBe(503);
+    expect(quota.reserve).toHaveBeenCalledTimes(1);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects malformed and oversized bodies before the runner", async () => {
     const run = vi.fn(async () => ({} as never));
     const quota = { reserve: vi.fn() };

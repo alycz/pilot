@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 
 import { readCookie } from "../../../../../lib/openrouter-session";
 import { resolvePilotRequestAuthority } from "../../../../../lib/runtime-profile";
@@ -92,9 +92,9 @@ export class InMemoryBacktestExternalReadQuota implements BacktestExternalReadQu
   }
 }
 
-function scopeDigest(domain: "account" | "session", value: string): string {
-  return createHash("sha256")
-    .update(`pilot.backtest.${domain}.v1\0`, "utf8")
+function scopeDigest(secret: string, domain: "account" | "session", value: string): string {
+  return createHmac("sha256", secret)
+    .update(`pilot.backtest.${domain}.v2\0`, "utf8")
     .update(value, "utf8")
     .digest("hex");
 }
@@ -117,8 +117,8 @@ export function resolveAuthenticatedBacktestScope(
     const session = openWalletSession(cookie, { secret, environment });
     if (!session) return null;
     return Object.freeze({
-      accountScopeId: scopeDigest("account", `${session.network}\0${session.account}`),
-      sessionScopeId: scopeDigest("session", cookie),
+      accountScopeId: scopeDigest(secret, "account", `${session.network}\0${session.account}`),
+      sessionScopeId: scopeDigest(secret, "session", cookie),
       network: session.network,
       sessionExpiresAt: session.expiresAt,
     });

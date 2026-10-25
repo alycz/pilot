@@ -171,6 +171,7 @@ export type VaultEnvironment = {
   VAULT_GITHUB_TOKEN?: string;
   VAULT_REPO?: string;
   PILOT_PERSONALIZATION_STATE_DIR?: string;
+  PILOT_PERSONALIZATION_BACKEND?: string;
   PILOT_STRUCTURED_PREFERENCES?: string;
 };
 

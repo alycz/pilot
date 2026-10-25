@@ -67,6 +67,7 @@ const CANONICAL_MIGRATIONS = Object.freeze({
 	"0014_declarative_strategies.sql": "c6cea482f4ba8c31339695c7ee405fa898a4974d7c08d1a1f37e16ab232436ad",
 	"0015_strategy_owner_scope.sql": "5c2cd2868a45c561bb875ad04a38221ce3531737dd1c795aa9247cc1af368580",
 	"0016_ap4m_evm_event.sql": "e13b58d348a350767f835b1b86270432df90f04e4ccf639e6b3b286c1155e931",
+	"0017_hosted_pilot_state.sql": "c5f0b77b231e40138fe17b3cb07690182b0da2519956ecf46e3844de31c3562b",
 });
 
 function sameKeys(value, expected) {

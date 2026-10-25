@@ -35,6 +35,8 @@ const PROFILE_KEYS = [
   "NEXT_PUBLIC_DEV_SIGNER",
   "SESSION_SECRET",
   "EXEC_NETWORK",
+  "HARBOR_URL",
+  "PILOT_HOSTED_STATE_API_KEY",
   "P_LIVE_RLUSD_ACQUISITION_STATE_DIR",
 ] as const;
 const originalEnvironment = Object.fromEntries(
@@ -75,8 +77,15 @@ function configure(
   else process.env.NEXT_PUBLIC_DEV_SIGNER = devSigner;
   if (buildMarker === undefined) delete process.env.NEXT_PUBLIC_PILOT_BUILD_MARKER;
   else process.env.NEXT_PUBLIC_PILOT_BUILD_MARKER = buildMarker;
-  if (profile === "hosted") process.env.PILOT_PUBLIC_ORIGIN = "https://pilot.example";
-  else delete process.env.PILOT_PUBLIC_ORIGIN;
+  if (profile === "hosted") {
+    process.env.PILOT_PUBLIC_ORIGIN = "https://pilot.example";
+    process.env.HARBOR_URL = "https://harbor.example";
+    process.env.PILOT_HOSTED_STATE_API_KEY = `pilot-hosted-state:${"H".repeat(32)}`;
+  } else {
+    delete process.env.PILOT_PUBLIC_ORIGIN;
+    delete process.env.HARBOR_URL;
+    delete process.env.PILOT_HOSTED_STATE_API_KEY;
+  }
 }
 
 function expectNoCookie(response: Response): void {
@@ -104,6 +113,7 @@ describe("wallet auth route deployment boundary", () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllGlobals();
     for (const key of PROFILE_KEYS) {
       const value = originalEnvironment[key];
       if (value === undefined) delete process.env[key];
@@ -399,6 +409,11 @@ describe("wallet auth route deployment boundary", () => {
 
   it("preserves remote challenge and session issuance for explicit hosted signer-off mode", async () => {
     configure("hosted", "0");
+    const hostedConsume = vi.fn<typeof fetch>().mockResolvedValue(new Response(
+      JSON.stringify({ consumed: true }),
+      { headers: { "content-type": "application/json" } },
+    ));
+    vi.stubGlobal("fetch", hostedConsume);
     const wallet = Wallet.generate();
     const origin = "https://pilot.example";
     const internalOrigin = "http://next-internal:3000";
@@ -427,6 +442,23 @@ describe("wallet auth route deployment boundary", () => {
     }));
     expect(created.status).toBe(200);
     expect(created.cookies.get(WALLET_SESSION_COOKIE)?.value).toBeTruthy();
+    expect(hostedConsume).toHaveBeenCalledTimes(1);
+    const [stateUrl, stateInit] = hostedConsume.mock.calls[0]!;
+    expect(String(stateUrl)).toBe(
+      "https://harbor.example/internal/pilot-state/v1/wallet-proofs/consume",
+    );
+    expect(new Headers(stateInit?.headers).get("authorization")).toBe(
+      `Bearer pilot-hosted-state:${"H".repeat(32)}`,
+    );
+    const stateBody = JSON.parse(String(stateInit?.body)) as Record<string, unknown>;
+    expect(stateBody).toMatchObject({
+      version: 1,
+      namespace: "wallet-auth",
+      expiresAtMs: expect.any(Number),
+      nonceDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+      scopeId: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
+    expect(JSON.stringify(stateBody)).not.toContain(wallet.classicAddress);
 
     const sealed = sealWalletSession({
       version: 1,
@@ -443,6 +475,34 @@ describe("wallet auth route deployment boundary", () => {
       authenticated: true,
       account: wallet.classicAddress,
       network: "testnet",
+    });
+  });
+
+  it("fails hosted wallet authorization closed before issuing a session when replay state is absent", async () => {
+    configure("hosted", "0");
+    const wallet = Wallet.generate();
+    const origin = "https://pilot.example";
+    const internalOrigin = "http://next-internal:3000";
+    const challenge = await issueChallenge(challengeRequest(
+      `${internalOrigin}/api/auth/wallet/challenge`,
+      wallet,
+      { origin },
+    ));
+    const challengeCookie = challenge.cookies.get(WALLET_CHALLENGE_COOKIE)?.value;
+    const body = await challenge.json() as { tx_json: Record<string, unknown> };
+    delete process.env.PILOT_HOSTED_STATE_API_KEY;
+
+    const response = await createSession(request(`${internalOrigin}/api/auth/wallet/session`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin },
+      body: JSON.stringify({ tx_blob: wallet.sign(body.tx_json as never).tx_blob }),
+      cookies: { [WALLET_CHALLENGE_COOKIE]: challengeCookie! },
+    }));
+
+    expect(response.status).toBe(503);
+    expect(response.cookies.get(WALLET_SESSION_COOKIE)).toBeUndefined();
+    await expect(response.json()).resolves.toEqual({
+      error: "Wallet authorization replay protection is unavailable.",
     });
   });
 

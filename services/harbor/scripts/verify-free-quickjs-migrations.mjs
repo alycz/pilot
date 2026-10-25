@@ -18,5 +18,5 @@ if (
 	throw new Error("Free/QuickJS migration profile is missing or stale");
 }
 process.stdout.write(
-	`verified ${FREE_QUICKJS_MIGRATIONS.length} Free/QuickJS migrations through 0010\n`,
+	`verified ${FREE_QUICKJS_MIGRATIONS.length} reviewed Free/QuickJS migrations through 0010 plus hosted state 0017\n`,
 );

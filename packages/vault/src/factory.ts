@@ -2,7 +2,10 @@ import path from "node:path";
 
 import { GitHubVaultBackend } from "./backends/github";
 import { FsVaultBackend } from "./backends/fs";
-import { FsStructuredPreferenceStore } from "./preference-store";
+import {
+  FsStructuredPreferenceStore,
+  type StructuredPreferenceStore,
+} from "./preference-store";
 import type { PolicySync, VaultEnvironment } from "./types";
 import { VaultService } from "./vault";
 
@@ -13,20 +16,53 @@ export function createVaultFromEnv(
     VAULT_GITHUB_TOKEN: process.env.VAULT_GITHUB_TOKEN,
     VAULT_REPO: process.env.VAULT_REPO,
     PILOT_PERSONALIZATION_STATE_DIR: process.env.PILOT_PERSONALIZATION_STATE_DIR,
+    PILOT_PERSONALIZATION_BACKEND: process.env.PILOT_PERSONALIZATION_BACKEND,
     PILOT_STRUCTURED_PREFERENCES: process.env.PILOT_STRUCTURED_PREFERENCES,
   },
   policySync?: PolicySync,
+  injectedPersonalizationStore?: StructuredPreferenceStore,
 ): VaultService {
   const backend = environment.VAULT_BACKEND?.trim() || "fs";
   const personalizationFlag = environment.PILOT_STRUCTURED_PREFERENCES;
   if (personalizationFlag !== undefined && personalizationFlag !== "0" && personalizationFlag !== "1") {
     throw new Error("PILOT_STRUCTURED_PREFERENCES must be exactly 0 or 1");
   }
-  const personalizationPath = personalizationFlag === "1"
+  const personalizationBackend = environment.PILOT_PERSONALIZATION_BACKEND?.trim() || "local";
+  if (personalizationBackend !== "local" && personalizationBackend !== "harbor-d1") {
+    throw new Error("PILOT_PERSONALIZATION_BACKEND must be exactly local or harbor-d1");
+  }
+  const personalizationPath = personalizationFlag === "1" && personalizationBackend === "local"
     ? environment.PILOT_PERSONALIZATION_STATE_DIR?.trim()
     : undefined;
-  if (personalizationFlag === "1" && !personalizationPath) {
+  if (personalizationFlag === "1" && personalizationBackend === "local" && !personalizationPath) {
     throw new Error("PILOT_PERSONALIZATION_STATE_DIR is required when structured preferences are enabled");
+  }
+  if (
+    personalizationFlag === "1" &&
+    personalizationBackend === "harbor-d1" &&
+    !injectedPersonalizationStore
+  ) {
+    throw new Error("harbor-d1 structured preferences require an injected remote private store");
+  }
+  if (
+    personalizationFlag === "1" &&
+    personalizationBackend === "harbor-d1" &&
+    injectedPersonalizationStore?.privateStorage !== "remote"
+  ) {
+    throw new Error("harbor-d1 structured preferences require remote private storage");
+  }
+  if (personalizationFlag === "1" && personalizationBackend === "local" && injectedPersonalizationStore) {
+    throw new Error("local structured preferences cannot use an injected store");
+  }
+  if (
+    personalizationFlag === "1" &&
+    personalizationBackend === "harbor-d1" &&
+    environment.PILOT_PERSONALIZATION_STATE_DIR?.trim()
+  ) {
+    throw new Error("PILOT_PERSONALIZATION_STATE_DIR must not be set for harbor-d1 preferences");
+  }
+  if (personalizationFlag !== "1" && injectedPersonalizationStore) {
+    throw new Error("Structured preference storage cannot be injected while the feature is disabled");
   }
   if (backend === "fs" && personalizationPath && environment.VAULT_PATH) {
     const vaultPath = path.resolve(environment.VAULT_PATH);
@@ -36,11 +72,15 @@ export function createVaultFromEnv(
       throw new Error("Personalization state must be outside the Git-backed vault path");
     }
   }
-  const personalizationStore = personalizationPath
-    ? new FsStructuredPreferenceStore(
-        personalizationPath,
-        backend === "fs" ? environment.VAULT_PATH : undefined,
-      )
+  const personalizationStore = personalizationFlag === "1"
+    ? personalizationBackend === "harbor-d1"
+      ? injectedPersonalizationStore
+      : personalizationPath
+        ? new FsStructuredPreferenceStore(
+            personalizationPath,
+            backend === "fs" ? environment.VAULT_PATH : undefined,
+          )
+        : undefined
     : undefined;
   if (backend === "fs") {
     if (!environment.VAULT_PATH) throw new Error("VAULT_PATH is required for the fs vault backend");

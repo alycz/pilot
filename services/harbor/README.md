@@ -55,6 +55,7 @@ readiness.
 | `/mcp` | named bearer, except the narrow read-only local bypass | MCP Streamable HTTP with `search` and `execute` |
 | `POST /api/ops/{operation}` | named bearer, except the narrow read-only local bypass | Direct invocation of one registered operation |
 | `GET /local/x402/probe` | none; exact local x402 signing profiles only | Non-mutating fixed-target connectivity probe; not payment evidence |
+| `POST /internal/pilot-state/v1/*` | dedicated named bearer; no local bypass | Private wallet-proof replay, encrypted personalization CAS/read/delete, and transactional Research quota. Never registered as REST operations or MCP tools. |
 
 Remote credentials use this header:
 
@@ -63,7 +64,9 @@ Authorization: Bearer <principal>:<token>
 ```
 
 The principal is part of the security boundary. Links, policies, builds,
-approvals, executions, and event queries are scoped to it in D1.
+approvals, executions, and event queries are scoped to it in D1. The hosted
+state principal and token must each be unique: a duplicate token across an
+ordinary principal and the hosted-state principal fails authentication.
 
 ### MCP
 
@@ -578,9 +581,12 @@ Worker name.
 
 The profile binds D1 to the frozen
 [`migrations-free-quickjs/`](migrations-free-quickjs/) inventory. That inventory
-is byte-bound to the canonical migrations and stops at `0010`; disabled later
-features cannot be migrated into this profile by an unqualified migration
-command. Generate an operator-specific config outside the checkout only after
+is byte-bound to the canonical base migrations through `0010` plus the isolated
+hosted-Pilot state schema `0017`. It deliberately excludes feature migrations
+`0011` through `0016`, so disabled trading and partner features cannot be
+migrated into this profile by an unqualified migration command. Hosted state
+also stays inert until its exact principal and finite Research policy are
+configured. Generate an operator-specific config outside the checkout only after
 the D1 resource exists and its UUID is known:
 
 ```bash
@@ -614,6 +620,28 @@ documented in
 [`docs/free-quickjs-workers-dev.md`](docs/free-quickjs-workers-dev.md). Those
 remote steps are not part of the offline development flow and require separate
 operator approval.
+
+### Private hosted Pilot state
+
+Migration `0017_hosted_pilot_state.sql` adds bounded D1 storage for wallet-proof
+replay markers, encrypted preference envelopes, and shared Research quota. The
+routes are not catalog operations and are never registered with MCP or model
+tools. They remain unavailable unless all of these non-secret policy values are
+present and internally consistent:
+
+- `HARBOR_HOSTED_STATE_ENABLED=1`
+- one exact `HARBOR_HOSTED_STATE_PRINCIPAL`
+- `HARBOR_RESEARCH_QUOTA_POLICY_VERSION=pilot.backtest.external-read.v1`
+- finite `HARBOR_RESEARCH_QUOTA_ACCOUNT_HOURLY_RUNS` and
+  `HARBOR_RESEARCH_QUOTA_SESSION_HOURLY_RUNS`
+
+The corresponding principal/token is installed only as one dedicated entry in
+the secret `HARBOR_API_KEYS` map and must differ from ordinary operations keys.
+Harbor rejects that principal from REST operations and MCP. D1 receives only
+opaque HMAC scopes, nonce digests, encrypted preference envelopes, and bounded
+quota rows—never wallet addresses, cookies, signatures, prompts, or datasets.
+Pilot must use the dedicated server-only `PILOT_HOSTED_STATE_API_KEY`; it does
+not fall back to `HARBOR_API_KEY`. No checked-in template enables these routes.
 
 ### Paid Dynamic Worker bootstrap
 

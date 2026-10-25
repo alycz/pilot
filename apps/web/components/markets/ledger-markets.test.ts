@@ -3,8 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import {
   assertReadOnly,
   endpointHost,
+  ledgerRetryAfterMs,
   LedgerClient,
   LedgerCommandNotAllowedError,
+  LedgerRequestError,
   LEDGER_ENDPOINTS,
   type SocketLike,
 } from "./ledger-client";
@@ -202,6 +204,40 @@ describe("ledger client", () => {
     await expect(pending).rejects.toMatchObject({ code: "actNotFound" });
   });
 
+  it("fails over and retries read-only calls when a public node is rate-limited", async () => {
+    const { client, sockets } = harness(["wss://quota", "wss://fallback"]);
+    const connected = client.connect();
+    sockets[0]!.open();
+    await connected;
+
+    const pending = client.request("book_offers", { taker_gets: { currency: "XRP" }, taker_pays: RLUSD, limit: 50 });
+    const first = sockets[0]!.sent[0]!;
+    sockets[0]!.reply({
+      id: first.id,
+      type: "response",
+      status: "error",
+      error: "rateLimit",
+      error_message: "rate limit: units quota (500000 per 3600s) exhausted, retry in ~189064ms",
+    });
+
+    await vi.waitFor(() => expect(sockets).toHaveLength(2));
+    sockets[1]!.open();
+    await vi.waitFor(() => expect(sockets[1]!.sent).toHaveLength(1));
+    const retried = sockets[1]!.sent[0]!;
+    expect(retried).toMatchObject({ command: "book_offers", limit: 50 });
+    sockets[1]!.reply({ id: retried.id, type: "response", status: "success", result: { offers: BID_OFFERS } });
+
+    await expect(pending).resolves.toMatchObject({ endpoint: "wss://fallback", result: { offers: BID_OFFERS } });
+  });
+
+  it("parses the provider retry hint from the reproduced quota response", () => {
+    const error = new LedgerRequestError(
+      "rate limit: units quota (500000 per 3600s) exhausted, retry in ~189064ms",
+      "rateLimit",
+    );
+    expect(ledgerRetryAfterMs(error)).toBe(189_064);
+  });
+
   it("never sends a disallowed command", () => {
     const { client } = harness(["wss://one"]);
     expect(() => client.request("submit" as never, { tx_blob: "00" })).toThrow(LedgerCommandNotAllowedError);
@@ -342,6 +378,20 @@ describe("route quotes computed in the browser", () => {
   it("reports a missing pool honestly", () => {
     const routes = quoteRoutes({ size: 100, bids: snapshot.bids, amm: null, mid: snapshot.book.mid });
     expect(routes.unavailable.find((route) => route.route === "amm")?.detail).toMatch(/No AMM pool/);
+  });
+
+  it("keeps an upstream AMM failure distinct from a genuinely missing pool", () => {
+    const routes = quoteRoutes({
+      size: 100,
+      bids: snapshot.bids,
+      amm: null,
+      mid: snapshot.book.mid,
+      ammUnavailableReason: "Public XRP Ledger nodes are temporarily rate-limited.",
+    });
+    expect(routes.routes.map((route) => route.route)).toEqual(["order-book"]);
+    expect(routes.unavailable.find((route) => route.route === "amm")?.detail).toBe(
+      "Public XRP Ledger nodes are temporarily rate-limited.",
+    );
   });
 });
 

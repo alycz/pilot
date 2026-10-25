@@ -109,8 +109,9 @@ export function quoteRoutes(input: {
   bids: DepthLevel[];
   amm: AmmSummary | null;
   mid: number | null;
+  ammUnavailableReason?: string;
 }): RouteSummary {
-  const { size, bids, amm, mid } = input;
+  const { size, bids, amm, mid, ammUnavailableReason } = input;
   const impact = (output: number) =>
     mid ? Number((((mid - output / size) / mid) * 10_000).toFixed(1)) : undefined;
   const routes: VenueRouteQuote[] = [];
@@ -144,7 +145,15 @@ export function quoteRoutes(input: {
   }
 
   if (!amm) {
-    routes.push({ venue_id: ROUTE_VENUES.amm, route: "amm", input_amount: fixed(size), output_amount: "0", price: "0", available: false, detail: "No AMM pool for this pair." });
+    routes.push({
+      venue_id: ROUTE_VENUES.amm,
+      route: "amm",
+      input_amount: fixed(size),
+      output_amount: "0",
+      price: "0",
+      available: false,
+      detail: ammUnavailableReason ?? "No AMM pool for this pair.",
+    });
   } else {
     const output = sellIntoAmm(amm, size);
     const quote: VenueRouteQuote = {

@@ -83,6 +83,23 @@ type Pending = {
   started: number;
 };
 
+const RETRYABLE_READ_CODES = new Set(["HTTP_429", "rateLimit", "rateLimited", "slowDown", "tooBusy"]);
+
+/** Capacity errors are safe to retry because this client only permits reads. */
+export function isRetryableLedgerReadError(cause: unknown): cause is LedgerRequestError {
+  if (!(cause instanceof LedgerRequestError)) return false;
+  return RETRYABLE_READ_CODES.has(cause.code) || /rate[ -]?limit|quota|too busy|temporarily unavailable/i.test(cause.message);
+}
+
+/** Provider retry hint, when the response includes one (for example "~189064ms"). */
+export function ledgerRetryAfterMs(cause: unknown): number | null {
+  if (!(cause instanceof Error)) return null;
+  const milliseconds = cause.message.match(/retry\s+in\s+~?(\d+)\s*ms/i);
+  if (milliseconds) return Number(milliseconds[1]);
+  const seconds = cause.message.match(/retry\s+in\s+~?(\d+(?:\.\d+)?)\s*s(?:ec(?:ond)?s?)?/i);
+  return seconds ? Math.round(Number(seconds[1]) * 1_000) : null;
+}
+
 /** The subset of the WebSocket API the client needs (injectable in tests). */
 export type SocketLike = {
   readyState: number;
@@ -119,6 +136,7 @@ export class LedgerClient {
   private stopped = true;
   private failedAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private failoverPromise: Promise<void> | null = null;
   private connectWaiters: Array<{ resolve: () => void; reject: (error: Error) => void }> = [];
   private readonly options: Required<Omit<LedgerClientOptions, "onStatus" | "onLedgerClosed">> &
     Pick<LedgerClientOptions, "onStatus" | "onLedgerClosed">;
@@ -153,9 +171,34 @@ export class LedgerClient {
     return waiter;
   }
 
-  /** Sends one allowlisted read and resolves with its `result` and latency. */
+  /**
+   * Sends one allowlisted request. Read-only calls retry capacity failures on
+   * the next configured public node; semantic rippled errors return directly.
+   */
   request<T = Record<string, unknown>>(command: LedgerCommand, params: Record<string, unknown> = {}): Promise<LedgerResponse<T>> {
     assertReadOnly(command, params);
+    const isRead = (READ_ONLY_COMMANDS as readonly string[]).includes(command);
+    return this.requestWithFailover<T>(command, params, isRead);
+  }
+
+  private async requestWithFailover<T>(
+    command: LedgerCommand,
+    params: Record<string, unknown>,
+    isRead: boolean,
+  ): Promise<LedgerResponse<T>> {
+    const attempts = isRead ? this.options.endpoints.length : 1;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        return await this.requestOnce<T>(command, params);
+      } catch (cause) {
+        if (!isRead || !isRetryableLedgerReadError(cause) || attempt === attempts - 1) throw cause;
+        await this.failOver(cause);
+      }
+    }
+    throw new LedgerRequestError("The ledger read failed.", "error");
+  }
+
+  private requestOnce<T = Record<string, unknown>>(command: LedgerCommand, params: Record<string, unknown>): Promise<LedgerResponse<T>> {
     const socket = this.socket;
     if (!socket || socket.readyState !== OPEN || this.status !== "open") {
       return Promise.reject(new LedgerRequestError("The ledger connection is not open.", "notConnected"));
@@ -174,6 +217,23 @@ export class LedgerClient {
       });
       socket.send(JSON.stringify({ id, command, ...params }));
     });
+  }
+
+  /** Move all in-flight reads together so one quota response causes one reconnect. */
+  private failOver(reason: LedgerRequestError): Promise<void> {
+    if (this.failoverPromise) return this.failoverPromise;
+    this.failoverPromise = (async () => {
+      this.teardown(reason);
+      this.endpointIndex = (this.endpointIndex + 1) % this.options.endpoints.length;
+      this.failedAttempts = 1;
+      // connect() starts only from an idle state; open() immediately reports
+      // the externally visible reconnecting transition.
+      this.status = "idle";
+      await this.connect();
+    })().finally(() => {
+      this.failoverPromise = null;
+    });
+    return this.failoverPromise;
   }
 
   /**

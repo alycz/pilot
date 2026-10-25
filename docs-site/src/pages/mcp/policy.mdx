@@ -86,4 +86,4 @@ Invariants: `execute_under_usd ≤ max_per_tx_usd ≤ daily_cap_usd`; x402 per-c
 
 ## Watcher
 
-Every minute, the engine pages each active link's validated transactions. Any transaction signed by the delegate that the engine did not execute is **foreign**: the link is suspended and an unsigned revoke is prepared for the owner. With QuickNode enabled, a Streams watchdog does the same from every validated ledger ([QuickNode](/integrations/quicknode)).
+When a cron trigger is configured (designed for `* * * * *`), the engine pages each active link's validated transactions. No checked-in deployment config enables the trigger yet, and the read-only and trading local profiles skip it. Any transaction signed by the delegate that the engine did not execute is **foreign**: the link is suspended and an unsigned revoke is prepared for the owner. With QuickNode enabled, a Streams watchdog does the same from every validated ledger ([QuickNode](/integrations/quicknode)).

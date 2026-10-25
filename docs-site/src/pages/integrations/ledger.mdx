@@ -12,7 +12,7 @@ The Ledger facade is **sign-only**: it adds only `SigningPubKey` and `TxnSignatu
 
 | Mode | For | Transport |
 | --- | --- | --- |
-| **Real Ledger** | Anyone with a device, in desktop Chrome, Edge or Brave | WebHID (`@ledgerhq/device-transport-kit-web-hid`) |
+| **Real Ledger** | Anyone with a device, in desktop Chrome, Edge or Brave, on a local Pilot profile (Ledger signing is disabled on the hosted profile) | WebHID (`@ledgerhq/device-transport-kit-web-hid`) |
 | **Virtual Ledger** | Developers, demos, end-to-end tests | Speculos running Ledger's real **XRP app 2.8.2**, through a same-origin proxy (`/api/ledger-sim/*`) |
 | **Simulated device** | Logged-out demo | Recorded device screens replayed. No signing. Labelled *Simulated Ledger · Recorded demo · no signing*. |
 

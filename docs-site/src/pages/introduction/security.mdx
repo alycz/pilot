@@ -27,7 +27,7 @@
 - **Approval binding**: an approved transaction must match the signed blob field for field. Approvals expire (10 minutes, or 90 seconds under `xrpl_execution_v2`).
 - **Sandbox**: `execute` scripts run with no outbound network, a 10 s deadline, 30 operation calls and 24 KiB of output. Script text and arguments matching `seed`, `secret`, `private` or `mnemonic` are rejected (`SENSITIVE_INPUT`).
 - **Untrusted text screening**: memos, token names and `Domain` fields can be screened by AWS Bedrock Guardrails and redacted before a model sees them ([AWS](/integrations/aws)).
-- **Watcher and kill switches**: a per-minute foreign-transaction watcher, an optional QuickNode Streams watchdog, per-strategy kill and an account-wide global kill.
+- **Watcher and kill switches**: a foreign-transaction watcher (runs on a scheduled trigger, designed for every minute), an optional QuickNode Streams watchdog, per-strategy kill and an account-wide global kill.
 - **SourceTag `2610240`** on every transaction the engine builds, with one canonical memo, so agent volume is attributable.
 
 ## Fail-closed defaults

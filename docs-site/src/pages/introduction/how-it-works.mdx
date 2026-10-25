@@ -42,7 +42,7 @@ The policy engine's verdict is one of `execute`, `needs_approval` or `block`. Th
 > "Buy 3,000 of a token from an unknown issuer."
 
 1. Policy: issuer not allowlisted, and value > $2,000 per-transaction cap → **`block`**. Every failed rule is listed. The model is told never to retry, split or weaken a blocked intent.
-2. Separately, a watcher scans your linked account every minute. If a transaction signed with your delegate key appears that the engine did not execute, the link is **suspended** and an empty-permission `DelegateSet` (revoke) is prepared for you to sign.
+2. Separately, when a scheduled trigger is configured, a watcher scans your linked account (designed to run every minute). If a transaction signed with your delegate key appears that the engine did not execute, the link is **suspended** and an empty-permission `DelegateSet` (revoke) is prepared for you to sign.
 
 ::::
 
@@ -53,7 +53,7 @@ Pilot classifies each chat request into a mode and only offers the matching tool
 | Mode | Tools that can mutate |
 | --- | --- |
 | `read_only` | none |
-| `one_time` | `propose_intent`, `ap4m_purchase`, `x402_compare` |
+| `one_time` | `propose_intent`, `ap4m_purchase` (x402 runs separately with only `x402_compare`) |
 | `recurring` / `autonomous` | `propose_strategy` (validate and paper-preview only) |
 
 See [Agent loop & tools](/harness/agent) for the full tool list.

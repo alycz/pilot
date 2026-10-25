@@ -34,7 +34,7 @@ Pilot acts on a **budget account**: the account you link and fund for agent trad
 | Switch | Scope | Where |
 | --- | --- | --- |
 | Revoke delegation | One linked account, on-ledger | Portfolio, `account.revoke` |
-| Watcher quarantine | Automatic on a foreign delegated transaction | Engine cron, every minute |
+| Watcher quarantine | Automatic on a foreign delegated transaction | Engine scheduled job (when a cron trigger is configured) |
 | QuickNode freeze | Automatic, engine-local | Streams watchdog ([QuickNode](/integrations/quicknode)) |
 | Strategy kill | One strategy | Strategy page, `strategy.kill` |
 | Global kill | Every strategy for the account | Strategy page, `strategy.globalKill.set` |

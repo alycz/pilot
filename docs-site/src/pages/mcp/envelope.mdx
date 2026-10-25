@@ -9,7 +9,7 @@ Every operation, over MCP or REST, returns the same envelope.
   ok: true
   data: unknown              // the operation's result
   asOf: string               // ISO timestamp
-  asOfBasis: "server-time"
+  asOfBasis: string          // "server-time" for normal operations
   caveat?: Caveat[]          // see below
   trust?: {
     rpc?: {

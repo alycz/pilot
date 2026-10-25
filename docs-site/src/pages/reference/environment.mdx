@@ -1,6 +1,6 @@
 # Environment variables
 
-The full lists live in `.env.example` (app), `services/harbor/.env.example` (engine) and `services/ap4m-merchants/.env.example`. These are the ones you are most likely to touch. Secrets stay server-side and are never committed.
+Most are documented in `.env.example` (app), `services/harbor/.env.example` (engine) and `services/ap4m-merchants/.env.example`. A few app variables are read by code but not yet listed there: `HARBOR_X402_URL`, `HARBOR_X402_API_KEY`, `AGENTCORE_MODE` and `MASTERCARD_OF_MODE` (`PILOT_PUBLIC_ORIGIN` is present but commented out). These are the ones you are most likely to touch. Secrets stay server-side and are never committed.
 
 ## Engine
 
@@ -20,7 +20,7 @@ The full lists live in `.env.example` (app), `services/harbor/.env.example` (eng
 | `QN_MODE` | `off` \| `mock` \| `live` | [QuickNode](/integrations/quicknode). |
 | `GUARDRAILS_MODE`, `GUARDRAILS_THRESHOLD` | `off` \| `mock` \| `aws`; `0.8` | [AWS](/integrations/aws). |
 | `KMS_MODE`, `HARBOR_KEK_CIPHERTEXT` | `off` \| `kek` \| `sign` | [AWS](/integrations/aws). |
-| `AP4M_DEMO_ENABLED`, `AP4M_MERCHANT_ALLOWLIST` | `false`; ids | [Mastercard](/integrations/mastercard). |
+| `AP4M_DEMO_ENABLED`, `AP4M_EVM_EVENT_ENABLED`, `AP4M_EVM_EVENT_MODE` | `false`; `false`; `off` \| `mock` | [Mastercard](/integrations/mastercard). |
 | `MASTERCARD_MCP_ENABLED` | unset \| `true` \| `false` | Developers MCP federation. |
 | `BITHOMP_API_KEY` | optional | Indexer fallback. |
 

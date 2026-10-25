@@ -38,7 +38,7 @@ pnpm typecheck && pnpm test
 pnpm test:e2e:fixture      # starts its own server on 127.0.0.1:3004
 ```
 
-Fixture mode needs **no** credentials, wallet, seed, model key or XRPL connection. It runs eight deterministic browser stories: onboarding preconditions, research with freshness caveats, delegated swap and AMM deposit cards, a policy block, owner approval, x402 presentation, revocation and vault memory.
+Fixture mode needs **no** credentials, wallet, seed, model key or XRPL connection. It runs every `*.fixture.spec.ts` browser spec (22 today), starting with eight core stories: onboarding preconditions, research with freshness caveats, delegated swap and AMM deposit cards, a policy block, owner approval, x402 presentation, revocation and vault memory.
 
 For an interactive workbench:
 

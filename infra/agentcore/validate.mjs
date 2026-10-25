@@ -34,6 +34,12 @@ const runtimeEnvironmentKeys = [
   "AGENTCORE_GATEWAY_JWT_TENANT_CLAIM",
   "AGENTCORE_GATEWAY_JWT_DEPLOYMENT_TENANT_ID",
   "AGENTCORE_GATEWAY_JWT_ALGORITHMS_JSON",
+  "AGENTCORE_GATEWAY_JWT_CLOCK_TOLERANCE_SECONDS",
+  "AGENTCORE_GATEWAY_JWT_MAX_TOKEN_AGE_SECONDS",
+  "AGENTCORE_GATEWAY_JWT_MAX_TOKEN_LIFETIME_SECONDS",
+  "AGENTCORE_GATEWAY_JWT_JWKS_CACHE_TTL_MS",
+  "AGENTCORE_GATEWAY_JWT_JWKS_REFRESH_COOLDOWN_MS",
+  "AGENTCORE_GATEWAY_JWT_REVOCATION_MODE",
   "AGENTCORE_REPLAY_TABLE",
   "AGENTCORE_REPLAY_DEPLOYMENT_ID",
   "AGENTCORE_REPLAY_LEASE_MS",
@@ -86,6 +92,17 @@ const validateJsonSchema = (schemaNode, value, path) => {
       if (Object.hasOwn(value, property)) validateJsonSchema(propertySchema, value[property], `${path}.${property}`);
     }
   }
+  if (schemaNode.type === "array") {
+    assert(Array.isArray(value), `${path}: expected array`);
+    if (schemaNode.minItems !== undefined) assert(value.length >= schemaNode.minItems, `${path}: array is too short`);
+    if (schemaNode.maxItems !== undefined) assert(value.length <= schemaNode.maxItems, `${path}: array is too long`);
+    if (schemaNode.uniqueItems === true) {
+      assert(new Set(value.map((entry) => JSON.stringify(entry))).size === value.length, `${path}: array contains a duplicate`);
+    }
+    if (schemaNode.items && typeof schemaNode.items === "object") {
+      value.forEach((entry, index) => validateJsonSchema(schemaNode.items, entry, `${path}[${index}]`));
+    }
+  }
   if (schemaNode.type === "string") {
     assert(typeof value === "string", `${path}: expected string`);
     if (schemaNode.minLength !== undefined) assert(value.length >= schemaNode.minLength, `${path}: string is too short`);
@@ -122,9 +139,36 @@ const validateRuntimeAccountBinding = (createDocument, updateDocument, label) =>
 
   assert(JSON.stringify(updateDocument.updateInput.agentRuntimeArtifact) === JSON.stringify(createDocument.createInput.agentRuntimeArtifact), `${label}: update must preserve the pinned create artifact`);
   assert(updateDocument.updateInput.roleArn === createDocument.createInput.roleArn, `${label}: update must preserve the create role`);
+  assert(JSON.stringify(updateDocument.updateInput.authorizerConfiguration) === JSON.stringify(createDocument.createInput.authorizerConfiguration), `${label}: update must preserve the complete create Runtime authorizer`);
   assert(JSON.stringify(updateDocument.updateInput.protocolConfiguration) === JSON.stringify(createDocument.createInput.protocolConfiguration), `${label}: update must preserve the create protocol`);
   assert(JSON.stringify(updateDocument.updateInput.networkConfiguration) === JSON.stringify(createDocument.createInput.networkConfiguration), `${label}: update must preserve the create network configuration`);
   assert(JSON.stringify(updateDocument.updateInput.environmentVariables) === JSON.stringify(createDocument.createInput.environmentVariables), `${label}: update must preserve the complete create Runtime environment`);
+  assert(createDocument.createInput.requestHeaderConfiguration === undefined && updateDocument.updateInput.requestHeaderConfiguration === undefined, `${label}: Runtime must not forward the inbound Authorization header`);
+  const runtimeAuthorizer = createDocument.createInput.authorizerConfiguration?.customJWTAuthorizer;
+  const runtimeVerification = createDocument.postCreateVerification?.runtimeInboundJwt;
+  assert(runtimeAuthorizer && runtimeVerification, `${label}: Runtime CUSTOM_JWT authorizer is missing`);
+  assert(runtimeVerification.authMode === "CUSTOM_JWT", `${label}: Runtime auth mode must be CUSTOM_JWT`);
+  assert(runtimeAuthorizer.discoveryUrl === runtimeVerification.discoveryUrl, `${label}: Runtime discovery URL differs from verification`);
+  assert(new URL(runtimeVerification.discoveryUrl).origin === new URL(runtimeVerification.issuer).origin, `${label}: Runtime discovery and issuer origins differ`);
+  assert(JSON.stringify(runtimeAuthorizer.allowedAudience) === JSON.stringify([runtimeVerification.audience]), `${label}: Runtime inbound audience differs from verification`);
+  assert(JSON.stringify(runtimeAuthorizer.allowedClients) === JSON.stringify([runtimeVerification.clientId]), `${label}: Runtime inbound client differs from verification`);
+  assert(JSON.stringify(runtimeAuthorizer.allowedScopes) === JSON.stringify([runtimeVerification.allowedScope]), `${label}: Runtime inbound scope differs from verification`);
+  assert(runtimeAuthorizer.customClaims.length === 2, `${label}: Runtime must bind exactly subject and deployment tenant claims`);
+  const [runtimeSubjectClaim, runtimeTenantClaim] = runtimeAuthorizer.customClaims;
+  assert(
+    runtimeSubjectClaim.inboundTokenClaimName === "sub" &&
+      runtimeSubjectClaim.inboundTokenClaimValueType === "STRING" &&
+      runtimeSubjectClaim.authorizingClaimMatchValue.claimMatchOperator === "EQUALS" &&
+      runtimeSubjectClaim.authorizingClaimMatchValue.claimMatchValue.matchValueString === runtimeVerification.subject,
+    `${label}: Runtime inbound subject claim differs from verification`,
+  );
+  assert(
+    runtimeTenantClaim.inboundTokenClaimName === runtimeVerification.tenantClaimName &&
+      runtimeTenantClaim.inboundTokenClaimValueType === "STRING" &&
+      runtimeTenantClaim.authorizingClaimMatchValue.claimMatchOperator === "EQUALS" &&
+      runtimeTenantClaim.authorizingClaimMatchValue.claimMatchValue.matchValueString === runtimeVerification.deploymentTenantId,
+    `${label}: Runtime inbound deployment tenant claim differs from verification`,
+  );
   const environment = createDocument.createInput.environmentVariables;
   assert(environment && JSON.stringify(Object.keys(environment).sort()) === JSON.stringify(runtimeEnvironmentKeys), `${label}: Runtime environment inventory is not exact`);
   assert(environment.AGENTCORE_RUNTIME_SERVER_MODE === "aws", `${label}: Runtime server mode must be aws`);
@@ -137,14 +181,20 @@ const validateRuntimeAccountBinding = (createDocument, updateDocument, label) =>
     assert(typeof environment[name] === "string" && environment[name].length <= 2_048 && /^https:\/\/[^?#]+$/.test(environment[name]), `${label}: ${name} must be a bounded HTTPS URL`);
   }
   const audiences = exactStringList(environment.AGENTCORE_GATEWAY_JWT_AUDIENCES_JSON, 8, `${label}: JWT audiences`);
-  const subjects = exactStringList(environment.AGENTCORE_GATEWAY_JWT_ALLOWED_SUBJECTS_JSON, 64, `${label}: JWT subjects`);
-  const clients = exactStringList(environment.AGENTCORE_GATEWAY_JWT_ALLOWED_CLIENTS_JSON, 16, `${label}: JWT clients`);
+  const subjects = exactStringList(environment.AGENTCORE_GATEWAY_JWT_ALLOWED_SUBJECTS_JSON, 1, `${label}: JWT subjects`);
+  const clients = exactStringList(environment.AGENTCORE_GATEWAY_JWT_ALLOWED_CLIENTS_JSON, 1, `${label}: JWT clients`);
   const scopes = exactStringList(environment.AGENTCORE_GATEWAY_JWT_REQUIRED_SCOPES_JSON, 16, `${label}: JWT scopes`);
   const algorithms = exactStringList(environment.AGENTCORE_GATEWAY_JWT_ALGORITHMS_JSON, 2, `${label}: JWT algorithms`, new Set(["RS256", "ES256"]));
   assert(["client_id", "azp"].includes(environment.AGENTCORE_GATEWAY_JWT_CLIENT_CLAIM), `${label}: JWT client claim is invalid`);
   assert(/^[A-Za-z][A-Za-z0-9_.:-]{0,127}$/.test(environment.AGENTCORE_GATEWAY_JWT_TENANT_CLAIM), `${label}: JWT tenant claim is invalid`);
   assert(typeof environment.AGENTCORE_GATEWAY_JWT_DEPLOYMENT_TENANT_ID === "string" && environment.AGENTCORE_GATEWAY_JWT_DEPLOYMENT_TENANT_ID.length >= 1 && environment.AGENTCORE_GATEWAY_JWT_DEPLOYMENT_TENANT_ID.length <= 256, `${label}: JWT deployment tenant is invalid`);
   assert(algorithms.length >= 1, `${label}: at least one asymmetric JWT algorithm is required`);
+  boundedInteger(environment.AGENTCORE_GATEWAY_JWT_CLOCK_TOLERANCE_SECONDS, 0, 60, `${label}: JWT clock tolerance`);
+  boundedInteger(environment.AGENTCORE_GATEWAY_JWT_MAX_TOKEN_AGE_SECONDS, 30, 3_600, `${label}: JWT maximum token age`);
+  boundedInteger(environment.AGENTCORE_GATEWAY_JWT_MAX_TOKEN_LIFETIME_SECONDS, 30, 3_600, `${label}: JWT maximum token lifetime`);
+  boundedInteger(environment.AGENTCORE_GATEWAY_JWT_JWKS_CACHE_TTL_MS, 1_000, 900_000, `${label}: JWT JWKS cache TTL`);
+  boundedInteger(environment.AGENTCORE_GATEWAY_JWT_JWKS_REFRESH_COOLDOWN_MS, 1_000, 60_000, `${label}: JWT JWKS refresh cooldown`);
+  assert(environment.AGENTCORE_GATEWAY_JWT_REVOCATION_MODE === "expiry_only", `${label}: Runtime template must disclose expiry-only revocation`);
   const verification = createDocument.postCreateVerification;
   assert(verification && environment.AGENTCORE_GATEWAY_URL === verification.gateway.url, `${label}: Runtime Gateway URL differs from the verified Gateway`);
   assert(environment.AGENTCORE_GATEWAY_TOOL_NAME === verification.gateway.toolName, `${label}: Runtime Gateway tool differs from the verified tool`);
@@ -155,6 +205,9 @@ const validateRuntimeAccountBinding = (createDocument, updateDocument, label) =>
   assert(JSON.stringify(scopes) === JSON.stringify([verification.jwtVerification.allowedScope]), `${label}: Runtime scope differs from the verified scope`);
   assert(environment.AGENTCORE_GATEWAY_JWT_TENANT_CLAIM === verification.jwtVerification.tenantClaimName, `${label}: Runtime tenant claim differs from the verified claim`);
   assert(environment.AGENTCORE_GATEWAY_JWT_DEPLOYMENT_TENANT_ID === verification.jwtVerification.deploymentTenantId, `${label}: Runtime deployment tenant differs from verification`);
+  assert(runtimeVerification.audience !== verification.jwtVerification.audience, `${label}: Runtime and Gateway JWT audiences must be distinct`);
+  assert(runtimeVerification.clientId !== verification.jwtVerification.clientId, `${label}: Runtime and Gateway JWT clients must be distinct`);
+  assert(runtimeVerification.allowedScope !== verification.jwtVerification.allowedScope, `${label}: Runtime and Gateway JWT scopes must be distinct`);
   assert(/^[A-Za-z0-9_.-]{3,255}$/.test(environment.AGENTCORE_REPLAY_TABLE), `${label}: replay table name is invalid`);
   assert(/^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$/.test(environment.AGENTCORE_REPLAY_DEPLOYMENT_ID), `${label}: replay deployment ID is invalid`);
   const replayLeaseMs = boundedInteger(environment.AGENTCORE_REPLAY_LEASE_MS, 1_000, 120_000, `${label}: replay lease`);
@@ -349,6 +402,8 @@ assert(schema.properties.destinationAccountId.pattern === "^[0-9]{12}$", "Runtim
 assert(updateSchema.properties.destinationAccountId.pattern === "^[0-9]{12}$", "Runtime update destination account boundary changed");
 assert(!Object.hasOwn(createInput, "metadataConfiguration"), "CreateAgentRuntime input must not contain unsupported metadataConfiguration");
 assert(schema.properties.createInput.properties.metadataConfiguration === undefined, "CreateAgentRuntime schema must not expose unsupported metadataConfiguration");
+assert(schema.properties.createInput.properties.requestHeaderConfiguration === undefined && updateSchema.properties.updateInput.properties.requestHeaderConfiguration === undefined, "Runtime schemas must not expose Authorization header forwarding");
+assert(schema.properties.createInput.required.includes("authorizerConfiguration") && updateSchema.properties.updateInput.required.includes("authorizerConfiguration"), "Runtime create and update must require CUSTOM_JWT authorization");
 assert(schema.properties.createInput.properties.protocolConfiguration.properties.serverProtocol.const === createInput.protocolConfiguration.serverProtocol, "Runtime protocol violates the create contract");
 assert(updateInput.metadataConfiguration.requireMMDSV2 === true, "Runtime update must require MMDSv2");
 assert(updateSchema.properties.updateInput.properties.metadataConfiguration.properties.requireMMDSV2.const === true, "Runtime update schema must fail closed on MMDSv2");
@@ -359,6 +414,7 @@ assert(new RegExp(schema.properties.createInput.properties.roleArn.pattern).test
 assert(new RegExp(updateSchema.properties.agentRuntimeId.pattern).test(updateExample.agentRuntimeId), "Runtime update ID fixture is invalid");
 assert(JSON.stringify(updateInput.agentRuntimeArtifact) === JSON.stringify(createInput.agentRuntimeArtifact), "Runtime update must preserve the pinned create artifact");
 assert(updateInput.roleArn === createInput.roleArn, "Runtime update must preserve the create role");
+assert(JSON.stringify(updateInput.authorizerConfiguration) === JSON.stringify(createInput.authorizerConfiguration), "Runtime update must preserve the create authorizer");
 assert(JSON.stringify(updateInput.protocolConfiguration) === JSON.stringify(createInput.protocolConfiguration), "Runtime update must preserve the create protocol");
 assert(JSON.stringify(updateInput.networkConfiguration) === JSON.stringify(createInput.networkConfiguration), "Runtime update must preserve the create network configuration");
 assert(new RegExp(schema.properties.postCreateVerification.properties.gateway.properties.url.pattern).test(verification.gateway.url), "Gateway URL fixture is invalid");
@@ -367,6 +423,44 @@ assert(verification.jwtVerification.allowedScope === "pilot.read_market_context"
 assert(verification.jwtVerification.deploymentTenantId === "pilot-agentcore-event-workload", "JWT deployment tenant fixture is invalid");
 assert(verification.jwtVerification.deploymentTenantId !== "wallet", "JWT deployment tenant must not be derived from a wallet tenant");
 validateRuntimeAccountBinding(example, updateExample, "repository Runtime examples");
+
+const missingRuntimeAuthorizerCreate = clone(example);
+delete missingRuntimeAuthorizerCreate.createInput.authorizerConfiguration;
+expectFailure(
+  () => validateRuntimeAccountBinding(missingRuntimeAuthorizerCreate, updateExample, "missing Runtime authorizer regression"),
+  "missing required property authorizerConfiguration",
+  "Runtime schema must reject a missing inbound authorizer",
+);
+
+const driftedRuntimeAuthorizerUpdate = clone(updateExample);
+driftedRuntimeAuthorizerUpdate.updateInput.authorizerConfiguration.customJWTAuthorizer.allowedClients = ["other-client"];
+expectFailure(
+  () => validateRuntimeAccountBinding(example, driftedRuntimeAuthorizerUpdate, "Runtime authorizer drift regression"),
+  "update must preserve the complete create Runtime authorizer",
+  "Runtime validator must reject create/update authorizer drift",
+);
+
+const reusedRuntimeAudienceCreate = clone(example);
+const reusedRuntimeAudienceUpdate = clone(updateExample);
+const gatewayAudience = reusedRuntimeAudienceCreate.postCreateVerification.jwtVerification.audience;
+reusedRuntimeAudienceCreate.createInput.authorizerConfiguration.customJWTAuthorizer.allowedAudience = [gatewayAudience];
+reusedRuntimeAudienceUpdate.updateInput.authorizerConfiguration.customJWTAuthorizer.allowedAudience = [gatewayAudience];
+reusedRuntimeAudienceCreate.postCreateVerification.runtimeInboundJwt.audience = gatewayAudience;
+expectFailure(
+  () => validateRuntimeAccountBinding(reusedRuntimeAudienceCreate, reusedRuntimeAudienceUpdate, "Runtime token reuse regression"),
+  "Runtime and Gateway JWT audiences must be distinct",
+  "Runtime validator must reject reuse of the outbound Gateway token audience",
+);
+
+const forwardedAuthorizationCreate = clone(example);
+const forwardedAuthorizationUpdate = clone(updateExample);
+forwardedAuthorizationCreate.createInput.requestHeaderConfiguration = { requestHeaderAllowlist: ["Authorization"] };
+forwardedAuthorizationUpdate.updateInput.requestHeaderConfiguration = { requestHeaderAllowlist: ["Authorization"] };
+expectFailure(
+  () => validateRuntimeAccountBinding(forwardedAuthorizationCreate, forwardedAuthorizationUpdate, "Authorization forwarding regression"),
+  "unexpected property requestHeaderConfiguration",
+  "Runtime schema must reject Authorization header forwarding",
+);
 
 const staticTokenCreate = clone(example);
 const staticTokenUpdate = clone(updateExample);
@@ -377,6 +471,28 @@ expectFailure(
   "unexpected property AGENTCORE_GATEWAY_BEARER_TOKEN",
   "Runtime schema must reject static token environment variables",
 );
+
+for (const [name, extraValue, expected] of [
+  ["AGENTCORE_GATEWAY_JWT_ALLOWED_SUBJECTS_JSON", "other-runtime", "JWT subjects: list length is invalid"],
+  ["AGENTCORE_GATEWAY_JWT_ALLOWED_CLIENTS_JSON", "other-client", "JWT clients: list length is invalid"],
+]) {
+  const multiPrincipalCreate = clone(example);
+  const multiPrincipalUpdate = clone(updateExample);
+  for (const document of [multiPrincipalCreate.createInput, multiPrincipalUpdate.updateInput]) {
+    const values = JSON.parse(document.environmentVariables[name]);
+    values.push(extraValue);
+    document.environmentVariables[name] = JSON.stringify(values);
+  }
+  expectFailure(
+    () => validateRuntimeAccountBinding(
+      multiPrincipalCreate,
+      multiPrincipalUpdate,
+      `${name} singleton regression`,
+    ),
+    expected,
+    `Runtime validator must reject multiple principals in ${name}`,
+  );
+}
 
 const crossAccountCreate = clone(example);
 const crossAccountUpdate = clone(updateExample);

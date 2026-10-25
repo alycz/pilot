@@ -20,6 +20,7 @@
     "verify:lambda": "pnpm build:lambda && pnpm smoke:lambda",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
+    "acceptance:identity:offline": "vitest run test/identity-acceptance.test.ts --reporter=verbose",
     "test:runtime-http": "vitest run test/runtime-http.test.ts test/runtime-entry.test.ts test/runtime-production.test.ts",
     "start:runtime": "tsx src/runtime-entry.ts"
   },

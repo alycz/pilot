@@ -12,6 +12,7 @@ import {
   createAgentCoreJwtVerifier,
   createVerifiedJwtGatewayAuth,
   type AgentCoreJwtPolicy,
+  type AgentCoreTokenRevocationChecker,
   type AgentCoreWorkloadJwtResolver,
 } from "./jwt";
 import { createAgentCoreRuntimeHandler } from "./runtime-handler";
@@ -57,6 +58,7 @@ export function createAgentCoreProductionRuntimeInvoker(input: Readonly<{
   jwksFetch?: typeof fetch;
   gatewayFetch?: typeof fetch;
   now?: () => number;
+  jwtRevocationChecker?: AgentCoreTokenRevocationChecker;
 }>): AgentCoreRuntimeInvoker {
   const gatewayToolName = AgentCoreGatewayToolNameSchema.parse(input.config.gatewayToolName);
   const jwtDeploymentTenantId = AgentCoreServerScopeSchema.shape.tenantId.parse(
@@ -65,6 +67,9 @@ export function createAgentCoreProductionRuntimeInvoker(input: Readonly<{
   const verifier = createAgentCoreJwtVerifier(input.config.jwtPolicy, {
     ...(input.jwksFetch ? { fetch: input.jwksFetch } : {}),
     ...(input.now ? { now: input.now } : {}),
+    ...(input.jwtRevocationChecker
+      ? { revocationChecker: input.jwtRevocationChecker }
+      : {}),
   });
   validateAgentCoreReplayDurations({
     leaseMs: input.config.replayLeaseMs,

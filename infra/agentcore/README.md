@@ -94,8 +94,13 @@ or access the table through the Lambda role.
 
 Runtime create/update inputs carry the same complete non-secret boot inventory:
 server mode, Region, Identity provider name, Gateway/tool binding, local JWT
-verification policy, replay settings, and Runtime request bounds. The validator
-requires exact equality across create and update and forbids static workload,
+verification policy, replay settings, Runtime request bounds, and one exact
+inbound `CUSTOM_JWT` authorizer. The inbound authorizer requires singleton
+audience, client, and scope allowlists plus exact `STRING`/`EQUALS` subject and
+deployment-tenant claims. It does not forward the inbound `Authorization`
+header into the Runtime container; AgentCore's verified inbound flow supplies
+the per-invocation workload token separately. The validator requires exact
+equality across create and update and forbids static workload,
 resource, bearer, access, secret, session, and web-identity token environment
 variables. Replay lease is 1,000–120,000 ms; retention is
 60,000–86,400,000 ms and must exceed lease. TTL is cleanup only. A dispatched
@@ -132,15 +137,16 @@ Runtime activation is deliberately staged and non-atomic:
 2. Substitute that ID into `runtime-update-mmdsv2.example.json`, validate it
    against `runtime-update-mmdsv2.input.schema.json`, and submit its
    `updateInput` as the `UpdateAgentRuntime` request body. This repeats the
-   pinned artifact, role, protocol, and network settings while adding
-   `metadataConfiguration.requireMMDSV2=true`.
+   pinned artifact, role, inbound authorizer, protocol, and network settings
+   while adding `metadataConfiguration.requireMMDSV2=true`.
 3. Wait for the updated Runtime to reach `READY`, then call `GetAgentRuntime`
    for the exact returned version. Attest that the response still contains the
-   expected image digest, role, protocol, network, and complete non-secret
-   Runtime environment and reports
+   expected image digest, role, inbound authorizer, protocol, network, and
+   complete non-secret Runtime environment and reports
    `metadataConfiguration.requireMMDSV2=true`.
 4. Only after that attestation may an approved operator create an endpoint and
-   deploy the second-stage caller role. If create, update, readiness, or
+   enable the separately reviewed JWT-bearing caller path. The IAM-only caller
+   role is not part of this Runtime activation. If create, update, readiness, or
    attestation fails, stop with no endpoint or invocation permission and have
    the account owner explicitly delete or roll back the temporary Runtime.
 
@@ -162,11 +168,13 @@ node infra/agentcore/validate.mjs path/to/runtime-create.json path/to/runtime-up
 The wrapper-only `destinationAccountId`, `region`, and verification fields are
 not sent in AWS request bodies; only `createInput` or `updateInput` is sent.
 
-Gateway JWT configuration declares the discovery URL, audience, client,
-subject, exact deployment-tenant claim name/value, and one read scope for
-account-time validation. Pass the same tenant claim name and deployment value
-used by the Runtime environment and `postCreateVerification`; a subject match
-alone is insufficient. The offline checks do
+Runtime and Gateway JWT configurations independently declare their discovery
+URL, audience, client, subject, exact deployment-tenant claim name/value, and
+one scope for account-time validation. Their bearer tokens are separate trust
+boundaries: the Pilot server's inbound Runtime token must not be reused as the
+Runtime's outbound Gateway token. Pass the Gateway tenant claim name and
+deployment value used by the Runtime environment and
+`postCreateVerification`; a subject match alone is insufficient. The offline checks do
 not fetch or validate OIDC discovery metadata. The Runtime verifier additionally binds
 the JWT tenant claim to one configured `deploymentTenantId` representing the
 approved deployment/workload. That value must be assigned independently and
@@ -181,14 +189,14 @@ still constrain DNS and egress and verify discovery/JWKS resolution in-account;
 syntax and same-origin checks alone do not prove resistance to DNS rebinding or
 an operator-controlled issuer.
 
-After the Runtime exists and passes MMDSv2 attestation, deploy
-`caller-role.template.json` as a second stack with its exact `RuntimeId` and one
-existing `PilotCallerRoleName`. The template derives both the Runtime ARN and
-caller principal ARN from `AWS::Partition`, `AWS::Region`, and
-`AWS::AccountId`; it accepts neither a caller ARN nor a Runtime ARN. Account
-root and cross-account principals/resources are therefore not configurable.
-This split avoids weakening the caller policy with a pre-creation Runtime
-wildcard.
+`caller-role.template.json` is an inert IAM/SigV4 alternative for a separately
+created IAM-authorized Runtime. Do not deploy it for the `CUSTOM_JWT` Runtime
+described by the create/update wrappers: IAM invocation does not satisfy or
+replace that Runtime's bearer-token boundary. If a separate IAM Runtime is ever
+approved, deploy the caller role only after its exact Runtime passes MMDSv2
+attestation. The template derives both the Runtime ARN and caller principal ARN
+from `AWS::Partition`, `AWS::Region`, and `AWS::AccountId`; it accepts neither a
+caller ARN nor a Runtime ARN.
 
 `operator-management.policy.template.json` is kept separate because it contains
 resource-management and deletion actions. Its literal `ACCOUNT_ID` and `REGION`
@@ -217,6 +225,12 @@ run in the approved destination account. Live
 validation still requires account-specific CloudFormation validation, a pinned
 ARM64 ECR image digest, the exact Lambda target ARN, IdP discovery/audience/
 client/subject/tenant values, role ARNs, and explicit deployment approval.
+The Runtime authorizer enforces token expiry but does not configure the IdP's
+maximum token lifetime or guarantee immediate revocation. The container template
+therefore declares the local maximum age/lifetime, clock skew, JWKS cache, and
+the truthful `expiry_only` revocation mode explicitly. A future `checker` mode
+requires a provider-backed adapter and a separately reviewed template change;
+no static-token shortcut belongs in these templates.
 
 Official schema references:
 

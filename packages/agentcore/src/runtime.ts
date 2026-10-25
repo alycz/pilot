@@ -23,6 +23,10 @@ import {
   deriveAgentCoreScopeDigest,
   type AgentCoreServerScope,
 } from "./contracts";
+import {
+  createAgentCoreJwtVerifier,
+  type AgentCoreTokenRevocationChecker,
+} from "./jwt";
 
 type RuntimeSender = Readonly<{
   send(command: InvokeAgentRuntimeCommand, options?: { abortSignal?: AbortSignal }): Promise<InvokeAgentRuntimeCommandOutput>;
@@ -30,10 +34,22 @@ type RuntimeSender = Readonly<{
 
 let sharedRuntimeClient: RuntimeSender | undefined;
 
+export interface AgentCoreRuntimeJwtResolver {
+  resolveAuthorization(
+    request: Readonly<{
+      tenantId: string;
+      audiences: readonly string[];
+      requiredScopes: readonly string[];
+    }>,
+    options?: Readonly<{ signal?: AbortSignal }>,
+  ): Promise<string>;
+}
+
 export interface AgentCoreProposalProvider extends ProposalProvider {
   readonly trust: Readonly<{
     transport: "disabled" | "agentcore-standin" | "aws-agentcore-runtime";
     localStandin: boolean;
+    runtimeAuthMode?: "iam" | "oauth_jwt";
   }>;
 }
 
@@ -239,6 +255,9 @@ export function createAgentCoreProposalProvider(input: Readonly<{
   scope: AgentCoreServerScope;
   fetch?: typeof fetch;
   runtimeClient?: RuntimeSender;
+  runtimeJwtResolver?: AgentCoreRuntimeJwtResolver;
+  runtimeJwksFetch?: typeof fetch;
+  runtimeJwtRevocationChecker?: AgentCoreTokenRevocationChecker;
 }>): AgentCoreProposalProvider {
   const { config } = input;
   if (config.mode === "off") {
@@ -259,6 +278,7 @@ export function createAgentCoreProposalProvider(input: Readonly<{
   });
   const scopeDigest = deriveAgentCoreScopeDigest(scope);
   const sender = config.mode === "aws"
+    && config.runtimeAuthMode === "iam"
     ? input.runtimeClient ?? (sharedRuntimeClient ??= new BedrockAgentCoreClient({
         region: config.region,
         maxAttempts: 1,
@@ -266,10 +286,28 @@ export function createAgentCoreProposalProvider(input: Readonly<{
       }))
     : undefined;
   const transport = input.fetch ?? globalThis.fetch;
+  const runtimeJwtVerifier = config.mode === "aws" && config.runtimeAuthMode === "oauth_jwt"
+    ? createAgentCoreJwtVerifier(config.runtimeJwtPolicy, {
+        ...(input.runtimeJwksFetch ? { fetch: input.runtimeJwksFetch } : {}),
+        ...(input.runtimeJwtRevocationChecker
+          ? { revocationChecker: input.runtimeJwtRevocationChecker }
+          : {}),
+      })
+    : undefined;
+  if (config.mode === "aws" && config.runtimeAuthMode === "oauth_jwt" && !input.runtimeJwtResolver) {
+    throw new AgentCoreInvocationError(
+      "disabled",
+      "AgentCore Runtime OAuth authorization resolver is not configured",
+    );
+  }
 
   return {
     enabled: true,
-    trust: { transport: expectedTransport, localStandin: config.mode === "standin" },
+    trust: {
+      transport: expectedTransport,
+      localStandin: config.mode === "standin",
+      ...(config.mode === "aws" ? { runtimeAuthMode: config.runtimeAuthMode } : {}),
+    },
     async propose(rawRequest, options: ProposalCallOptions = {}) {
       const request = AgentCoreResearchRequestSchema.parse(rawRequest);
       const requestDigest = deriveAgentCoreRequestDigest({ request, scopeDigest, gatewayBindingDigest });
@@ -317,14 +355,83 @@ export function createAgentCoreProposalProvider(input: Readonly<{
           }
           return parseResponse(await readFetchBody(response, config.maxResponseBytes, signal), expected);
         }
+        const runtimeSessionId = randomUUID();
+        if (config.runtimeAuthMode === "oauth_jwt") {
+          let authorization: string;
+          try {
+            authorization = await input.runtimeJwtResolver!.resolveAuthorization({
+              tenantId: config.runtimeJwtTenantId,
+              audiences: runtimeJwtVerifier!.policy.audiences,
+              requiredScopes: runtimeJwtVerifier!.policy.requiredScopes,
+            }, { signal });
+            await runtimeJwtVerifier!.verifyAuthorization(authorization, {
+              tenantId: config.runtimeJwtTenantId,
+              signal,
+            });
+          } catch {
+            throw new AgentCoreInvocationError(
+              "failed",
+              "AgentCore Runtime authorization is unavailable",
+            );
+          }
+          const endpoint = new URL(
+            `/runtimes/${encodeURIComponent(config.runtimeArn)}/invocations`,
+            `https://bedrock-agentcore.${config.region}.amazonaws.com`,
+          );
+          endpoint.searchParams.set("qualifier", config.qualifier);
+          let response: Response;
+          try {
+            response = await transport(endpoint, {
+              method: "POST",
+              redirect: "error",
+              signal,
+              headers: {
+                accept: "application/json",
+                authorization,
+                "content-type": "application/json",
+                "x-amzn-bedrock-agentcore-runtime-session-id": runtimeSessionId,
+              },
+              body: payload,
+            });
+          } catch {
+            throw new AgentCoreInvocationError(
+              "uncertain",
+              "AgentCore Runtime transport failed after dispatch",
+            );
+          }
+          if (!response.ok || response.redirected) {
+            await response.body?.cancel().catch(() => undefined);
+            const deterministic = response.status >= 400 && response.status < 500 && !response.redirected;
+            throw new AgentCoreInvocationError(
+              deterministic ? "failed" : "uncertain",
+              deterministic
+                ? `AgentCore Runtime rejected the request with status ${response.status}`
+                : "AgentCore Runtime transport failed after dispatch",
+            );
+          }
+          const returnedSessionId = response.headers.get(
+            "x-amzn-bedrock-agentcore-runtime-session-id",
+          );
+          if (
+            response.headers.get("content-type")?.split(";", 1)[0]?.trim() !== "application/json" ||
+            (returnedSessionId !== null && returnedSessionId !== runtimeSessionId)
+          ) {
+            await response.body?.cancel().catch(() => undefined);
+            throw new AgentCoreInvocationError("failed", "AgentCore Runtime returned an invalid response");
+          }
+          return parseResponse(await readFetchBody(response, config.maxResponseBytes, signal), expected);
+        }
         const output = await sender!.send(new InvokeAgentRuntimeCommand({
           agentRuntimeArn: config.runtimeArn,
           qualifier: config.qualifier,
-          runtimeSessionId: randomUUID(),
+          runtimeSessionId,
           contentType: "application/json",
           accept: "application/json",
           payload,
         }), { abortSignal: signal });
+        if (output.runtimeSessionId !== undefined && output.runtimeSessionId !== runtimeSessionId) {
+          throw new AgentCoreInvocationError("failed", "AgentCore Runtime returned an invalid response");
+        }
         if (output.contentType?.split(";", 1)[0]?.trim() !== "application/json") {
           throw new AgentCoreInvocationError("failed", "AgentCore Runtime returned an unsupported content type");
         }
@@ -337,6 +444,21 @@ export function createAgentCoreProposalProvider(input: Readonly<{
 export function createAgentCoreProposalProviderFromEnv(input: Readonly<{
   env?: Readonly<Record<string, string | undefined>>;
   scope: AgentCoreServerScope;
+  fetch?: typeof fetch;
+  runtimeClient?: RuntimeSender;
+  runtimeJwtResolver?: AgentCoreRuntimeJwtResolver;
+  runtimeJwksFetch?: typeof fetch;
+  runtimeJwtRevocationChecker?: AgentCoreTokenRevocationChecker;
 }>): AgentCoreProposalProvider {
-  return createAgentCoreProposalProvider({ config: readAgentCoreConfig(input.env), scope: input.scope });
+  return createAgentCoreProposalProvider({
+    config: readAgentCoreConfig(input.env),
+    scope: input.scope,
+    ...(input.fetch ? { fetch: input.fetch } : {}),
+    ...(input.runtimeClient ? { runtimeClient: input.runtimeClient } : {}),
+    ...(input.runtimeJwtResolver ? { runtimeJwtResolver: input.runtimeJwtResolver } : {}),
+    ...(input.runtimeJwksFetch ? { runtimeJwksFetch: input.runtimeJwksFetch } : {}),
+    ...(input.runtimeJwtRevocationChecker
+      ? { runtimeJwtRevocationChecker: input.runtimeJwtRevocationChecker }
+      : {}),
+  });
 }

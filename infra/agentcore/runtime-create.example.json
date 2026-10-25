@@ -9,6 +9,32 @@
       }
     },
     "roleArn": "arn:aws:iam::000000000000:role/pilot-agentcore-runtime-example",
+    "authorizerConfiguration": {
+      "customJWTAuthorizer": {
+        "discoveryUrl": "https://identity.example.invalid/.well-known/openid-configuration",
+        "allowedAudience": ["pilot-agentcore-runtime"],
+        "allowedClients": ["pilot-agentcore-server"],
+        "allowedScopes": ["pilot.invoke_agentcore_research"],
+        "customClaims": [
+          {
+            "inboundTokenClaimName": "sub",
+            "inboundTokenClaimValueType": "STRING",
+            "authorizingClaimMatchValue": {
+              "claimMatchOperator": "EQUALS",
+              "claimMatchValue": { "matchValueString": "pilot-server" }
+            }
+          },
+          {
+            "inboundTokenClaimName": "tenant_id",
+            "inboundTokenClaimValueType": "STRING",
+            "authorizingClaimMatchValue": {
+              "claimMatchOperator": "EQUALS",
+              "claimMatchValue": { "matchValueString": "pilot-agentcore-event-workload" }
+            }
+          }
+        ]
+      }
+    },
     "protocolConfiguration": {
       "serverProtocol": "HTTP"
     },
@@ -31,6 +57,12 @@
       "AGENTCORE_GATEWAY_JWT_TENANT_CLAIM": "tenant_id",
       "AGENTCORE_GATEWAY_JWT_DEPLOYMENT_TENANT_ID": "pilot-agentcore-event-workload",
       "AGENTCORE_GATEWAY_JWT_ALGORITHMS_JSON": "[\"RS256\"]",
+      "AGENTCORE_GATEWAY_JWT_CLOCK_TOLERANCE_SECONDS": "30",
+      "AGENTCORE_GATEWAY_JWT_MAX_TOKEN_AGE_SECONDS": "300",
+      "AGENTCORE_GATEWAY_JWT_MAX_TOKEN_LIFETIME_SECONDS": "600",
+      "AGENTCORE_GATEWAY_JWT_JWKS_CACHE_TTL_MS": "300000",
+      "AGENTCORE_GATEWAY_JWT_JWKS_REFRESH_COOLDOWN_MS": "10000",
+      "AGENTCORE_GATEWAY_JWT_REVOCATION_MODE": "expiry_only",
       "AGENTCORE_REPLAY_TABLE": "pilot-agentcore-replay-example",
       "AGENTCORE_REPLAY_DEPLOYMENT_ID": "pilot-agentcore-event-workload",
       "AGENTCORE_REPLAY_LEASE_MS": "30000",
@@ -48,6 +80,17 @@
     }
   },
   "postCreateVerification": {
+    "runtimeInboundJwt": {
+      "authMode": "CUSTOM_JWT",
+      "discoveryUrl": "https://identity.example.invalid/.well-known/openid-configuration",
+      "issuer": "https://identity.example.invalid/",
+      "audience": "pilot-agentcore-runtime",
+      "clientId": "pilot-agentcore-server",
+      "subject": "pilot-server",
+      "allowedScope": "pilot.invoke_agentcore_research",
+      "tenantClaimName": "tenant_id",
+      "deploymentTenantId": "pilot-agentcore-event-workload"
+    },
     "gateway": {
       "url": "https://pilotgateway-0000000000.gateway.bedrock-agentcore.us-east-2.amazonaws.com/mcp",
       "toolName": "PilotReadTarget___pilot.read_market_context",

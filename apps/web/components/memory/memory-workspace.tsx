@@ -213,14 +213,12 @@ export function MemoryWorkspace() {
     setDemoPolicy(PolicySchema.parse(nextPolicy));
   };
 
-  const demoReason = presentation.kind === "demo" ? presentation.reason : undefined;
   const loading = readiness.kind === "checking" || (readiness.kind === "live" && liveState.kind === "loading");
   const liveError = readiness.kind === "live" && liveState.kind === "error" ? liveState.message : undefined;
   const refreshing = checkingContext || liveState.kind === "refreshing";
 
   return (
     <div className="w-full min-w-0">
-      {demo ? <DemoBand reason={demoReason} /> : null}
       <section className="relative flex min-w-0 flex-col gap-6 overflow-hidden border-b border-border px-4 py-8 sm:px-6 sm:py-10 lg:flex-row lg:items-end lg:justify-between lg:px-8" aria-labelledby="memory-overview-title">
         <div className="relative min-w-0">
           <p className="label-mono flex items-center gap-2"><Sparkles className="h-3.5 w-3.5 text-primary" aria-hidden="true" />Persistent context</p>
@@ -291,25 +289,6 @@ export function MemoryWorkspace() {
   );
 }
 
-function DemoBand({ reason }: { reason?: string }) {
-  return (
-    <div className="flex min-w-0 flex-col gap-3 border-b border-border bg-surface px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:hidden" role="note" aria-label="Demo vault">
-      <p className="flex min-w-0 items-start gap-2.5 text-[13px] leading-5 text-muted-foreground">
-        <span aria-hidden="true" className="mt-[7px] h-1.5 w-1.5 shrink-0 bg-primary" />
-        <span>
-          <span className="font-medium text-foreground">You&apos;re viewing a demo vault.</span> Connect a wallet to see your own notes and policy.
-          {reason ? <span className="mt-0.5 block text-xs">{reason}</span> : null}
-        </span>
-      </p>
-      <Link
-        href="/onboarding"
-        className="link-dashed inline-flex shrink-0 items-center gap-1.5 self-start text-[13px] font-medium text-foreground sm:self-auto pointer-coarse:py-3.5"
-      >
-        Get started <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-      </Link>
-    </div>
-  );
-}
 
 function StatusBanner({ children, icon: Icon, spin = false, tone }: { children: React.ReactNode; icon: typeof AlertCircle; spin?: boolean; tone: "info" | "error" }) {
   return (

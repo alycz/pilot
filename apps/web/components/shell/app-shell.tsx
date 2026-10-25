@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ArrowRight,
   Bot,
   BookOpenText,
   CandlestickChart,
@@ -71,7 +70,7 @@ function isSignedOut(identity: ShellIdentityLabels): boolean {
   return identity.walletStatus === "disconnected" || identity.walletStatus === "unavailable";
 }
 
-type NavKey = "chat" | "markets" | "backtests" | "strategy-research" | "map" | "portfolio" | "strategy" | "agreements" | "memory" | "how-it-works";
+type NavKey = "chat" | "markets" | "backtests" | "strategy-research" | "map" | "portfolio" | "strategy" | "agreements" | "memory";
 
 const navigation = [
   { key: "chat", label: "Chat", href: "/chat", icon: MessageCircle },
@@ -83,7 +82,6 @@ const navigation = [
   { key: "strategy", label: "Strategy", href: "/strategy", icon: Bot },
   { key: "agreements", label: "Agreements", href: "/agreements", icon: Handshake },
   { key: "memory", label: "Memory", href: "/memory", icon: Sparkles },
-  { key: "how-it-works", label: "How it works", href: "/how-it-works", icon: BookOpenText },
 ] as const;
 
 export function AppShell({
@@ -150,7 +148,6 @@ export function AppShell({
           <div className="mt-auto space-y-3 pt-5 lg:pb-14">
             {/* Page-specific footer context (e.g. chat's Live context) is portalled in here. */}
             <div id={SHELL_SIDEBAR_FOOTER_SLOT_ID} className="empty:hidden" />
-            {signedOut ? <SidebarDemoCard /> : null}
             {!signedIn ? null : (
               <>
                 <div className="xl:hidden"><NetworkBadge identity={identity} /></div>
@@ -196,7 +193,6 @@ export function AppShell({
               <DelegationStatus status={delegationStatus} />
             </div>
           )}
-          {signedOut ? <div className="mt-auto pt-6"><SidebarDemoCard /></div> : null}
         </div>
       </aside>
 
@@ -283,26 +279,6 @@ function DemoAccountCta() {
   );
 }
 
-/**
- * Signed-out state stays explicit on every app page, as one quiet line
- * rather than a highlighted card.
- */
-function SidebarDemoCard() {
-  return (
-    <div role="note" aria-label="Demo mode" className="px-1 text-[12px] leading-[1.125rem] text-muted-foreground">
-      <p className="flex items-center gap-2 font-medium text-foreground">
-        <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-        Demo mode
-      </p>
-      <p className="mt-1">
-        Chat, Portfolio and Memory use sample data until you connect a wallet.{" "}
-        <Link href="/onboarding" className="link-dashed inline-flex min-h-11 items-center gap-1 font-medium text-foreground pointer-fine:min-h-0">
-          Get started <ArrowRight className="h-3 w-3" aria-hidden="true" />
-        </Link>
-      </p>
-    </div>
-  );
-}
 
 function NetworkBadge({ identity }: { identity: ShellIdentityLabels }) {
   return (

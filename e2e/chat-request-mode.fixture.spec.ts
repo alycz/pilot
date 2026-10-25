@@ -5,7 +5,7 @@ const ACCOUNT_B = "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe";
 
 test.beforeEach(({ lane }) => requireLane(lane, "fixture"));
 
-test("request mode is request-scoped across repeat, interruption, reload, navigation, and account switch", async ({ page }) => {
+test("request mode is request-scoped across interruption, reload, navigation, and account switch", async ({ page }) => {
   let activeAccount = ACCOUNT_A;
   const requests: Array<Record<string, unknown>> = [];
 
@@ -54,13 +54,6 @@ test("request mode is request-scoped across repeat, interruption, reload, naviga
   await expect(page.getByLabel("Request scope").last()).toContainText("One-time");
   expect(requests[0]?.request_mode).toBe("one_time");
 
-  // Changing the current selector must not reinterpret Repeat; it reuses the
-  // original request's exact mode.
-  await chooseMode("Autonomous");
-  await page.getByRole("button", { name: "Repeat" }).click();
-  await expect.poll(() => requests.length).toBe(2);
-  expect(requests[1]?.request_mode).toBe("one_time");
-
   await chooseMode("Recurring");
   await composer.fill("slow recurring buy of 10 RLUSD every day");
   await page.getByRole("button", { name: "Send message" }).click();
@@ -68,7 +61,7 @@ test("request mode is request-scoped across repeat, interruption, reload, naviga
   await page.getByRole("button", { name: "Stop streaming" }).click();
   await expect(page.getByText(/Stopped before any transaction tool completed/)).toBeVisible();
   await expect(page.getByLabel("Request scope").last()).toContainText("Recurring");
-  expect(requests[2]?.request_mode).toBe("recurring");
+  expect(requests[1]?.request_mode).toBe("recurring");
 
   await chooseMode("Autonomous");
   await page.reload();

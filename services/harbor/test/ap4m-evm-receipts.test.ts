@@ -18,14 +18,21 @@ const FUNDING = '0x2222222222222222222222222222222222222222' as Address;
 const PAYOUT = '0x3333333333333333333333333333333333333333' as Address;
 const TX_HASH = `0x${'11'.repeat(32)}` as Hex;
 const BLOCK_HASH = `0x${'22'.repeat(32)}` as Hex;
+const EVIDENCE_0 = `0x${'40'.repeat(32)}` as Hex;
+const EVIDENCE_1 = `0x${'41'.repeat(32)}` as Hex;
+const EVIDENCE_2 = `0x${'42'.repeat(32)}` as Hex;
 const EXPECTED_ARGS = {
 	channelId: CHANNEL,
 	claimId: CLAIM,
+	evidence0: EVIDENCE_0,
+	evidence1: EVIDENCE_1,
 	agent: AGENT,
+	evidence2: EVIDENCE_2,
 	payout: PAYOUT,
 	token: AP4M_EVM_EVENT_PROFILE.rlusdToken,
 	cumulativeAmount: 20n,
 	incrementalAmount: 5n,
+	evidence3: 7n,
 } as const;
 
 function eventLog(overrides: Record<string, unknown> = {}) {
@@ -37,8 +44,8 @@ function eventLog(overrides: Record<string, unknown> = {}) {
 			args: { channelId: CHANNEL, claimId: CLAIM, agent: AGENT },
 		}),
 		data: encodeAbiParameters(
-			parseAbiParameters('address payout, address token, uint256 cumulativeAmount, uint256 incrementalAmount'),
-			[PAYOUT, AP4M_EVM_EVENT_PROFILE.rlusdToken, 20n, 5n],
+			parseAbiParameters('bytes32 evidence0, bytes32 evidence1, bytes32 evidence2, address payout, address token, uint256 cumulativeAmount, uint256 incrementalAmount, uint256 evidence3'),
+			[EVIDENCE_0, EVIDENCE_1, EVIDENCE_2, PAYOUT, AP4M_EVM_EVENT_PROFILE.rlusdToken, 20n, 5n, 7n],
 		),
 		logIndex: 0,
 		removed: false,
@@ -62,6 +69,10 @@ function expectation(overrides: Record<string, unknown> = {}) {
 		blockHash: BLOCK_HASH,
 		channelId: CHANNEL,
 		claimId: CLAIM,
+		evidence0: EVIDENCE_0,
+		evidence1: EVIDENCE_1,
+		evidence2: EVIDENCE_2,
+		evidence3: '7',
 		agent: AGENT,
 		fundingWallet: FUNDING,
 		merchantPayout: PAYOUT,
@@ -87,8 +98,8 @@ describe('AP4M EVM receipt validation', () => {
 			[eventLog({ removed: true })],
 			[eventLog({ address: PAYOUT })],
 			[eventLog({ data: encodeAbiParameters(
-				parseAbiParameters('address payout, address token, uint256 cumulativeAmount, uint256 incrementalAmount'),
-				[PAYOUT, AP4M_EVM_EVENT_PROFILE.rlusdToken, 21n, 6n],
+				parseAbiParameters('bytes32 evidence0, bytes32 evidence1, bytes32 evidence2, address payout, address token, uint256 cumulativeAmount, uint256 incrementalAmount, uint256 evidence3'),
+				[EVIDENCE_0, EVIDENCE_1, EVIDENCE_2, PAYOUT, AP4M_EVM_EVENT_PROFILE.rlusdToken, 21n, 6n, 7n],
 			) })],
 		]) {
 			expect(() => validateFinalizedReceipt(receipt(logs), expectation()))

@@ -141,6 +141,14 @@ export const OP_SCREENING_CLASSIFICATION: Readonly<
   "amm.pools": "structured",
   "amm.position": "structured",
   "ap4m.purchase": "untrusted",
+  // The event-EVM surface returns only strict local identifiers, typed-data,
+  // transaction fields, and verified on-chain evidence. It never returns
+  // merchant prose or an arbitrary service body.
+  "ap4m.evmPrepareApproval": "structured",
+  "ap4m.evmBindVoucher": "structured",
+  "ap4m.evmRecordSubmission": "structured",
+  "ap4m.evmReconcile": "structured",
+  "ap4m.evmStatus": "structured",
   "channel.list": "structured",
   "channel.status": "structured",
   // Local capability results contain only strict first-party identifiers,

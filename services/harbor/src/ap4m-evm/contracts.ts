@@ -21,6 +21,8 @@ export const PreparedEvmTransactionSchema = z.object({
 	data: HexDataSchema,
 	value: CanonicalUintSchema,
 	gasLimit: PositiveUintSchema,
+	feeModel: z.literal('legacy'),
+	gasPrice: PositiveUintSchema,
 }).strict();
 
 export const Ap4mEvmChannelSchema = z.object({

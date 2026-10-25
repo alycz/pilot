@@ -12,11 +12,14 @@ import { Ap4mEvmValidationError } from './contracts';
 /**
  * The only contract surface supported by this initial, signerless slice.
  * Opening and closing channels stay unsupported until their published ABI is
- * independently reviewed. Callers cannot replace this ABI at runtime.
+ * independently reviewed. The public material exposes the complete event type
+ * sequence but not names for four protocol-specific evidence values, so those
+ * values stay deliberately opaque and must be bound by a reviewed caller
+ * before a receipt can become final. Callers cannot replace this ABI at runtime.
  */
 export const AP4M_PAYMENT_LEDGER_ABI = parseAbi([
-	'function redeemVoucher(bytes32 channelId, uint256 cumulativeAmount, bytes signature)',
-	'event VoucherRedeemed(bytes32 indexed channelId, bytes32 indexed claimId, address indexed agent, address payout, address token, uint256 cumulativeAmount, uint256 incrementalAmount)',
+	'function redeemVoucher((bytes32 channelId, uint256 cumulativeAmount) voucher, bytes agentSignature)',
+	'event VoucherRedeemed(bytes32 indexed channelId, bytes32 indexed claimId, bytes32 evidence0, bytes32 evidence1, address indexed agent, bytes32 evidence2, address payout, address token, uint256 cumulativeAmount, uint256 incrementalAmount, uint256 evidence3)',
 ]);
 
 export const AP4M_REDEEM_VOUCHER_FUNCTION = 'redeemVoucher' as const;

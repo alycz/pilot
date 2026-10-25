@@ -16,6 +16,15 @@ export type ReceiptEventExpectation = Readonly<{
 	blockHash: Hex;
 	channelId: Hex;
 	claimId: Hex;
+	/**
+	 * The event publishes four additional protocol-bound values whose public
+	 * semantics are not documented. Callers must supply exact reviewed values;
+	 * this validator never ignores or invents them.
+	 */
+	evidence0: Hex;
+	evidence1: Hex;
+	evidence2: Hex;
+	evidence3: string;
 	agent: Address;
 	fundingWallet: Address;
 	merchantPayout: Address;
@@ -85,6 +94,9 @@ export function validateFinalizedReceipt(
 		!Hex32Schema.safeParse(expected.blockHash).success ||
 		!Hex32Schema.safeParse(expected.channelId).success ||
 		!Hex32Schema.safeParse(expected.claimId).success ||
+		!Hex32Schema.safeParse(expected.evidence0).success ||
+		!Hex32Schema.safeParse(expected.evidence1).success ||
+		!Hex32Schema.safeParse(expected.evidence2).success ||
 		!EvmAddressSchema.safeParse(expected.agent).success ||
 		!EvmAddressSchema.safeParse(expected.fundingWallet).success ||
 		!EvmAddressSchema.safeParse(expected.merchantPayout).success ||
@@ -128,17 +140,22 @@ export function validateFinalizedReceipt(
 	}
 	const cumulativeAmount = canonicalUint(expected.cumulativeAmount, 'expected cumulative amount', 'INVALID_RECEIPT');
 	const incrementalAmount = canonicalUint(expected.incrementalAmount, 'expected incremental amount', 'INVALID_RECEIPT');
+	const evidence3 = canonicalUint(expected.evidence3, 'expected event evidence', 'INVALID_RECEIPT');
 	if (incrementalAmount < 1n || cumulativeAmount < incrementalAmount) {
 		throw new Ap4mEvmValidationError('Receipt amount binding is invalid', 'INVALID_RECEIPT');
 	}
 	const expectedArgs = {
 		channelId: expected.channelId,
 		claimId: expected.claimId,
+		evidence0: expected.evidence0,
+		evidence1: expected.evidence1,
 		agent,
+		evidence2: expected.evidence2,
 		payout: merchantPayout,
 		token,
 		cumulativeAmount,
 		incrementalAmount,
+		evidence3,
 	};
 	if (decoded.length !== 1 || !equal(decoded[0], expectedArgs)) {
 		throw new Ap4mEvmValidationError(

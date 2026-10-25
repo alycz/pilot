@@ -117,6 +117,7 @@ describe("bounded AgentCore live acceptance runner", () => {
       exp: seconds + 120,
     });
     const secretProvider = { resolveSecret: vi.fn(async () => "fixture-client-secret") };
+    const approvalJournal = { consume: vi.fn(async () => undefined) };
     const oauthFetch = vi.fn(async () => new Response(JSON.stringify({
       access_token: accessToken,
       token_type: "Bearer",
@@ -152,6 +153,7 @@ describe("bounded AgentCore live acceptance runner", () => {
       env: liveEnvironment,
       now: () => NOW,
       secretProvider,
+      approvalJournal,
       oauthFetch,
       runtimeFetch,
       jwksFetch: jwks.fetch,
@@ -163,6 +165,10 @@ describe("bounded AgentCore live acceptance runner", () => {
     });
     expect(oauthFetch).toHaveBeenCalledTimes(1);
     expect(runtimeFetch).toHaveBeenCalledTimes(1);
+    expect(approvalJournal.consume).toHaveBeenCalledWith({
+      runId: RUN_ID,
+      approvedAt: "2026-10-25T11:55:00.000Z",
+    });
     const serialized = serializeAgentCoreIdentityLiveAcceptanceReport(report);
     expect(serialized).not.toContain(accessToken);
     expect(serialized).not.toContain("fixture-client-secret");
@@ -176,6 +182,7 @@ describe("bounded AgentCore live acceptance runner", () => {
       env: { ...liveEnvironment, AGENTCORE_IDENTITY_LIVE_APPROVAL: "yes" },
       now: () => NOW,
       secretProvider: { resolveSecret: vi.fn() },
+      approvalJournal: { consume: vi.fn() },
       oauthFetch: transport,
       runtimeFetch: transport,
     })).rejects.toThrow("approval marker");
@@ -186,6 +193,35 @@ describe("bounded AgentCore live acceptance runner", () => {
       oauthFetch: transport,
       runtimeFetch: transport,
     })).rejects.toThrow("server-only secret provider");
+    await expect(runAgentCoreIdentityLiveAcceptance({
+      args: ["--live"],
+      env: liveEnvironment,
+      now: () => NOW,
+      secretProvider: { resolveSecret: vi.fn() },
+      oauthFetch: transport,
+      runtimeFetch: transport,
+    })).rejects.toThrow("durable approval journal");
+    expect(transport).not.toHaveBeenCalled();
+  });
+
+  it("consumes the durable approval before secret access and transport", async () => {
+    const secretProvider = { resolveSecret: vi.fn() };
+    const transport = vi.fn();
+    await expect(runAgentCoreIdentityLiveAcceptance({
+      args: ["--live"],
+      env: liveEnvironment,
+      now: () => NOW,
+      secretProvider,
+      approvalJournal: {
+        consume: vi.fn(async () => {
+          throw new Error("already consumed");
+        }),
+      },
+      oauthFetch: transport,
+      runtimeFetch: transport,
+      jwksFetch: transport,
+    })).rejects.toThrow("already consumed");
+    expect(secretProvider.resolveSecret).not.toHaveBeenCalled();
     expect(transport).not.toHaveBeenCalled();
   });
 });

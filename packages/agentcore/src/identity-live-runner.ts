@@ -6,6 +6,7 @@ import {
   createAgentCoreRuntimeOAuthJwtResolverFromEnv,
   type AgentCoreSecretProvider,
 } from "./runtime-oauth";
+import type { AgentCoreIdentityApprovalJournal } from "./identity-approval-journal";
 import { createAgentCoreProposalProviderFromEnv } from "./runtime";
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -45,6 +46,7 @@ export async function runAgentCoreIdentityLiveAcceptance(input: Readonly<{
   env?: Env;
   now?: () => number;
   secretProvider?: AgentCoreSecretProvider;
+  approvalJournal?: AgentCoreIdentityApprovalJournal;
   oauthFetch?: typeof fetch;
   runtimeFetch?: typeof fetch;
   jwksFetch?: typeof fetch;
@@ -68,6 +70,9 @@ export async function runAgentCoreIdentityLiveAcceptance(input: Readonly<{
   if (!input.secretProvider) {
     throw new Error("Live identity acceptance requires a server-only secret provider");
   }
+  if (!input.approvalJournal) {
+    throw new Error("Live identity acceptance requires a durable approval journal");
+  }
   const runtimeJwtResolver = createAgentCoreRuntimeOAuthJwtResolverFromEnv({
     env,
     secretProvider: input.secretProvider,
@@ -88,6 +93,10 @@ export async function runAgentCoreIdentityLiveAcceptance(input: Readonly<{
   if (!provider.enabled || provider.trust.transport !== "aws-agentcore-runtime") {
     throw new Error("Live identity acceptance Runtime is unavailable");
   }
+  await input.approvalJournal.consume({
+    runId: preflight.runId,
+    approvedAt: preflight.approvedAt,
+  });
   const result = await provider.propose({
     requestId: `acceptance-${preflight.runId}`,
     purpose: "read",

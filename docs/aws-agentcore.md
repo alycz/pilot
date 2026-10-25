@@ -210,6 +210,11 @@ After separate resource, cost, secret-entry, and single-run approval, the bounde
 runner is `pnpm --filter @pilot/agentcore acceptance:identity:live`. It requires
 the exact approval marker, a fresh UUID and timestamp, `us-east-2`, the complete
 Runtime/Gateway identity policy, and a dedicated public Testnet owner address.
+It also requires `AGENTCORE_IDENTITY_ACCEPTANCE_STATE_ROOT` to name a durable,
+owner-private `0700` directory on persistent local storage. The runner atomically
+consumes the UUID there before secret access or Runtime transport, retains the
+claim after failure, and rejects same-process, restart, and concurrent replay.
+Do not place this journal under `/tmp`, a shared directory, or ephemeral storage.
 It then obtains one fresh caller token and sends exactly one fixed public
 XRP/RLUSD Testnet read to the configured Runtime. Its report contains only run
 metadata and PASS/FAIL, never a token, secret, response body, wallet history, or

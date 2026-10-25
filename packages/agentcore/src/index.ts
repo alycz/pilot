@@ -3,6 +3,7 @@ export * from "./contracts";
 export * from "./gateway";
 export * from "./identity";
 export * from "./identity-acceptance";
+export * from "./identity-approval-journal";
 export * from "./identity-live-runner";
 export * from "./identity-sdk";
 export * from "./jwt";

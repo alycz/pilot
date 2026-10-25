@@ -1,4 +1,5 @@
 import {
+  createFileAgentCoreIdentityApprovalJournal,
   createMountedFileAgentCoreSecretProvider,
   runAgentCoreIdentityLiveAcceptance,
   serializeAgentCoreIdentityLiveAcceptanceReport,
@@ -11,11 +12,17 @@ const secretProvider = liveRequested
       root: process.env.AGENTCORE_RUNTIME_OAUTH_SECRET_MOUNT_ROOT?.trim() || "/run/secrets/pilot",
     })
   : undefined;
+const approvalJournal = liveRequested && process.env.AGENTCORE_IDENTITY_ACCEPTANCE_STATE_ROOT
+  ? createFileAgentCoreIdentityApprovalJournal({
+      root: process.env.AGENTCORE_IDENTITY_ACCEPTANCE_STATE_ROOT,
+    })
+  : undefined;
 
 try {
   const report = await runAgentCoreIdentityLiveAcceptance({
     args,
     ...(secretProvider ? { secretProvider } : {}),
+    ...(approvalJournal ? { approvalJournal } : {}),
   });
   process.stdout.write(`${serializeAgentCoreIdentityLiveAcceptanceReport(report)}\n`);
 } catch {

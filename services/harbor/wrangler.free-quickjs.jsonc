@@ -2,13 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "replace-with-approved-worker-name",
   "main": "src/server.ts",
-  "workers_dev": false,
-  "routes": [
-    {
-      "pattern": "replace.invalid",
-      "custom_domain": true
-    }
-  ],
+  "workers_dev": true,
   "compatibility_date": "2026-10-06",
   "compatibility_flags": [
     "nodejs_compat"
@@ -17,7 +11,8 @@
     {
       "binding": "DB",
       "database_name": "replace-with-approved-d1-name",
-      "database_id": "00000000-0000-0000-0000-000000000000"
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations-free-quickjs"
     }
   ],
   "triggers": {
@@ -30,9 +25,11 @@
   "vars": {
     "HARBOR_DEPLOYMENT_PROFILE": "free-quickjs",
     "HARBOR_SOURCE_TAG": "2610240",
-    "HARBOR_PUBLIC_URL": "https://replace.invalid",
+    "HARBOR_PUBLIC_URL": "https://replace-with-approved-worker-name.replace-with-account-subdomain.workers.dev",
     "EXEC_NETWORK": "testnet",
     "MAINNET_EXECUTION": "false",
+    "HARBOR_MOCK": "1",
+    "LIVE": "0",
     "EXECUTOR": "quickjs",
     "HARBOR_MCP_EXECUTION_ENABLED": "false",
     "AUTONOMOUS_STRATEGY_RUNNER": "false",
@@ -40,6 +37,9 @@
     "MASTERCARD_MCP_ENABLED": "false",
     "KMS_MODE": "off",
     "AP4M_DEMO_ENABLED": "false",
+    "AP4M_EVM_EVENT_ENABLED": "false",
+    "AP4M_EVM_EVENT_MODE": "off",
+    "GUARDRAILS_MODE": "off",
     "HARBOR_DEMO_QUOTA_ENABLED": "0"
   }
 }

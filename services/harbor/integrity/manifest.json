@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "digestAlgorithm": "sha256-exact-service-subtree-v1",
   "servicePrefix": "services/harbor/",
-  "trackedPathCount": 575,
-  "treeSha256": "b1898d27e98213776f0886ef611c3f1f314e866d134746a70cfb434c6e676194",
+  "trackedPathCount": 589,
+  "treeSha256": "9bf655f691e81226edbe9f35ef71e9167ccf60450f81267905cea09a9d3fc4bd",
   "digestExcludes": [
     "services/harbor/integrity/manifest.json"
   ],

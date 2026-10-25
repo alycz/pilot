@@ -7,6 +7,7 @@ export const TRADING_ISOLATED_V1_MIGRATION_DIRECTORY =
 	"migrations-profile-trading-isolated-v1";
 export const X402_ISOLATED_V1_MIGRATION_DIRECTORY =
 	"migrations-profile-x402-isolated-v1";
+export const FREE_QUICKJS_MIGRATION_DIRECTORY = "migrations-free-quickjs";
 
 export const TRADING_ISOLATED_V1_MIGRATIONS = Object.freeze([
 	"0001_init.sql",
@@ -32,7 +33,41 @@ export const X402_ISOLATED_V1_MIGRATIONS = Object.freeze([
 	"0010_issued_x402_authority.sql",
 ]);
 
+export const FREE_QUICKJS_MIGRATIONS = Object.freeze([
+	"0001_init.sql",
+	"0002_build_capability_isolation.sql",
+	"0002_quicknode.sql",
+	"0003_execution_lifetime_v2.sql",
+	"0004_v2_preflight_rejections.sql",
+	"0005_v2_approval_recovery.sql",
+	"0006_local_trading_isolated_onboarding_v1.sql",
+	"0007_ap4m_mandates.sql",
+	"0008_ap4m_purchase_attempts.sql",
+	"0008_quicknode_rpc_counters.sql",
+	"0009_aws_kms_delegate_keys.sql",
+	"0010_ap4m_channel_purchase.sql",
+]);
+
 const PROFILES = Object.freeze({
+	"free-quickjs": Object.freeze({
+		sourceDirectory: "migrations",
+		profileDirectory: FREE_QUICKJS_MIGRATION_DIRECTORY,
+		migrationNames: FREE_QUICKJS_MIGRATIONS,
+		sha256: Object.freeze({
+			"0001_init.sql": "5d8ef181b9d30c0b33b0457c2911c2d3742777f14b1291f2b1479ea5f52e604c",
+			"0002_build_capability_isolation.sql": "b7394bb6b7b135a9730655d85e29c1489461e0a769629af9efaad5e46261302c",
+			"0002_quicknode.sql": "636baf9b62db702f94547216fe28f7796b66fa47f124b98d2f2c59e06440774c",
+			"0003_execution_lifetime_v2.sql": "a0852ba68b34851d226aa88ccf992dbafc3ba3d6e3758de1886b96e1602e9155",
+			"0004_v2_preflight_rejections.sql": "be6e3f538ceae8440a56c4fd0a0751ffc3fa9c240468e11ee22bd8ee7134e018",
+			"0005_v2_approval_recovery.sql": "f761f8b889b13a553c0f3baec40b5738bb136a40c6b6389144cfc70c47e8dfda",
+			"0006_local_trading_isolated_onboarding_v1.sql": "a2c8d06cc2eb763f9eb57ac33ecf4166463b0707e448f91186c2ec36296f4a48",
+			"0007_ap4m_mandates.sql": "a72eb0286becacf639a03fd7610105265f276a8a47b614b9b413a7e682e7a635",
+			"0008_ap4m_purchase_attempts.sql": "37d3dcac1ae8126630043dfb5e59fa4fefd249f41e774a9f2878cd5c5f7a181b",
+			"0008_quicknode_rpc_counters.sql": "88bb144b9dba6a4a92a2ed80e10a6ffda6eeb8f67e2cbe4f5c90c12c0d2c5fd3",
+			"0009_aws_kms_delegate_keys.sql": "38db2663ab897d46da23e904190d7541cabbb686173153abe274248bf240bbab",
+			"0010_ap4m_channel_purchase.sql": "4c27d6cfe254e993eeb4d392ad42196b43bde941da71b9aef1bc07e665e30e91",
+		}),
+	}),
 	"trading-isolated-v1": Object.freeze({
 		sourceDirectory: "migrations",
 		profileDirectory: TRADING_ISOLATED_V1_MIGRATION_DIRECTORY,

@@ -569,22 +569,36 @@ return a fail-closed deployment-profile error, and MCP `execute`
 stays unregistered until a separately authorized Workers Free CPU acceptance
 run shows that the QuickJS path fits the plan's CPU budget.
 
-The checked-in template is deliberately not deployable: its Worker, existing
-D1 database, and HTTPS custom-domain origin are placeholders. Generate an
-operator-specific local config only after those three targets are approved:
+The checked-in template is deliberately not deployable because its Worker, D1,
+account subdomain, origin, and D1 UUID are placeholders. Its Workers.dev mode
+uses `workers_dev: true` with no custom-domain route. The
+generator also supports a separately approved custom-domain origin, but it
+rejects a Workers.dev hostname unless the first label exactly matches the
+Worker name.
+
+The profile binds D1 to the frozen
+[`migrations-free-quickjs/`](migrations-free-quickjs/) inventory. That inventory
+is byte-bound to the canonical migrations and stops at `0010`; disabled later
+features cannot be migrated into this profile by an unqualified migration
+command. Generate an operator-specific config outside the checkout only after
+the D1 resource exists and its UUID is known:
 
 ```bash
 npm run config:free:generate -- \
   --profile free-quickjs \
   --worker-name <approved-worker-name> \
-  --database-name <approved-existing-d1-name> \
+  --database-name <approved-d1-name> \
   --database-id <approved-existing-d1-uuid> \
-  --origin https://<approved-harbor-origin> \
-  --output ./wrangler.free-quickjs.operator.jsonc
+  --origin https://<approved-worker-name>.<approved-account-subdomain>.workers.dev \
+  --output /absolute/owner-private/path/wrangler.free-quickjs.operator.jsonc
 ```
 
 The generator only writes a new local file and refuses to overwrite the shared
-or template configs. It does not authenticate, probe remote features, create a
+or template configs. Because that file is outside the checkout, its `main` and
+`migrations_dir` values are canonical absolute paths to the reviewed server
+entrypoint and migration inventory in the current checkout. Regenerate it after
+moving the checkout; do not hand-edit those paths. The generator does not
+authenticate, probe remote features, create a
 Worker or D1 database, upload secrets, apply migrations, fund wallets, or
 deploy. The checked-in bundle can be verified locally without contacting
 Cloudflare:
@@ -592,7 +606,14 @@ Cloudflare:
 ```bash
 npm run deploy:free:dry-run
 npm run cf-typegen:free:check
+npm run migrations:free:check
 ```
+
+The reviewed create, migration, dry-run, deploy, smoke, and rollback sequence is
+documented in
+[`docs/free-quickjs-workers-dev.md`](docs/free-quickjs-workers-dev.md). Those
+remote steps are not part of the offline development flow and require separate
+operator approval.
 
 ### Paid Dynamic Worker bootstrap
 
@@ -624,6 +645,7 @@ the offline development flow.
 | `npm run deploy` | Regenerate the catalog and deploy the scoped Worker |
 | `npm run deploy:free:dry-run` | Bundle the inert no-loader Free/QuickJS template locally; never deploy |
 | `npm run config:free:generate -- ...` | Write a new explicitly targeted Free/QuickJS config without cloud actions |
+| `npm run migrations:free:check` | Verify the exact byte-bound Free/QuickJS migration inventory through `0010` |
 | `node scripts/build-catalog.mjs` | Validate venue YAML and regenerate ignored catalog/operation artifacts |
 | `npm run cf-typegen` | Refresh Worker binding types from Wrangler configuration |
 | `npm run cf-typegen:free` | Refresh the no-loader Free/QuickJS binding types |

@@ -1,9 +1,5 @@
 import { defineConfig } from 'vocs/config'
 
-const built = { text: 'Built', variant: 'info' } as const
-const mock = { text: 'Mock-first', variant: 'warning' } as const
-const off = { text: 'Default off', variant: 'note' } as const
-
 export default defineConfig({
   title: 'Pilot',
   titleTemplate: '%s · Pilot Docs',
@@ -77,7 +73,7 @@ export default defineConfig({
         { text: 'Card lifecycle', link: '/harness/lifecycle' },
         { text: 'Onboarding & delegation', link: '/harness/onboarding' },
         { text: 'Memory & personalization', link: '/harness/memory' },
-        { text: 'Strategies', link: '/harness/strategies', badge: off },
+        { text: 'Strategies', link: '/harness/strategies' },
         { text: 'Backtesting', link: '/harness/backtesting' },
         { text: 'Evals', link: '/harness/evals' },
       ],
@@ -86,16 +82,16 @@ export default defineConfig({
       text: 'Integrations',
       items: [
         { text: 'Overview', link: '/integrations' },
-        { text: 'Ledger', link: '/integrations/ledger', badge: built },
-        { text: 'AWS', link: '/integrations/aws', badge: mock },
-        { text: 'QuickNode', link: '/integrations/quicknode', badge: mock },
-        { text: 'Mastercard (AP4M)', link: '/integrations/mastercard', badge: mock },
-        { text: 'x402 payments', link: '/integrations/x402', badge: mock },
-        { text: 'OpenRouter', link: '/integrations/openrouter', badge: built },
-        { text: 'Wallets', link: '/integrations/wallets', badge: built },
-        { text: 'Markdown vault', link: '/integrations/vault', badge: built },
-        { text: 'Market data sources', link: '/integrations/data-sources', badge: built },
-        { text: 'Hermes', link: '/integrations/hermes', badge: off },
+        { text: 'Ledger', link: '/integrations/ledger' },
+        { text: 'AWS', link: '/integrations/aws' },
+        { text: 'QuickNode', link: '/integrations/quicknode' },
+        { text: 'Mastercard (AP4M)', link: '/integrations/mastercard' },
+        { text: 'x402 payments', link: '/integrations/x402' },
+        { text: 'OpenRouter', link: '/integrations/openrouter' },
+        { text: 'Wallets', link: '/integrations/wallets' },
+        { text: 'Markdown vault', link: '/integrations/vault' },
+        { text: 'Market data sources', link: '/integrations/data-sources' },
+        { text: 'Hermes', link: '/integrations/hermes' },
       ],
     },
     {

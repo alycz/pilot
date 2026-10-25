@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "digestAlgorithm": "sha256-exact-blob-v1",
-  "trackedPathCount": 1691,
-  "treeSha256": "9ae1b9977a2c6250bb2c1ae9c7a1d9b5310facff40edfc2d941b5102906a9753",
+  "trackedPathCount": 1693,
+  "treeSha256": "6eb8375430865cc66f4cb3dbf043e29c10421c4735a5be72a7ade5756bebc1db",
   "digestExcludes": [
     "integrity/manifest.json"
   ],

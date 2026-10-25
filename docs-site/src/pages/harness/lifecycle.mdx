@@ -1,0 +1,58 @@
+# Card lifecycle [Ten states, no shortcuts]
+
+Every intent becomes a **card** in chat. The card is driven by a state machine that rejects skipped, repeated or backward transitions, and validates every event against a schema.
+
+## States
+
+```text
+drafting ─► planned ─► simulated ─► policy_checked ─┬─► executing ──────────┬─► submitted ─► validated
+   │           │           │              │          │                       └─► validated
+   │           │           │              │          ├─► awaiting_approval ─► submitted ─► validated
+   │           │           │              │          └─► blocked
+   └───────────┴───────────┴──────────────┴──────────┴──────► failed   (from any non-terminal state)
+```
+
+Terminal states: **`validated`**, **`blocked`**, **`failed`**.
+
+| From | Allowed next |
+| --- | --- |
+| `drafting` | `planned`, `failed` |
+| `planned` | `simulated`, `failed` |
+| `simulated` | `policy_checked`, `failed` |
+| `policy_checked` | `executing`, `awaiting_approval`, `blocked`, `failed` |
+| `executing` | `submitted`, `validated`, `failed` |
+| `awaiting_approval` | `submitted`, `failed` |
+| `submitted` | `validated`, `failed` |
+
+## What drives each step
+
+1. **drafting → planned**: the intent is mapped to a builder call.
+2. **planned → simulated**: the engine builds, preflights and simulates.
+3. Your vault `Policy.md` is synced to `policy.set` if configured.
+4. **simulated → policy_checked**: `tx.execute` runs the [policy rules](/mcp/policy#policy-rules).
+5. The engine's verdict picks the branch:
+   - `executed` → `executing → submitted → validated`, then the vault is updated.
+   - `needs_approval` → `awaiting_approval`; the card shows the exact transaction and an **Approve** button.
+   - `blocked` → `blocked`; the card lists each failed rule.
+   - `failed` → `failed`.
+
+The model never chooses the branch.
+
+## Approving on a hardware wallet
+
+The approval button reads **Sign only** for a software wallet and **Approve on Ledger** for a Ledger. Under the 90-second v2 approval window, once fewer than 30 seconds remain (or the approval has expired) it becomes **Rebuild and approve**: a fresh build with a new idempotency key. An expired approval is never reused.
+
+## Trust receipt
+
+Each card ends with chips that show provenance:
+
+| Chip | Examples |
+| --- | --- |
+| Model | *Model · OpenRouter*, *Model · Amazon Bedrock* |
+| Screen | *Screened by Bedrock Guardrails*, *Guardrail screening unavailable* |
+| Signer | *Signed by AWS KMS*, *Key protected by AWS KMS*, *Signed locally*, *Signed via Ledger transport* |
+| RPC | *RPC · QuickNode*, *Fallback node* |
+| Confirmation | *Confirmed · QuickNode webhook · 4.2 s*, *Confirmed · polling* |
+| Watch | *Watched · QuickNode Streams* |
+
+Mock modes append *(mock)*; disabled features hide their chip.

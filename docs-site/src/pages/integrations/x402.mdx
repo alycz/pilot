@@ -1,0 +1,39 @@
+# x402 payments [Pay-per-call HTTP on XRPL]
+
+[x402](https://xrpl.org/docs/agents/agentic-payments-x402) revives HTTP `402 Payment Required`: a server answers with payment terms, the client pays on-ledger and retries with proof. Pilot's agent can pay for a data resource this way without ever choosing the URL or price.
+
+## How Pilot uses it
+
+- The model tool `x402_compare` takes **no arguments**. It pays one fixed Testnet resource (`GET /api/x402/compare`) at a fixed price (default 5,000 drops; ceiling 100,000; fee cap 100 drops).
+- The engine operation `x402.pay` is local-only, requires an authenticated principal, and signs from a dedicated **payer** key, separate from delegate keys.
+- Settlement goes through the **t54** XRPL facilitator (`https://xrpl-facilitator-testnet.t54.ai`, `/verify` and `/settle`), with an independent ledger lookup.
+- Policy caps: `x402_max_per_call_drops` and `x402_daily_cap_drops`.
+
+## Isolated profile
+
+x402 runs on its own engine process with its own credential, payer, state and key:
+
+| | Origin |
+| --- | --- |
+| Pilot | `http://127.0.0.2:3003` |
+| Ordinary engine ops | `http://127.0.0.2:8791` |
+| `x402.pay` only | `http://127.0.0.2:8792` |
+
+```bash
+# engine
+npm run dev:local:x402:isolated:v1
+# app
+pnpm dev:isolated:x402
+```
+
+The x402 credential must differ from the trading credential in both principal and token; reuse fails closed.
+
+## Variants
+
+| Variant | Where | Status |
+| --- | --- | --- |
+| Native XRP `x402.pay` | `services/harbor/src/ops/x402.ts`, merchant `apps/web/api/x402` | Offline and mock-transport evidence |
+| Owner-reviewed x402 on Ledger | `/demo/ledger-x402` | Local mock, labelled simulated settlement |
+| Issued RLUSD (x402 v2 `exact`, `network: "xrpl:1"`) | `x402.payIssuedFixture` | Deterministic offline fixture |
+
+The repository has not called the facilitator live. See `docs/isolated-x402-profile.md` and `docs/native-xrpl-issued-rlusd-x402.md`.

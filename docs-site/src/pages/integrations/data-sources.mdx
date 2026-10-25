@@ -1,0 +1,19 @@
+# Market data sources
+
+| Source | Used for | Operations | Notes |
+| --- | --- | --- | --- |
+| **XRPL public nodes** | Ledger state, books, AMMs, submit | `ledger.*`, `dex.*`, `amm.info`, `tx.*` | `s1.ripple.com` (Mainnet), `s.altnet.rippletest.net` (Testnet), `s.devnet.rippletest.net` (Devnet), `lend.devnet.rippletest.net` (Lending-Devnet). QuickNode can serve Testnet ([QuickNode](/integrations/quicknode)). |
+| **XRPL Docs MCP** (`mcp.xrpledger.ai`) | Official documentation search | `docs.search` | Maps results to xrpl.org, opensource.ripple.com, docs.xrplevm.org, XRPL-Standards, js.xrpl.org and xrpl-py. |
+| **XRPL.to** | Token metadata, trending, scam blocklist, AMM pool metrics | `tokens.lookup`, `tokens.trending`, `tokens.flagged`, `amm.pools` | Off-ledger; merged with on-ledger issuer controls. |
+| **XRPSCAN**, **Bithomp** | Indexer fallbacks and explorer links | same | `BITHOMP_API_KEY` optional. |
+| **Hyperliquid** | XRP perpetuals context | `perps.markets` | Read-only. Pilot never executes perps. |
+| **Kraken** | XRP/USD daily OHLC for backtests | — | Off by default ([Backtesting](/harness/backtesting)). |
+| **Mastercard Developers MCP** | Mastercard product docs | `mastercard.*` | Untrusted reference data ([Mastercard](/integrations/mastercard)). |
+
+## USD valuation
+
+Policy limits are in USD. The engine values transactions at the midpoint of the top of the **Mainnet XRP/RLUSD order book** (validated ledger, cached briefly), not from off-ledger prices. This is a read; Mainnet is never used for execution.
+
+## Markets page
+
+The app's Markets page fetches live XRPL market data **from your browser** against public nodes. There is no paid backend cache.

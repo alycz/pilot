@@ -1,0 +1,41 @@
+# Onboarding & delegation
+
+## Steps
+
+Basic setup is the first three steps; the rest is the optional trading track.
+
+| Step | What happens | What you sign | Required for |
+| --- | --- | --- | --- |
+| **Wallet** | Connect GemWallet, Crossmark or a Ledger | Non-broadcast sign-in challenge (`AccountSet`, `Fee "0"`, memo `pilot-wallet-auth-v1`) | Everything |
+| **AI model** | OpenRouter OAuth or Bedrock | Nothing | Chat |
+| **Done** | Research is ready | — | — |
+| **Fund** | *Prepare the budget account* | RLUSD `TrustSet` | Trading |
+| **Acquire** | *Acquire 75 official Testnet RLUSD* (local Testnet only) | Fill-or-kill buy, 1% slippage, ≤ 275 XRP | Optional |
+| **Delegate** | *Approve seven narrow permissions* | `DelegateSet` grant | Delegated trading |
+| **Verify** | *Verify a bounded budget* with Mastercard Open Finance (mock by default), hash-only proof | — | Agentic payments |
+| **Mandate** | *Approve the autonomous mandate*: limits, merchants, expiry, Testnet channel locks | AP4M mandate | Agentic payments |
+| **Trading** | Delegate active (and mandate ACTIVE if you set one up) | — | — |
+
+The wallet session lasts at most 60 minutes. Real model access starts only after the sign-in proof, and the model session is cryptographically bound to the same wallet session, account and network.
+
+## Budget account vs main account
+
+Pilot acts on a **budget account**: the account you link and fund for agent trading. Keep your main holdings elsewhere. `fund_budget` intents move funds from a separate main account into the budget account, always with owner approval.
+
+## Revoking
+
+1. Portfolio → **Revoke** (or `account.revoke`).
+2. The engine **suspends execution immediately** and prepares an empty-permission `DelegateSet`.
+3. You sign it in your wallet or Ledger (a blind-signed transaction on Ledger).
+4. Revocation is complete only when the ledger validates it. A button press or a prepared transaction is not a revocation.
+
+## Kill switches
+
+| Switch | Scope | Where |
+| --- | --- | --- |
+| Revoke delegation | One linked account, on-ledger | Portfolio, `account.revoke` |
+| Watcher quarantine | Automatic on a foreign delegated transaction | Engine cron, every minute |
+| QuickNode freeze | Automatic, engine-local | Streams watchdog ([QuickNode](/integrations/quicknode)) |
+| Strategy kill | One strategy | Strategy page, `strategy.kill` |
+| Global kill | Every strategy for the account | Strategy page, `strategy.globalKill.set` |
+| Revoke mandate | AP4M payments | `mandate.revoke` + credential delete |

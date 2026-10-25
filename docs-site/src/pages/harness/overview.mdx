@@ -1,0 +1,46 @@
+# Trading harness [An agent that can act, inside rules you set]
+
+The trading harness is the Pilot app's engine room: the part that turns *"swap 100 XRP to RLUSD"* into a validated transaction without the model ever being trusted with authority.
+
+## The idea in one diagram
+
+```text
+ you ──► model (your choice)          ──► typed intent (strict schema)
+          read-only tools only              │
+                                            ▼
+                         deterministic pipeline (no model in the loop)
+         drafting → planned → simulated → policy_checked ─┬─► executing → submitted → validated
+                                                          ├─► awaiting_approval → submitted → validated
+                                                          └─► blocked
+                                            │
+                                            ▼
+                         vault: Trades · Journal · Reflections
+```
+
+The model **proposes**. A strict schema decides what a proposal can be. The engine's policy decides what happens. You approve anything beyond your limits. The ledger is the only source of "done".
+
+## Components
+
+| Component | Page | Code |
+| --- | --- | --- |
+| Agent loop, tools, request modes, system prompt | [Agent loop & tools](/harness/agent) | `apps/web/app/api/chat/handler.ts`, `packages/agent` |
+| Typed intents and the intent → builder mapping | [Typed intents](/harness/intents) | `packages/intents` |
+| The 10-state card machine | [Card lifecycle](/harness/lifecycle) | `packages/agent/src/card-state.ts` |
+| Wallet, model, funding, delegation, mandate | [Onboarding & delegation](/harness/onboarding) | `apps/web/components/onboarding` |
+| Vault, preferences, workflow lessons | [Memory & personalization](/harness/memory) | `packages/vault` |
+| Declarative strategies and the Testnet rebalancer | [Strategies](/harness/strategies) | `services/harbor/src/ops/strategy.ts` |
+| Research backtests | [Backtesting](/harness/backtesting) | `apps/web/components/backtests` |
+| Golden MCP eval and offline improvement eval | [Evals](/harness/evals) | `services/harbor/eval`, `eval/` |
+
+## Design rules
+
+1. **No signing tool.** Ever. Owner signatures happen in the wallet; delegate signatures happen in the engine after policy.
+2. **One mutation per run.** A chat turn can propose at most one transaction.
+3. **Blocked means stop.** A blocked fingerprint is not retried, split or weakened.
+4. **Only `validated` is success.** The model is told never to claim success earlier.
+5. **Memory is advice, not authority.** Remembered preferences change how Pilot explains things, never what it is allowed to do.
+6. **Everything is labelled.** Mock, stand-in and fixture data say so in the UI.
+
+## Bring your own model
+
+The harness works with any tool-calling model available through OpenRouter (signed in with OAuth) or Amazon Bedrock. Model choice is limited to a server allowlist; the browser cannot pick a provider, base URL or unlisted model.

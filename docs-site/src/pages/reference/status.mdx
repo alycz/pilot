@@ -1,0 +1,25 @@
+# What is live [Claims we can stand behind]
+
+Pilot separates *built* from *live*. A fixture card is presentation evidence, a build is not a submission, and a requested revocation is not a validated revocation. This page reflects the repository as of **25 October 2026** (`alycz/pilot`).
+
+| Area | Status | What that means |
+| --- | --- | --- |
+| MCP server and REST API (95 ops) | :badge[Built]{info} | Typechecked, unit-tested, golden eval harness ready. No public hosted URL is published. |
+| Execution on Testnet / Devnet | :badge[Built]{info} | Build, simulate, policy, delegated signing, approval and relay implemented and tested offline. Live acceptance lanes are run separately. |
+| Mainnet | :badge[Reads only]{success} | Execution is refused in the builder, policy, signer and submit path. |
+| Pilot app (chat, markets, map, portfolio, memory, backtests) | :badge[Built]{info} | Runs fully in fixture mode with eight deterministic browser stories. |
+| Ledger | :badge[Speculos-verified]{info} | Ledger's real XRP app 2.8.2 in an emulator. Physical device is a manual lane. |
+| AWS | :badge[Local stand-in]{warning} | No live AWS account yet. |
+| QuickNode | :badge[Mock-verified]{warning} | Live account and endpoint activation pending. |
+| Mastercard AP4M | :badge[Mock-first]{warning} | Open Finance sandbox and live Testnet checks are event-day gates. No Mastercard AP4M API is called. |
+| x402 | :badge[Offline / fixture]{warning} | The facilitator has not been called live from this repository. |
+| Strategy runner | :badge[Default off]{note} | Not activated; offline and mock evidence only. |
+| Self-improvement | :badge[Partial]{note} | Preferences and workflow lessons with human review are built; an offline improvement evaluator exists; nothing promotes automatically. |
+| Production | :badge[Not ready]{danger} | No production deployment or acceptance is claimed. |
+
+## Always true
+
+- Owner keys never leave the wallet.
+- The model has no signing tool.
+- Mainnet execution, perpetual-futures execution, automatic funding and automatic signing are prohibited.
+- Every stand-in is labelled in the UI.

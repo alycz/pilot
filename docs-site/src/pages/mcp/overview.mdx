@@ -1,0 +1,71 @@
+# MCP & API overview [One registry, two doorways]
+
+Pilot exposes a single registry of typed operations through two interfaces:
+
+| | MCP | REST |
+| --- | --- | --- |
+| Endpoint | `/mcp` (Streamable HTTP, JSON responses) | `POST /api/ops/{operation}` |
+| Shape | 2 tools: `search`, `execute` | 1 route per operation |
+| Best for | AI clients (Claude, Codex, Cursor, agents) | Apps, scripts, backends |
+| Auth | `Authorization: Bearer <principal>:<token>` | same |
+| Envelope | same `ok` / `error` envelope | same |
+
+## The registry
+
+**95 operations** are registered in production (103 including local-only test and capability ops), in these families:
+
+| Family | Count | Examples |
+| --- | --- | --- |
+| Ledger reads | 5 | `ledger.account.info`, `ledger.account.lines`, `ledger.account.tx`, `ledger.fee` |
+| Markets & DEX | 7 | `dex.book`, `dex.depth`, `dex.quote`, `amm.info`, `amm.position`, `amm.pools`, `analytics.marketSnapshot` |
+| Research | 10 | `venues.list/get/compare`, `tokens.lookup/trending/flagged`, `yield.options`, `perps.markets`, `docs.search`, `skill.read` |
+| Transaction builders | 16 | `tx.swap`, `tx.offer`, `tx.ammDeposit`, `tx.escrowCreate`, `tx.checkCash`, `tx.simulate` |
+| Execution | 5 | `tx.execute`, `tx.approvalPreflight`, `tx.approvalReconcile`, `tx.submit`, `tx.status` |
+| Delegation & policy | 5 | `account.link/status/revoke`, `policy.get/set` |
+| Strategies | 13 | `strategy.validate/simulate/create/authorize/pause/kill`, `strategy.globalKill.*` |
+| Agentic commerce | 19 | `mandate.*`, `credential.*`, `channel.*`, `merchants.*`, `ap4m.*`, `x402.pay` |
+| Mastercard Developers | 4 | `mastercard.services/docs/page/search` |
+| QuickNode | 5 | `quicknode.status/events/webhookEvidence/kv.reconcile/unfreeze` |
+| Network & other | 6 | `server.reserves`, `amendments.status`, `vault.info/positions`, `lending.brokers`, `onboarding.readiness` |
+
+Full list with one-line summaries: [All operations](/reference/operations).
+
+:::note
+Being registered is not the same as being enabled. Many families (AP4M, QuickNode, strategy runner, x402) are gated by environment flags and are off by default. See [What is live](/reference/status).
+:::
+
+## Why "code mode"
+
+Instead of exposing 95 separate tools (which floods a model's context), the MCP server exposes `search` to discover operations and `execute` to run a short script against them:
+
+```js
+const book = await harbor.dex.depth({
+  network: "testnet",
+  taker_gets: { currency: "XRP" },
+  taker_pays: { currency: "524C555344000000000000000000000000000000",
+                issuer: "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" }
+});
+if (!book.ok) return book;
+return book.data;
+```
+
+One `execute` call can make up to 30 operation calls, combine results and return only what matters. The sandbox has no network access, so a script can reach the ledger only through typed, policy-guarded operations.
+
+## Networks
+
+| Network | Reads | Execution |
+| --- | --- | --- |
+| `mainnet` | ✓ (valuation and research) | ✗ always refused |
+| `testnet` | ✓ | ✓ |
+| `devnet` | ✓ | ✓ (vault builders are Devnet-only) |
+| `lending-devnet` | ✓ (lending reads) | — |
+
+## In this section
+
+- [MCP tools: search & execute](/mcp/tools)
+- [REST API](/mcp/rest)
+- [Authentication](/mcp/authentication)
+- [Response envelope & errors](/mcp/envelope)
+- [Executing transactions](/mcp/transactions)
+- [Policy & delegation](/mcp/policy)
+- [Venue catalog](/mcp/venues)

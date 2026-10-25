@@ -1,0 +1,31 @@
+# Integrations
+
+Every integration sits behind an explicit mode switch, defaults to **off or mock**, and labels its own provenance in the UI. Nothing silently falls back to something else.
+
+| Integration | What it adds | Mode switch | Status |
+| --- | --- | --- | --- |
+| [Ledger](/integrations/ledger) | Hardware owner signing; Virtual Ledger (Speculos); simulated device for demos | `LEDGER_MODE=off\|webhid\|webhid+virtual` | :badge[Speculos-verified]{info} |
+| [AWS](/integrations/aws) | Bedrock models, Bedrock Guardrails screening, KMS-held keys, AgentCore research | `BEDROCK_MODE`, `GUARDRAILS_MODE`, `KMS_MODE`, `AGENTCORE_MODE` | :badge[Local stand-in]{warning} |
+| [QuickNode](/integrations/quicknode) | RPC transport, webhook confirmations, KV registry, Streams watchdog | `QN_MODE=off\|mock\|live` | :badge[Mock-verified]{warning} |
+| [Mastercard](/integrations/mastercard) | AP4M on XRPL: Open Finance, Verifiable Intent, Level 3 merchants, Web Bot Auth, Developers MCP | `AP4M_DEMO_ENABLED`, `MASTERCARD_OF_MODE` | :badge[Mock-first]{warning} |
+| [x402](/integrations/x402) | Pay-per-call HTTP payments on XRPL via the t54 facilitator | local x402 profile | :badge[Offline / fixture]{warning} |
+| [OpenRouter](/integrations/openrouter) | Bring-your-own model with OAuth PKCE; optional free demo | `DEMO_MODEL_ENABLED` | :badge[Built]{info} |
+| [Wallets](/integrations/wallets) | GemWallet, Crossmark, Ledger via xrpl-connect | — | :badge[Built]{info} |
+| [Markdown vault](/integrations/vault) | Obsidian-compatible memory, filesystem or GitHub | `VAULT_BACKEND=fs\|github` | :badge[Built]{info} |
+| [Market data](/integrations/data-sources) | XRPL nodes, XRPL Docs MCP, XRPL.to, XRPSCAN, Bithomp, Hyperliquid, Kraken | — | :badge[Built]{info} |
+| [Hermes](/integrations/hermes) | Read-only advisor on workflow lessons | `PILOT_HERMES_ENABLED` | :badge[Default off]{note} |
+
+:::info[Honest labels]
+Statuses come from the repository's own claim boundaries as of 25 October 2026. "Mock-first" means built and tested end to end against mocks or a local stand-in, with live accounts and endpoints switched on at the event. See [What is live](/reference/status).
+:::
+
+## How they show up for users
+
+All sponsor integrations surface on the same **trust receipt** at the bottom of each intent card:
+
+```text
+Model · Amazon Bedrock   Screened by Bedrock Guardrails   Signed by AWS KMS
+RPC · QuickNode   Confirmed · QuickNode webhook · 4.2 s   Watched · QuickNode Streams
+```
+
+The app also has plain-language explainers at `/integrations/ledger`, `/integrations/aws`, `/integrations/quicknode` and `/integrations/mastercard`.

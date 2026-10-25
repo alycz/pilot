@@ -1,0 +1,61 @@
+# Backtesting [Research only]
+
+Pilot has two research engines. Neither places orders.
+
+## Backtests (`/research/backtests`)
+
+A daily-bar backtest of an **allocation-band** strategy (`allocation-band.v1`) on XRP/USD: rebalance toward a target XRP share whenever it leaves a band.
+
+### Data
+
+Kraken public XRP/USD daily OHLC (`kraken.xrp-usd.spot.daily.v1`). Every run records raw and normalized SHA-256 hashes of the data it used. Signed-out visitors get a demo with 12 sample prices.
+
+### Modelling
+
+- Fills at the **next bar's unadjusted open**.
+- Spread, venue fee and slippage are deducted as cash-equivalent quote costs; network cost is a fixed quote amount.
+- Liquidity is **not modelled**.
+- An in-sample / embargo / out-of-sample split is built in.
+
+### Inputs
+
+| Group | Fields |
+| --- | --- |
+| Window | `startDay`, `endDay`, `outOfSampleStartDay`, `embargoBars` (1–30) |
+| Portfolio | `initialBase`, `initialQuote`, `targetBaseBps`, `bandBps` (0–4999), `maxTradeQuote` |
+| Costs | `spreadBps`, `venueFeeBps`, `slippageBps` (combined < 10000), `networkCostQuote` |
+| Notes | `hypothesis` (≤ 500 chars) |
+
+### Outputs
+
+- For the full, in-sample and out-of-sample windows: strategy, benchmark and excess return (bps), max drawdown, filled and rejected order counts, turnover, total costs.
+- Every order, with rejection codes: `EMBARGO`, `MISSING_NEXT_BAR`, `NO_NEXT_BAR`, `INSUFFICIENT_CASH`, `INSUFFICIENT_BASE`, `COST_EXCEEDS_PROCEEDS`, `ROUNDING_TO_ZERO`.
+- Equity and drawdown series.
+- A reproducibility report (`pilot.daily-bar-backtest.v1`) with fingerprints.
+
+Saved runs live in your browser session (up to 8 runs, 512 KB) and can be compared side by side. A saved run can be attached to chat as an evidence card.
+
+### API
+
+| Route | Notes |
+| --- | --- |
+| `POST /api/research/backtests/run` | Authenticated, quota-limited, 30 s max. |
+| `POST /api/research/backtests/evidence` | Verifies a saved run against a chat reference (≤ 128 KB). |
+
+External data reads are **off by default**:
+
+```bash
+BACKTEST_EXTERNAL_READS_ENABLED=1
+BACKTEST_QUOTA_BACKEND=sqlite-single-host      # or harbor-d1 (required on serverless)
+BACKTEST_QUOTA_POLICY_VERSION=pilot.backtest.external-read.v1
+BACKTEST_QUOTA_ACCOUNT_HOURLY_RUNS=24
+BACKTEST_QUOTA_SESSION_HOURLY_RUNS=12
+```
+
+## Research lab (`/strategy-research`)
+
+A simulation of the same band-rebalance idea over per-ledger observations (`pilot.strategy-backtest.v2`), from deterministic fixtures or validated historical data. Reports return, benchmark, excess return, max drawdown, trade count, partial fills and costs.
+
+:::note
+A strategy *paper preview* (`strategy.simulate`) is not a backtest. It shows what the rules would do now, not how they would have performed.
+:::

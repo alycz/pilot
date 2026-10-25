@@ -1,0 +1,71 @@
+# Ledger [Authority lives on the device]
+
+> The agent never holds a key that matters. Authority lives on a Ledger; Pilot can only do what the Ledger granted, and anything beyond that goes back to the device.
+
+## What it does
+
+Ledger is Pilot's **owner signer**. The device signs everything that grants, revokes or exceeds the delegate's authority: the sign-in proof, trust lines, the `DelegateSet` grant and revoke, and over-limit approvals. In-policy trades are still signed by the delegate, with no device prompt.
+
+The Ledger facade is **sign-only**: it adds only `SigningPubKey` and `TxnSignature`, decodes the result, checks every other field is unchanged, verifies the signature locally, and hands the blob to Pilot's existing relay. It refuses Mainnet.
+
+## Three device modes, one code path
+
+| Mode | For | Transport |
+| --- | --- | --- |
+| **Real Ledger** | Anyone with a device, in desktop Chrome, Edge or Brave | WebHID (`@ledgerhq/device-transport-kit-web-hid`) |
+| **Virtual Ledger** | Developers, demos, end-to-end tests | Speculos running Ledger's real **XRP app 2.8.2**, through a same-origin proxy (`/api/ledger-sim/*`) |
+| **Simulated device** | Logged-out demo | Recorded device screens replayed. No signing. Labelled *Simulated Ledger · Recorded demo · no signing*. |
+
+Built on Ledger's Device Management Kit (`@ledgerhq/device-management-kit` 1.11.0, `device-signer-kit-xrp` 0.2.0), not the legacy LedgerJS.
+
+## What you see on the device
+
+| Transaction | Signing | Device shows |
+| --- | --- | --- |
+| Sign-in proof | Clear | Account Setting, Fee 0, memo `pilot-wallet-auth-v1` |
+| RLUSD `TrustSet` | Clear | Set Trust Line · RLUSD |
+| Swap (`OfferCreate`, fill-or-kill) | Clear | Create Offer · Fill or Kill · RLUSD |
+| `DelegateSet` grant / revoke | **Blind** | Warning, type *Unknown*, Authorize (delegate address), one screen per permission |
+
+### Permission legend
+
+The XRP app does not yet decode `DelegateSet`, so permissions appear as numbers. Pilot shows this legend next to the device (value = transaction type code + 1, XLS-75):
+
+| Device shows | Permission | Lets the delegate |
+| --- | --- | --- |
+| 8 | `OfferCreate` | Place DEX offers (swaps) within policy |
+| 9 | `OfferCancel` | Cancel its own offers |
+| 21 | `TrustSet` | Add or adjust trust lines |
+| 37 | `AMMDeposit` | Add liquidity to AMM pools |
+| 38 | `AMMWithdraw` | Remove liquidity |
+| 3 | `EscrowFinish` | Finish escrows |
+| 18 | `CheckCash` | Cash checks |
+
+:::warning[Blind signing]
+`DelegateSet` needs blind signing enabled in the XRP app. With it off, the device returns status `6985`, the same code as a user reject; Pilot tells them apart by the expected signing mode and reopens the explainer. Turn blind signing off again after the grant validates.
+:::
+
+## Configuration
+
+```bash
+LEDGER_MODE=webhid                 # off | webhid | webhid+virtual
+LEDGER_DEFAULT_ACCOUNT_INDEX=0     # 0–9, path 44'/144'/{index}'/0/0
+LEDGER_SPECULOS_URL=http://127.0.0.1:5000   # local profiles only; hosted startup refuses it
+LEDGER_CHAT_SESSION_PROOF=0
+```
+
+Real devices need a Chromium browser with `navigator.hid`; other browsers see the Ledger card disabled with a reason.
+
+## Run the Virtual Ledger
+
+```bash
+pnpm ledger:sim            # Speculos with the XRP 2.8.2 app on 127.0.0.1:5000
+pnpm ledger:conformance    # expect 10/10
+pnpm test:ledger-sim       # facade tests against Speculos
+```
+
+The **Ledger companion** (`pnpm ledger:companion`, loopback `127.0.0.1:43659`) lets one exact hosted HTTPS origin talk to a local Speculos. It never submits.
+
+## Status
+
+Speculos simulation of Ledger's real XRP app 2.8.2 with a public test seed. Physical-device WebHID and live Testnet runs are manual lanes; the hosted Virtual Ledger is disabled. Demo fallback order: real Ledger → Virtual Ledger → simulated replay. Runbook: `RUNBOOK-LEDGER.md`.

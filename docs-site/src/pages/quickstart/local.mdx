@@ -1,0 +1,87 @@
+# Run Pilot locally [The engine and the app on your machine]
+
+Pilot is one repository: the web app at the root (pnpm workspace) and the execution engine under `services/harbor` (Cloudflare Worker, npm).
+
+## Requirements
+
+- Node **24.14.0** (pinned in `.node-version`)
+- pnpm **10.32.1** for the app, npm **11.9.0** for the engine
+- Chromium from Playwright for browser tests
+
+## 1. Start the engine (read-only)
+
+```bash
+cd services/harbor
+npm ci
+npm run dev:local
+```
+
+This regenerates the operation catalog, applies local D1 migrations and serves a **read-only** profile at `http://127.0.0.1:8791`. On `localhost`/`127.0.0.1` with `HARBOR_LOCAL_DEV=true`, no bearer token is needed.
+
+Point an MCP client at `http://127.0.0.1:8791/mcp` and try a read:
+
+```bash
+curl -s http://127.0.0.1:8791/api/ops/ledger.fee \
+  -H 'Content-Type: application/json' -d '{"network":"testnet"}'
+```
+
+:::info
+The read-only profile refuses `account.link`, `account.revoke`, `tx.execute`, `tx.submit`, `tx.approvalPreflight` and `tx.approvalReconcile`. Trading, onboarding and x402 each have their own local profile (`dev:local:trading`, `dev:local:trading:onboarding`, `dev:local:x402`, and isolated `127.0.0.2` variants) with separate credentials and state.
+:::
+
+## 2. Run the app in fixture mode
+
+```bash
+pnpm install --frozen-lockfile
+pnpm exec playwright install chromium
+pnpm typecheck && pnpm test
+pnpm test:e2e:fixture      # starts its own server on 127.0.0.1:3004
+```
+
+Fixture mode needs **no** credentials, wallet, seed, model key or XRPL connection. It runs eight deterministic browser stories: onboarding preconditions, research with freshness caveats, delegated swap and AMM deposit cards, a policy block, owner approval, x402 presentation, revocation and vault memory.
+
+For an interactive workbench:
+
+```bash
+PILOT_E2E_LANE=fixture pnpm exec playwright test --project=fixture --ui
+```
+
+## 3. Run the app against the engine
+
+The dev server binds only to `http://127.0.0.1:3003`. Use that exact origin.
+
+```bash
+pnpm dev
+```
+
+Minimum server settings (see [Environment variables](/reference/environment)):
+
+```bash
+PILOT_DEPLOYMENT_PROFILE=local-wallet
+HARBOR_MOCK=0                 # 1 = in-process mock
+HARBOR_URL=http://127.0.0.1:8791
+EXEC_NETWORK=testnet
+SESSION_SECRET=<at least 32 characters>
+P_LIVE_RLUSD_ACQUISITION_STATE_DIR=/absolute/path/mode-0700
+```
+
+Chat stays disabled until `SESSION_SECRET` and the state directory validate and your wallet session is authenticated.
+
+## Demo liquidity on Testnet
+
+```bash
+export EXEC_NETWORK=testnet
+pnpm tsx scripts/seed.ts --network "$EXEC_NETWORK"
+pnpm tsx scripts/mm-loop.ts --network "$EXEC_NETWORK"
+```
+
+The market maker refreshes a synthetic offer ladder every 30 seconds. It is not real volume. If Testnet RLUSD is unavailable, seeding creates a demo stablecoin `tUSD`.
+
+## Deploying the engine
+
+| Profile | Command | Notes |
+| --- | --- | --- |
+| Paid Dynamic Worker | `./scripts/bootstrap.sh`, then `npm run deploy` | Full MCP `execute` via a Dynamic Worker loader. |
+| Free / QuickJS | `npm run config:free:generate -- --profile free-quickjs ...` | MCP is **search-only**; REST returns `403 DEPLOYMENT_PROFILE_DISABLED`. |
+
+Secrets: `HARBOR_API_KEYS` (`principal:token` list) and `HARBOR_KEK` (Base64, 32 bytes). Never commit `.env*` files, seeds or keys.

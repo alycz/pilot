@@ -1,0 +1,41 @@
+# Memory & personalization [A vault you can read, and preferences you approve]
+
+## The vault
+
+Pilot writes to an **Obsidian-compatible Markdown vault**, scoped per wallet and network.
+
+```text
+Pilot/
+├── Profile.md        who you are, how you like answers
+├── Policy.md         your limits (syncs to policy.set)
+├── Journal/          one note per day of validated activity
+├── Trades/           one note per validated transaction hash
+├── Venues/  Tokens/  research notes
+└── Reflections/      a short note after each validated trade
+```
+
+After every validated execution, Pilot writes `Pilot/Trades/<hash>.md`, appends `Pilot/Journal/<date>.md` and adds `Pilot/Reflections/<hash>.md`. Execution metrics it does not have (for example fill price) are written as `unavailable`, never estimated.
+
+Backends: local filesystem (`VAULT_BACKEND=fs`) or a GitHub repository (`VAULT_BACKEND=github`). See [Markdown vault](/integrations/vault).
+
+## Structured preferences
+
+With `PILOT_STRUCTURED_PREFERENCES=1`, an explicitly durable statement like *"I prefer concise summaries in future chats"* becomes a **proposal**. You accept, correct, reject or forget it on the Memory page. Nothing is saved silently.
+
+- Categories: communication, presentation, workflow, research.
+- Up to 12 accepted preferences are supplied to later chats as quoted, untrusted context.
+- *"I prefer conservative trade analysis"* can reorder which caveats and downside evidence appear first. It never changes an intent, amount, route, limit, approval or execution.
+- Repeated facts in your validated-trade journal can produce a pending candidate (for example, familiar assets). One event is never enough, and Pilot does not infer risk tolerance, profitability or venue preference.
+- Current-request instructions override remembered style; temporary wording is not persisted.
+
+## Workflow lessons
+
+Lessons tune *how* Pilot works with you: response detail, evidence layout, approval explanations, comparison emphasis and research risk posture. Each goes through propose → your review → approved. All except risk posture need verified experience evidence. The eight most recent accepted lessons are injected into chat.
+
+## The hard line
+
+Memory is soft context. It **cannot** change permissions, limits, amounts, venues, approvals, signing or policy. If you tell Pilot to ignore remembered preferences, personalization is skipped for that request.
+
+## Hosted storage
+
+In hosted mode, each preference or lesson document is encrypted before it leaves the app (keys derived from `SESSION_SECRET`), bounded to 1 MiB, and limited to 4,096 rows per principal. *Forget* keeps a content-free tombstone for idempotency.

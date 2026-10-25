@@ -1,0 +1,59 @@
+# How it works [Seven layers from a sentence to a validated transaction]
+
+## The stack
+
+| # | Layer | What it does | Where |
+| --- | --- | --- | --- |
+| 1 | **User intents** | Research, trade (swap, limit, cancel), liquidity, payments, vault deposits, agentic purchases. Entry points: Pilot chat, any MCP client, any REST app. | Pilot app / your client |
+| 2 | **Orchestrator** | The agent loop. The model you picked reads with read-only tools and proposes one **typed intent** (a strict schema). It has no signing tool. | `apps/web/app/api/chat`, `packages/agent` |
+| 3 | **Harness** | A deterministic pipeline: plan → simulate → policy check → execute, ask for approval, or block → submit → validated. A 10-state card machine that cannot skip or go backwards. | `packages/agent/src/card-state.ts` |
+| 4 | **Tools, memory, skills** | `search` / `execute`, the Markdown vault (Profile, Policy, Journal, Trades, Reflections), approved preferences, playbooks, the XRPL Docs MCP. | `packages/vault`, `ecosystem-skills/` |
+| 5 | **MCP & REST API** | Two MCP tools plus a REST mirror over one registry of operations, isolated per API principal. | `services/harbor/src/mcp`, `src/rest.ts` |
+| 6 | **Execution engine** | Builders and preflight → simulate → policy → idempotent claim → daily budget reservation → delegate signs **or** owner signs in their wallet → submit → confirm and recover. A watcher suspends the link on any foreign delegated transaction. | `services/harbor/src/exec` |
+| 7 | **On-chain venues** | XRPL DEX order book, AMM, Payments, Escrow, Checks, Single-asset Vault (Devnet); read-only Lending, Permissioned DEX, indexers and Hyperliquid perps context. | XRPL |
+
+## Three flows
+
+The policy engine's verdict is one of `execute`, `needs_approval` or `block`. These three examples show each one. The dollar thresholds are the [default policy](/mcp/policy#default-policy).
+
+::::steps
+
+### A. Under the limit: auto-executes
+
+> "Swap 100 XRP to RLUSD."
+
+1. The model proposes a `swap` intent. Pilot maps it to `tx.swap` (fill-or-kill).
+2. The engine builds, autofills, preflights and **simulates** it (`tesSUCCESS` required).
+3. Policy: network ✓, link active ✓, `OfferCreate` granted ✓, RLUSD issuer allowlisted ✓, slippage ≤ 100 bps ✓, value < $250 ✓ → **`execute`**.
+4. The delegate key signs, the engine submits, and the card reaches `validated`.
+5. Pilot writes `Pilot/Trades/<hash>.md` and a Journal entry to your vault.
+
+### B. Over the limit: needs your approval
+
+> "Swap 500 XRP to RLUSD."
+
+1. Same build and simulation.
+2. Policy: every safety rule passes, but the value is ≥ $250 → **`needs_approval`**.
+3. The card moves to `awaiting_approval` and shows the **exact transaction**.
+4. You sign it in your wallet or on your Ledger (sign-only). The engine checks the signed blob matches the approved transaction field for field, then relays it.
+
+### C. Blocked, and the kill switch
+
+> "Buy 3,000 of a token from an unknown issuer."
+
+1. Policy: issuer not allowlisted, and value > $2,000 per-transaction cap → **`block`**. Every failed rule is listed. The model is told never to retry, split or weaken a blocked intent.
+2. Separately, a watcher scans your linked account every minute. If a transaction signed with your delegate key appears that the engine did not execute, the link is **suspended** and an empty-permission `DelegateSet` (revoke) is prepared for you to sign.
+
+::::
+
+## Request modes
+
+Pilot classifies each chat request into a mode and only offers the matching tools:
+
+| Mode | Tools that can mutate |
+| --- | --- |
+| `read_only` | none |
+| `one_time` | `propose_intent`, `ap4m_purchase`, `x402_compare` |
+| `recurring` / `autonomous` | `propose_strategy` (validate and paper-preview only) |
+
+See [Agent loop & tools](/harness/agent) for the full tool list.

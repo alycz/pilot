@@ -1,0 +1,101 @@
+# Call the REST API [Every operation over plain HTTP]
+
+Every operation in the registry is also available as:
+
+```http
+POST /api/ops/{operation}
+Authorization: Bearer <principal>:<token>
+Content-Type: application/json
+
+{ ...the operation's arguments... }
+```
+
+The body is the arguments object itself, with no wrapper. Only `POST` is accepted.
+
+## Read an account
+
+```bash
+curl -s "$PILOT_URL/api/ops/ledger.account.info" \
+  -H "Authorization: Bearer $PILOT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "account": "r...", "network": "testnet" }'
+```
+
+```json
+{
+  "ok": true,
+  "data": { "...": "account root, flags, balances" },
+  "asOf": "2026-10-25T14:02:11.000Z",
+  "asOfBasis": "server-time",
+  "trust": { "rpc": { "route": "fallback", "methods_quicknode": 0, "methods_fallback": 1 } }
+}
+```
+
+## Get the network fee
+
+```bash
+curl -s "$PILOT_URL/api/ops/ledger.fee" \
+  -H "Authorization: Bearer $PILOT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "network": "testnet" }'
+```
+
+## Compare venues for a trade
+
+```bash
+curl -s "$PILOT_URL/api/ops/venues.compare" \
+  -H "Authorization: Bearer $PILOT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "network": "testnet",
+    "account": "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
+    "base": { "currency": "XRP" },
+    "quote": { "currency": "524C555344000000000000000000000000000000",
+               "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" },
+    "size": "10000000"
+  }'
+```
+
+This prices 10 XRP (in drops) against Testnet RLUSD across three routes: order book, AMM and payment paths. Results carry the `unverified-match` caveat: they are indicative, not a fill guarantee.
+
+:::tip
+Not sure about an operation's arguments? Call the MCP `search` tool with the operation name (for example `{"query":"venues.compare"}`). An exact name match ranks first and includes the `signature` and an `example`.
+:::
+
+## Always check `ok`
+
+Operation failures return **HTTP 200** with `ok: false`:
+
+```json
+{ "ok": false, "error": { "service": "xrpl", "kind": "soft-empty", "message": "Account not found.", "code": "actNotFound" } }
+```
+
+Transport-level problems use HTTP status codes (`401`, `404 UNKNOWN_OPERATION`, `413 REQUEST_TOO_LARGE`, ...). See [Response envelope & errors](/mcp/envelope).
+
+## Execute a transaction
+
+Writes follow build → simulate → execute. The short version:
+
+```bash
+# 1. build: autofill, preflight and simulate; returns build_id, tx_json, simulate, preflight, summary
+curl -s "$PILOT_URL/api/ops/tx.swap" -H "Authorization: Bearer $PILOT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "network": "testnet",
+    "account": "r...",
+    "sell": { "currency": "XRP" },
+    "buy": { "currency": "524C555344000000000000000000000000000000",
+             "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" },
+    "amount": "1000000",
+    "side": "sell",
+    "max_slippage_bps": 100,
+    "execution_mode": "fill_or_kill"
+  }'
+
+# 2. execute under policy
+curl -s "$PILOT_URL/api/ops/tx.execute" -H "Authorization: Bearer $PILOT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "build_id": "<from step 1>", "idempotency_key": "swap-2026-10-25-001" }'
+```
+
+The result is `executed`, `needs_approval`, `blocked` or `failed`. Full detail in [Executing transactions](/mcp/transactions).

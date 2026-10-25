@@ -1,0 +1,51 @@
+# AWS [A trust layer around what the AI reads, thinks with, and signs with]
+
+> AWS protects what the AI reads, which model it thinks with, and the keys it signs with.
+
+Pilot's app and engine do not move to AWS. AWS services wrap them, each behind its own switch.
+
+## Bedrock Guardrails: screen what the AI reads
+
+On-ledger text is attacker-controlled: token names, `Domain` fields and memos can carry prompt injections. The engine screens mapped untrusted fields with `InvokeGuardrailChecks` (prompt-attack categories) **before** a result leaves the engine.
+
+- At or above `GUARDRAILS_THRESHOLD` (default `0.8`): the string becomes `[blocked: possible prompt injection · screened by AWS Bedrock Guardrails]`, the envelope gets the `screened-redacted` caveat and `trust.screen` counts.
+- If Guardrails errors or times out (1,500 ms): **fail closed**. Free text becomes `[unscreened text hidden]`; addresses and currency codes are kept; provider is `unavailable`.
+- Chat shows a banner when a turn contained a redaction.
+
+```bash
+GUARDRAILS_MODE=mock     # off | mock | aws
+GUARDRAILS_THRESHOLD=0.8
+```
+
+## Amazon Bedrock: which model it thinks with
+
+Claude models on Bedrock appear in the model picker for signed-in, wallet-bound sessions. Logged-out and demo visitors stay on free OpenRouter models.
+
+```bash
+BEDROCK_MODE=mock                 # off | mock | aws
+BEDROCK_MODELS=<comma list of model IDs>
+BEDROCK_DAILY_TURN_CAP=50         # per signed-in user
+AWS_BEARER_TOKEN_BEDROCK=...      # server only
+```
+
+## AWS KMS: the keys it signs with
+
+| `KMS_MODE` | Behavior | Receipt |
+| --- | --- | --- |
+| `off` | Delegate keys wrapped with a local `HARBOR_KEK` | *Signed locally* |
+| `kek` | The key-encryption key is decrypted by KMS (`alias/harbor/kek`) once per isolate, imported as non-extractable, plaintext zeroed. Covers every key the engine wraps. | *Key protected by AWS KMS* |
+| `sign` | Per-link Ed25519 delegate keys are created **inside** KMS and never leave it. The engine verifies each signature locally before returning. Revoke schedules key deletion (7 days). | *Signed by AWS KMS* |
+
+There is no fallback: if KMS signing fails, the call fails.
+
+## AgentCore: isolated research
+
+An optional, read-only research worker on Bedrock AgentCore Runtime with a Gateway (custom JWT). It runs only for an explicit research operation and exposes one tool, `agentcore_research`. `AGENTCORE_MODE=off|standin|aws`, default `off`. There is no dedicated product UI yet.
+
+## Local stand-in
+
+Everything is testable without an AWS account. `services/harbor/tools/aws-local` (port 8790) mimics KMS (real Ed25519), Guardrails and the JSON APIs closely enough for the clients to run unchanged. `AWS_ENDPOINT_OVERRIDE` is accepted only for local Testnet/Devnet requests; deployed builds refuse it.
+
+## Status
+
+Implemented and tested against mocks and the local stand-in. No live AWS account, live Bedrock request or production KMS claim yet. Region: `us-east-1`/`us-east-2`. Runbook: `RUNBOOK-AWS.md`.

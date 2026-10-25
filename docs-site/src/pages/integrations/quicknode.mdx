@@ -1,0 +1,47 @@
+# QuickNode [Runs every agent trade, confirms it, and watches for misuse]
+
+> QuickNode runs every agent trade, confirms it, and independently watches every ledger for agent keys used outside Pilot.
+
+Both QuickNode receivers land in the engine, which owns secrets, state and policy. The app only renders what the engine reports. The model never sees a QuickNode URL, token or raw payload.
+
+## Four pieces
+
+| Piece | What it does |
+| --- | --- |
+| **RPC transport** | Every XRPL JSON-RPC call from the engine goes through one router: QuickNode first in `live`, a public node in `mock`/`off`. Coverage-aware: methods QuickNode does not serve go straight to the fallback. Fails over only on transport or capability errors, never on business errors, and **never re-signs** a submit. |
+| **Webhooks** (`xrplWalletFilter`) | QuickNode pushes each transaction on a watched account to `POST /hooks/quicknode/wallet`. Matching executions are marked *confirmed by QuickNode* with latency. Polling remains as a backstop. |
+| **Key-Value Store** | The registry the engine keeps in sync: watched accounts, delegate accounts, frozen accounts, allowed transaction types and allowlisted issuers. |
+| **Streams watchdog** | A filter checks every validated ledger. If a Pilot delegate key signs a transaction the engine did not execute, the engine **freezes** that link and the app alerts the owner with a one-click on-ledger revoke. Owner-signed transactions are never violations. |
+
+Webhook and stream deliveries are verified with HMAC-SHA256 over `nonce + timestamp + payload` (`x-qn-nonce`, `x-qn-timestamp`, `x-qn-signature`), a 300-second window and nonce replay protection.
+
+:::note[Honest scope]
+A freeze stops the engine from using the key. Only the owner's on-ledger revoke stops a leaked delegate key everywhere, so the freeze banner always offers it.
+:::
+
+## Operations
+
+`quicknode.status`, `quicknode.events`, `quicknode.webhookEvidence`, `quicknode.kv.reconcile`, `quicknode.unfreeze`.
+
+## Configuration
+
+```bash
+QN_MODE=mock                      # off | mock | live
+QN_XRPL_TESTNET_HTTP=...          # secret: endpoint URL including token
+XRPL_FALLBACK_TESTNET_HTTP=https://s.altnet.rippletest.net:51234/
+QN_API_KEY=...                    # secret: KV, Webhooks, Streams
+QN_WEBHOOK_SECURITY_TOKEN=...     # secret
+QN_STREAM_SECURITY_TOKEN=...      # secret
+QN_WATCHDOG_ACTION=freeze         # freeze | alert
+QN_RUN_TAG=event
+```
+
+## What users see
+
+- Trust receipt chips: *RPC · QuickNode*, *Confirmed · QuickNode webhook · 4.2 s*, *Watched · QuickNode Streams* (*(mock)* in mock mode; *Fallback node* when the fallback served).
+- A freeze banner: *QuickNode Streams detected a transaction signed with your agent's key outside Harbor… Harbor froze the agent.*
+- A QuickNode panel on Portfolio: share of calls served, confirmations, ledgers watched, last event, frozen status.
+
+## Status
+
+Built and mock-verified with a local stand-in (`services/harbor/tools/qn-local`). Live account and Testnet endpoint activation pending. Runbook: `RUNBOOK-QUICKNODE.md`.

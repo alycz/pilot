@@ -1,0 +1,104 @@
+# Executing transactions [Build → simulate → execute → approve → submit → status]
+
+Every write follows the same pipeline. The model, or your code, can propose; only the engine decides and signs.
+
+::::steps
+
+### Build
+
+Call a builder. It autofills the transaction (fee, sequence, `LastLedgerSequence`), tags it with SourceTag `2610240` and one canonical memo, runs preflight checks and **simulates** it without applying it.
+
+```js
+const build = await harbor.tx.swap({
+  network: "testnet",
+  account: "r...",                        // your budget account
+  sell: { currency: "XRP" },
+  buy: { currency: "524C555344000000000000000000000000000000",
+         issuer: "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" },
+  amount: "1000000",                      // drops
+  side: "sell",
+  max_slippage_bps: 100,
+  execution_mode: "fill_or_kill"
+});
+```
+
+The result (`TxBuild`):
+
+```ts
+{
+  build_id: string
+  network: "testnet" | "devnet" | ...
+  tx_json: object                          // the exact unsigned transaction
+  delegable: boolean                       // can the delegate sign this type?
+  simulate: { engine_result: string, engine_result_message: string, applied: false }
+  preflight: { check: string, pass: boolean, detail?: string }[]
+  summary: { action, account, amounts, fee_drops, reserve_delta_drops,
+             est_slippage_bps?, usd_value? }
+}
+```
+
+For any other transaction type, `tx.simulate({ network, account, tx_json })` stores a build the same way.
+
+### Execute under policy
+
+```js
+const exec = await harbor.tx.execute({
+  build_id: build.data.build_id,
+  idempotency_key: "intent-7f3c"         // 1–200 chars, unique per intended action
+});
+```
+
+Optional arguments: `require_owner_approval: true` forces the owner-approval path even when policy would auto-execute; `execution_contract` and `build_revision` select the v2 lifetime contract (below).
+
+### Read the result
+
+`tx.execute` returns exactly one of:
+
+| `status` | Fields | Meaning |
+| --- | --- | --- |
+| `executed` | `hash`, `ledger_index`, `result` (`filled`/`partial`/`resting`/`success`), `signed_by: "delegate"`, `signer?`, `confirmation?` | The delegate signed and the ledger validated it. |
+| `needs_approval` | `approval_id`, `tx_json`, `expires_at`, `policy` | Show `tx_json` to the owner. Stop. |
+| `blocked` | `policy` | A safety rule failed. Never retry. |
+| `failed` | `engine_result`, `detail` | Submitted but did not succeed, or could not be submitted. |
+
+### Owner approval (when needed)
+
+The owner signs `tx_json` in their wallet or Ledger **without submitting** it. Then relay the signed blob:
+
+```js
+await harbor.tx.submit({ tx_blob: "1200...", network: "testnet" /* , approval_id */ });
+```
+
+When an approval is supplied, the engine decodes the blob and checks it matches the approved transaction **field for field** before relaying.
+
+### Confirm
+
+```js
+await harbor.tx.status({ hash: "<64-hex hash>", network: "testnet", account: "r..." });
+```
+
+Only `validated` counts. Never report success before it.
+
+::::
+
+## Idempotency
+
+- `idempotency_key` is namespaced per principal and bound to the build, execution contract, revision and execution mode. A retry that differs in any of these fails closed.
+- Use one stable key per intended action (the Pilot app uses the intent `id`).
+- `require_owner_approval: true` is one-way: a permissive or concurrently changed policy cannot convert it into delegated execution.
+- The daily budget is reserved atomically **before** any key is unwrapped or any signature is produced. Reserved and committed amounts count toward the cap; failed, blocked and pending-approval rows do not. The day boundary is UTC.
+
+## Approval lifetimes
+
+| Contract | Approval TTL | Extra requirements |
+| --- | --- | --- |
+| `xrpl_execution_v1` (default) | 10 minutes | — |
+| `xrpl_execution_v2` | **90 seconds**; `LastLedgerSequence` = build + 64; at least 8 ledgers left at signing and relay | `build_revision`, then `tx.approvalPreflight` right before signing with `approval_id`, `unsigned_tx_digest` and `economic_fingerprint`. Local reviewed trading profiles only. |
+
+If a v2 approval expires, do not resubmit it. Use `tx.approvalReconcile` to burn it after an exact non-inclusion proof, then build again with a **new** idempotency key. The Pilot app does this with a *Rebuild and approve* button.
+
+## What can't be executed
+
+- Anything on Mainnet (`MAINNET_EXECUTION_DISABLED`).
+- `Payment`, `EscrowCreate` and `CheckCreate` builders always route to owner approval (never delegated).
+- Vault deposit and withdraw are Devnet-only and owner-signed.

@@ -1,0 +1,89 @@
+# Policy & delegation
+
+## Delegation, in one paragraph
+
+Your budget account grants a Pilot-held **delegate account** permission to send specific transaction types on its behalf, using XRPL's native `DelegateSet` transaction (XLS-75 Permission Delegation). The grant is on-ledger, visible to anyone, limited to at most 10 permissions, and revocable by you at any time with an empty-permission `DelegateSet`.
+
+## Delegation operations
+
+| Operation | What it does |
+| --- | --- |
+| `account.link({ owner, network })` | Create or reuse a Testnet/Devnet delegate account and prepare the unsigned `DelegateSet` grant for you to sign. |
+| `account.status({ owner, network })` | Read the on-ledger delegation and refresh the link. |
+| `account.revoke({ owner, network })` | Prepare an empty-permission `DelegateSet` and **suspend execution immediately** until the revoke validates. |
+
+## Permissions
+
+| Set | Transaction types |
+| --- | --- |
+| **Granted by default** (7) | `OfferCreate`, `OfferCancel`, `TrustSet`, `AMMDeposit`, `AMMWithdraw`, `EscrowFinish`, `CheckCash` |
+| Delegable with a custom grant | the default 7, plus `EscrowCancel`, `CheckCancel` |
+| **Never delegated** | `Payment`, `EscrowCreate`, `CheckCreate`, `PaymentChannelCreate`, `PaymentChannelFund`, `NFTokenCreateOffer`, `PaymentBurn`, `PaymentMint` |
+| Non-delegable (owner only) | `AccountSet`, `SetRegularKey`, `SignerListSet`, `DelegateSet`, `AccountDelete`, `Batch`, all `Vault*`, `Loan*`, `LoanBroker*`, and network-level types |
+
+On a Ledger, the grant shows each permission as its XLS-75 value (transaction type code + 1): 8, 9, 21, 37, 38, 3, 18. See the [legend](/integrations/ledger#permission-legend).
+
+## Policy rules
+
+Every `tx.execute` evaluates these rules **in order**:
+
+| # | Rule | On failure |
+| --- | --- | --- |
+| 1 | `network`: in `policy.networks`; Mainnet always fails | block |
+| 2 | `link_active`: the account is linked and the link is active | block (revoked link → needs approval) |
+| 3 | `transaction_type`: in `allowed_tx_types` and granted on-ledger | **needs approval** |
+| 4 | `issuer_allowlist`: every issued asset's issuer is allowlisted | block |
+| 5 | `require_auth`: no RequireAuth issuers (when enabled) | block |
+| 6 | `preflight`: all preflight checks pass | block |
+| 7 | `simulation`: `tesSUCCESS` | block |
+| 8 | `slippage`: estimate ≤ `max_slippage_bps` | block |
+| 9 | `max_per_tx_usd` | block |
+| 10 | `daily_cap_usd`: today's total + this transaction | block |
+| 11 | `execute_under_usd`: value strictly below | **needs approval** |
+
+**Verdict:** `block` if any rule blocks; else `needs_approval` if any rule asks for approval; else `execute`.
+
+## Default policy
+
+```ts
+{
+  max_per_tx_usd: 2000,
+  daily_cap_usd: 5000,
+  execute_under_usd: 250,          // auto-execute only below this
+  max_slippage_bps: 100,           // 1%
+  allowed_tx_types: ["OfferCreate", "OfferCancel", "TrustSet",
+                     "AMMDeposit", "AMMWithdraw", "EscrowFinish", "CheckCash"],
+  issuer_allowlist: ["RLUSD"],     // resolves to the per-network RLUSD issuer
+  block_requireauth_issuers: true,
+  networks: ["testnet", "devnet"],
+  x402_max_per_call_drops: "10000",
+  x402_daily_cap_drops: "1000000",
+  ap4m_enabled: false
+}
+```
+
+`"RLUSD"` resolves to `rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV` on Testnet.
+
+## Changing policy
+
+```js
+await harbor.policy.set({
+  owner: "r...",
+  network: "testnet",
+  policy: {
+    max_per_tx_usd: 500, daily_cap_usd: 1000, execute_under_usd: 50,
+    max_slippage_bps: 50,
+    allowed_tx_types: ["OfferCreate", "OfferCancel"],
+    issuer_allowlist: ["RLUSD"], block_requireauth_issuers: true,
+    networks: ["testnet"],
+    x402_max_per_call_drops: "10000", x402_daily_cap_drops: "1000000",
+    ap4m_enabled: false
+  }
+});
+```
+
+Invariants: `execute_under_usd ≤ max_per_tx_usd ≤ daily_cap_usd`; x402 per-call ≤ daily; lists unique; `networks` cannot contain `mainnet`. In the Pilot app, editing `Pilot/Policy.md` on the Memory page syncs to `policy.set`.
+
+## Watcher
+
+Every minute, the engine pages each active link's validated transactions. Any transaction signed by the delegate that the engine did not execute is **foreign**: the link is suspended and an unsigned revoke is prepared for the owner. With QuickNode enabled, a Streams watchdog does the same from every validated ledger ([QuickNode](/integrations/quicknode)).

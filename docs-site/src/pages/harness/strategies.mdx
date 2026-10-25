@@ -1,0 +1,77 @@
+# Strategies [Recurring and autonomous execution, bounded and default-off]
+
+:::warning[Not activated]
+The strategy runner is **off by default** and has not completed live, bounded Testnet acceptance. It runs only when `AUTONOMOUS_STRATEGY_RUNNER="true"`, `EXEC_NETWORK="testnet"` and `MAINNET_EXECUTION="false"`. All checked-in configurations set the runner to `"false"`. Evidence so far is offline and mock only.
+:::
+
+When you ask for something recurring (*"keep my XRP between 45% and 55%"*), the model can call `propose_strategy`. That tool only **validates** the strategy and returns a **paper preview**. It cannot create, approve or activate anything. Activation always needs your fresh wallet signature.
+
+## Declarative strategies (`declarative_strategy_v1`)
+
+```ts
+{
+  semantics_version: "harbor.declarative-strategy/1",
+  kind: "declarative_strategy_v1",
+  network: "testnet",
+  account: "r...",
+  issued_asset: { currency: "524C555344000000000000000000000000000000",
+                  issuer: "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" },  // Testnet RLUSD only
+  plan: {
+    plan_version: "1",
+    trigger: { kind: "interval", interval_seconds: 900 },     // 300–86400
+    rules: [                                                  // 1–8 rules, first match wins
+      {
+        rule_id: "dip-buy",
+        all: [{ kind: "price_threshold", side: "ask", comparator: "lte", price: "0.45" }],
+        action: { kind: "fixed_swap", direction: "buy_xrp", order_value: "10" }
+      },
+      {
+        rule_id: "rebalance",
+        all: [{ kind: "xrp_allocation_outside", lower_xrp_bps: 4500, upper_xrp_bps: 5500 }],
+        action: { kind: "target_allocation", target_xrp_bps: 5000,
+                  lower_xrp_bps: 4500, upper_xrp_bps: 5500 }
+      }
+    ],
+    fallback: { kind: "hold" }
+  },
+  limits: { /* see below */ },
+  execution_mode: "offer_create_fok",
+  not_before: "2026-10-26T00:00:00Z",
+  expires_at: "2026-11-02T00:00:00Z"
+}
+```
+
+| Element | Options |
+| --- | --- |
+| Conditions (1–8 per rule, all must hold) | `always` (must be the only condition), `price_threshold` (`side`: bid/ask, `comparator`: lte/gte, `price` in test-RLUSD per XRP), `xrp_allocation_outside` (`lower_xrp_bps`, `upper_xrp_bps`) |
+| Actions | `fixed_swap` (`direction`: `buy_xrp`/`sell_xrp`, `order_value` in test-RLUSD), `target_allocation` (`target_xrp_bps` strictly inside `lower_xrp_bps`–`upper_xrp_bps`) |
+| Limits | min/max order, max daily value, fee, slippage (1–1000 bps), price impact, reserve and fee buffer, XRP and issued exposure, minimum liquidity, cooldown (60 s – 1 day), quote age (1–300 s), ledger gap (0–4), cumulative value and fees, daily trades (≤ 1000), total trades (≤ 100k), optional occurrence cap |
+
+Cross-field checks enforce orderings such as daily ≤ cumulative. The pair is fixed to XRP against Testnet RLUSD.
+
+## Legacy Testnet rebalancer (`xrp_issued_rebalancer_v1`)
+
+A single-purpose allocation band rebalancer: target and band in bps (UI defaults: 50% target, 45–55% band, 5-minute interval), schedule 300 s – 1 day, execution as fill-or-kill `OfferCreate`.
+
+## Lifecycle
+
+| Object | States |
+| --- | --- |
+| Strategy | `draft`, `active`, `paused`, `stopped`, `error` |
+| Mandate | `draft`, `approved`, `revoked`, `expired` |
+
+Owner authorization is a `wallet_action_proof_v1` binding the owner, the mandate digest, its version and its expiry.
+
+## Operations
+
+| Operation | Purpose |
+| --- | --- |
+| `strategy.validate` | Check against the grammar. |
+| `strategy.simulate` | Deterministic paper-only preview. |
+| `strategy.create` | Create a non-authorizing draft. |
+| `strategy.list`, `strategy.get`, `strategy.audit` | Read. |
+| `strategy.authorize` | Activate with fresh owner authorization. |
+| `strategy.pause`, `strategy.resume`, `strategy.stop`, `strategy.kill` | Lifecycle controls. |
+| `strategy.globalKill.get`, `strategy.globalKill.set` | Account-wide kill switch. It must be verified clear before any autonomous authorization. |
+
+Pilot never schedules or executes strategies itself. The engine owns scheduling; Pilot's `/api/strategy/[action]` route and the Strategy page are the control surface.

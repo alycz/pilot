@@ -25,9 +25,11 @@ import { usePublishHarnessPageSummary } from "@/components/harness-chat/page-con
 import { DepthChart, PoolComposition, RouteBars } from "./charts";
 import {
   endpointHost,
+  isRetryableLedgerReadError,
   LEDGER_ENDPOINTS,
   LedgerClient,
   LedgerRequestError,
+  ledgerRetryAfterMs,
   type LedgerCommand,
   type LedgerNetwork,
   type LedgerStatus,
@@ -84,6 +86,8 @@ type PairState = {
   status: "loading" | "ready" | "error";
   snapshot: PairSnapshot | null;
   error?: string;
+  ammError?: string;
+  retryAt?: number;
   updatedAt?: number;
   lastFetch?: number;
 };
@@ -104,7 +108,7 @@ type LedgerCall = {
 const MAX_CALLS = 40;
 const FULL_DEPTH = 50;
 const LIGHT_DEPTH = 20;
-const SELECTED_MIN_INTERVAL_MS = 4_000;
+const SELECTED_MIN_INTERVAL_MS = 15_000;
 const OTHERS_EVERY_N_LEDGERS = 5;
 const LADDER_ROWS = 6;
 const NETWORKS: LedgerNetwork[] = ["mainnet", "testnet"];
@@ -144,6 +148,18 @@ export function marketHref(key: string): string {
 
 function prefersReducedMotion(): boolean {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function marketReadError(cause: unknown): string {
+  if (isRetryableLedgerReadError(cause)) {
+    const retryMs = ledgerRetryAfterMs(cause);
+    if (retryMs) {
+      const minutes = Math.max(1, Math.ceil(retryMs / 60_000));
+      return `Public XRP Ledger nodes are temporarily rate-limited. Retry in about ${minutes} minute${minutes === 1 ? "" : "s"}.`;
+    }
+    return "Public XRP Ledger nodes are temporarily rate-limited. Pilot will retry automatically.";
+  }
+  return cause instanceof Error ? cause.message : "The public XRP Ledger nodes could not return this market.";
 }
 
 /**
@@ -234,8 +250,10 @@ export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
   }, []);
 
   const fetchPair = useCallback(
-    async (pair: CatalogPair, full: boolean) => {
+    async (pair: CatalogPair, full: boolean, force = false) => {
       if (inFlight.current.has(pair.id)) return;
+      const retryAt = pairStatesRef.current[pair.id]?.retryAt ?? 0;
+      if (!force && retryAt > Date.now()) return;
       inFlight.current.add(pair.id);
       lastFetch.current.set(pair.id, Date.now());
       setPairStates((current) => (current[pair.id] ? current : { ...current, [pair.id]: { status: "loading", snapshot: null } }));
@@ -248,9 +266,18 @@ export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
           read("book_offers", { taker_gets: quote, taker_pays: base, limit, ledger_index: "validated" }),
           read("amm_info", { asset: base, asset2: quote, ledger_index: "validated" }),
         ]);
-        if (asks.status === "rejected" && bids.status === "rejected") {
-          const reason = asks.reason instanceof Error ? asks.reason.message : "The order book could not be read.";
-          setPairStates((current) => ({ ...current, [pair.id]: { ...(current[pair.id] ?? { snapshot: null }), status: current[pair.id]?.snapshot ? "ready" : "error", error: reason } }));
+        const bookFailure = asks.status === "rejected" ? asks.reason : bids.status === "rejected" ? bids.reason : null;
+        if (bookFailure) {
+          const retryMs = ledgerRetryAfterMs(bookFailure);
+          setPairStates((current) => ({
+            ...current,
+            [pair.id]: {
+              ...(current[pair.id] ?? { snapshot: null }),
+              status: current[pair.id]?.snapshot ? "ready" : "error",
+              error: marketReadError(bookFailure),
+              ...(retryMs ? { retryAt: Date.now() + retryMs } : {}),
+            },
+          }));
           return;
         }
         const resultLedger = (value: PromiseSettledResult<Record<string, unknown>>) =>
@@ -263,7 +290,15 @@ export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
           quote: pair.quote.asset,
           ledgerIndex: resultLedger(asks) ?? resultLedger(bids),
         });
-        setPairStates((current) => ({ ...current, [pair.id]: { status: "ready", snapshot, updatedAt: Date.now() } }));
+        setPairStates((current) => ({
+          ...current,
+          [pair.id]: {
+            status: "ready",
+            snapshot,
+            updatedAt: Date.now(),
+            ...(amm.status === "rejected" ? { ammError: marketReadError(amm.reason) } : {}),
+          },
+        }));
       } finally {
         inFlight.current.delete(pair.id);
       }
@@ -293,8 +328,12 @@ export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
 
   const refreshAll = useCallback(() => {
     const selected = selectedPairRef.current;
+    if (openKey) {
+      void fetchPair(selected, true);
+      return;
+    }
     for (const pair of pairsRef.current) void fetchPair(pair, pair.id === selected.id);
-  }, [fetchPair]);
+  }, [fetchPair, openKey]);
 
   handleLedgerRef.current = (index: number) => {
     setLedgerIndex(index);
@@ -309,6 +348,9 @@ export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
     const selected = selectedPairRef.current;
     const last = lastFetch.current.get(selected.id) ?? 0;
     if (Date.now() - last >= SELECTED_MIN_INTERVAL_MS) void fetchPair(selected, true);
+    // Detail pages render only the selected market; do not spend public-node
+    // quota refreshing catalog rows that are not on screen.
+    if (openKey) return;
     const everyN = ledgerCount.current % OTHERS_EVERY_N_LEDGERS === 0;
     for (const pair of pairsRef.current) {
       if (pair.id === selected.id) continue;
@@ -430,7 +472,7 @@ export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
   const amm = snapshot?.amm ?? null;
   const ammDelta = deviationBps(amm?.price ?? null, book.mid);
   const size = selectedPair.sizes[Math.min(sizeIndex, selectedPair.sizes.length - 1)]!;
-  const routes = snapshot ? quoteRoutes({ size, bids, amm, mid: book.mid }) : null;
+  const routes = snapshot ? quoteRoutes({ size, bids, amm, mid: book.mid, ammUnavailableReason: selectedState?.ammError }) : null;
   const offline = !demo && !snapshot && (connection.status === "failed" || connection.status === "reconnecting");
   const loadingSelected = !snapshot && !offline && (selectedState?.status ?? "loading") === "loading";
   const base = selectedPair.base.symbol;
@@ -642,6 +684,14 @@ export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
             </p>
             {loadingSelected ? (
               <SkeletonRows rows={2} />
+            ) : selectedState?.error && !snapshot ? (
+              <div className="p-4">
+                <EmptyBox
+                  title="Market data unavailable"
+                  message={selectedState.error}
+                  action={!demo ? <RetryButton onClick={() => void fetchPair(selectedPair, true, true)} /> : undefined}
+                />
+              </div>
             ) : routes && routes.routes.length ? (
               <div className="flex flex-1 flex-col">
                 <RouteBars routes={routes.routes} quoteSymbol={quote} focusRoute={selectedRoute} />
@@ -712,7 +762,7 @@ export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
                 <EmptyBox
                   title={selectedState?.error ? "Book unavailable" : "Empty book"}
                   message={selectedState?.error ?? "No resting offers on either side right now."}
-                  action={selectedState?.error && !demo ? <RetryButton onClick={() => void fetchPair(selectedPair, true)} /> : undefined}
+                  action={selectedState?.error && !demo ? <RetryButton onClick={() => void fetchPair(selectedPair, true, true)} /> : undefined}
                 />
               </div>
             ) : (

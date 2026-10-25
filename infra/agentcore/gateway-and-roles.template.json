@@ -1,0 +1,455 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Account-neutral Pilot AgentCore Gateway and least-privilege execution roles. Does not create an AgentCore Runtime or its post-creation caller role.",
+  "Parameters": {
+    "GatewayName": {
+      "Type": "String",
+      "Default": "PilotResearchGateway",
+      "AllowedPattern": "^([0-9A-Za-z]-?){1,48}$"
+    },
+    "TargetName": {
+      "Type": "String",
+      "Default": "PilotReadTarget",
+      "AllowedPattern": "^([0-9A-Za-z]-?){1,100}$"
+    },
+    "TargetLambdaFunctionName": {
+      "Type": "String",
+      "AllowedPattern": "^[A-Za-z0-9_-]{1,64}$"
+    },
+    "TargetLambdaQualifier": {
+      "Type": "String",
+      "Default": "",
+      "AllowedValues": ["", "accepted"]
+    },
+    "RuntimeName": {
+      "Type": "String",
+      "Default": "PilotResearchRuntime",
+      "AllowedPattern": "^[A-Za-z][A-Za-z0-9_]{0,47}$"
+    },
+    "RuntimeEcrRepositoryName": {
+      "Type": "String",
+      "AllowedPattern": "^[a-z0-9]+(?:[._/-][a-z0-9]+)*$"
+    },
+    "RuntimeWorkloadIdentityName": {
+      "Type": "String",
+      "AllowedPattern": "^[A-Za-z0-9_.-]{3,255}$"
+    },
+    "RuntimeOauth2CredentialProviderName": {
+      "Type": "String",
+      "AllowedPattern": "^[A-Za-z0-9_-]{1,128}$"
+    },
+    "RuntimeReplayTableName": {
+      "Type": "String",
+      "AllowedPattern": "^[A-Za-z0-9_.-]{3,255}$"
+    },
+    "ReplayMaxReadRequestUnits": {
+      "Type": "Number",
+      "MinValue": 1,
+      "MaxValue": 1000
+    },
+    "ReplayMaxWriteRequestUnits": {
+      "Type": "Number",
+      "MinValue": 1,
+      "MaxValue": 1000
+    },
+    "ReplayRecoveryPeriodDays": {
+      "Type": "Number",
+      "MinValue": 1,
+      "MaxValue": 35
+    },
+    "JwtDiscoveryUrl": {
+      "Type": "String",
+      "AllowedPattern": "^https://[^/?#]+(?:/[^?#]*)?/\\.well-known/openid-configuration$"
+    },
+    "JwtAudience": {
+      "Type": "String",
+      "MinLength": 1,
+      "MaxLength": 255
+    },
+    "JwtClientId": {
+      "Type": "String",
+      "MinLength": 1,
+      "MaxLength": 255
+    },
+    "JwtSubject": {
+      "Type": "String",
+      "AllowedPattern": "^[A-Za-z0-9_.:/-]{1,255}$"
+    },
+    "JwtTenantClaimName": {
+      "Type": "String",
+      "Default": "tenant_id",
+      "AllowedPattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "JwtDeploymentTenantId": {
+      "Type": "String",
+      "AllowedPattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "JwtAllowedScope": {
+      "Type": "String",
+      "Default": "pilot.read_market_context",
+      "AllowedPattern": "^[A-Za-z0-9_.:/-]{1,255}$"
+    }
+  },
+  "Conditions": {
+    "UseAcceptedTargetAlias": {
+      "Fn::Equals": [{ "Ref": "TargetLambdaQualifier" }, "accepted"]
+    }
+  },
+  "Resources": {
+    "RuntimeExecutionRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": { "Service": "bedrock-agentcore.amazonaws.com" },
+              "Action": "sts:AssumeRole",
+              "Condition": {
+                "StringEquals": { "aws:SourceAccount": { "Ref": "AWS::AccountId" } },
+                "ArnLike": {
+                  "aws:SourceArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:runtime/${RuntimeName}-*"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "PullExactRuntimeImage",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/${RuntimeEcrRepositoryName}"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "ecr:GetAuthorizationToken",
+                  "Resource": "*"
+                }
+              ]
+            }
+          },
+          {
+            "PolicyName": "RuntimeTelemetryOnly",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": ["logs:CreateLogGroup", "logs:DescribeLogStreams"],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/runtimes/${RuntimeName}-*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/runtimes/${RuntimeName}-*:log-stream:*"
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "cloudwatch:PutMetricData",
+                  "Resource": "*",
+                  "Condition": { "StringEquals": { "cloudwatch:namespace": "bedrock-agentcore" } }
+                }
+              ]
+            }
+          },
+          {
+            "PolicyName": "RetrieveOneResourceOauthToken",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "bedrock-agentcore:GetResourceOauth2Token",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:workload-identity-directory/default"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:workload-identity-directory/default/workload-identity/${RuntimeWorkloadIdentityName}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:token-vault/default"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:token-vault/default/oauth2-credential-provider/${RuntimeOauth2CredentialProviderName}"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "PolicyName": "RuntimeReplayOnly",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": ["dynamodb:GetItem", "dynamodb:UpdateItem"],
+                  "Resource": { "Fn::GetAtt": ["RuntimeReplayTable", "Arn"] }
+                }
+              ]
+            }
+          },
+          {
+            "PolicyName": "DenyAuthorityEscalation",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Deny",
+                  "Action": [
+                    "iam:*",
+                    "kms:*",
+                    "secretsmanager:*",
+                    "ssm:GetParameter*",
+                    "sts:AssumeRole",
+                    "bedrock-agentcore:GetWorkloadAccessToken*"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          { "Key": "pilot:component", "Value": "agentcore-runtime" },
+          { "Key": "pilot:authority", "Value": "read-only-research" }
+        ]
+      }
+    },
+    "GatewayExecutionRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": { "Service": "bedrock-agentcore.amazonaws.com" },
+              "Action": "sts:AssumeRole",
+              "Condition": {
+                "StringEquals": { "aws:SourceAccount": { "Ref": "AWS::AccountId" } },
+                "ArnLike": {
+                  "aws:SourceArn": {
+                    "Fn::Sub": "arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:gateway/${GatewayName}-*"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "InvokeExactReadTarget",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "lambda:InvokeFunction",
+                  "Resource": {
+                    "Fn::If": [
+                      "UseAcceptedTargetAlias",
+                      { "Fn::Sub": "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${TargetLambdaFunctionName}:accepted" },
+                      { "Fn::Sub": "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${TargetLambdaFunctionName}" }
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "PolicyName": "DenySecretsAndSigning",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Deny",
+                  "Action": ["iam:*", "kms:*", "secretsmanager:*", "ssm:GetParameter*", "sts:AssumeRole"],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          { "Key": "pilot:component", "Value": "agentcore-gateway" },
+          { "Key": "pilot:authority", "Value": "one-read-target" }
+        ]
+      }
+    },
+    "RuntimeReplayTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "TableName": { "Ref": "RuntimeReplayTableName" },
+        "BillingMode": "PAY_PER_REQUEST",
+        "OnDemandThroughput": {
+          "MaxReadRequestUnits": { "Ref": "ReplayMaxReadRequestUnits" },
+          "MaxWriteRequestUnits": { "Ref": "ReplayMaxWriteRequestUnits" }
+        },
+        "AttributeDefinitions": [
+          { "AttributeName": "namespace", "AttributeType": "S" },
+          { "AttributeName": "requestDigest", "AttributeType": "S" }
+        ],
+        "KeySchema": [
+          { "AttributeName": "namespace", "KeyType": "HASH" },
+          { "AttributeName": "requestDigest", "KeyType": "RANGE" }
+        ],
+        "TimeToLiveSpecification": {
+          "AttributeName": "expiresAt",
+          "Enabled": true
+        },
+        "PointInTimeRecoverySpecification": {
+          "PointInTimeRecoveryEnabled": true,
+          "RecoveryPeriodInDays": { "Ref": "ReplayRecoveryPeriodDays" }
+        },
+        "DeletionProtectionEnabled": true,
+        "TableClass": "STANDARD",
+        "Tags": [
+          { "Key": "pilot:project", "Value": "pilot" },
+          { "Key": "pilot:component", "Value": "agentcore-runtime-replay" },
+          { "Key": "pilot:authority", "Value": "idempotency-only" },
+          { "Key": "pilot:environment", "Value": "testnet" }
+        ]
+      }
+    },
+    "ResearchGateway": {
+      "Type": "AWS::BedrockAgentCore::Gateway",
+      "Properties": {
+        "Name": { "Ref": "GatewayName" },
+        "Description": "Pilot read-only public market research gateway",
+        "RoleArn": { "Fn::GetAtt": ["GatewayExecutionRole", "Arn"] },
+        "AuthorizerType": "CUSTOM_JWT",
+        "AuthorizerConfiguration": {
+          "CustomJWTAuthorizer": {
+            "DiscoveryUrl": { "Ref": "JwtDiscoveryUrl" },
+            "AllowedAudience": [{ "Ref": "JwtAudience" }],
+            "AllowedClients": [{ "Ref": "JwtClientId" }],
+            "AllowedScopes": [{ "Ref": "JwtAllowedScope" }],
+            "CustomClaims": [
+              {
+                "InboundTokenClaimName": "sub",
+                "InboundTokenClaimValueType": "STRING",
+                "AuthorizingClaimMatchValue": {
+                  "ClaimMatchOperator": "EQUALS",
+                  "ClaimMatchValue": { "MatchValueString": { "Ref": "JwtSubject" } }
+                }
+              },
+              {
+                "InboundTokenClaimName": { "Ref": "JwtTenantClaimName" },
+                "InboundTokenClaimValueType": "STRING",
+                "AuthorizingClaimMatchValue": {
+                  "ClaimMatchOperator": "EQUALS",
+                  "ClaimMatchValue": { "MatchValueString": { "Ref": "JwtDeploymentTenantId" } }
+                }
+              }
+            ]
+          }
+        },
+        "ProtocolType": "MCP",
+        "ProtocolConfiguration": {
+          "Mcp": {
+            "Instructions": "Expose only the exact read-only public market context tool. Never sign, pay, mutate policy, or return credentials.",
+            "SupportedVersions": ["2025-11-25"],
+            "SessionConfiguration": { "SessionTimeoutInSeconds": 900 }
+          }
+        },
+        "Tags": {
+          "pilot:project": "pilot",
+          "pilot:component": "agentcore-gateway",
+          "pilot:authority": "read-only-research",
+          "pilot:environment": "testnet"
+        }
+      }
+    },
+    "ResearchGatewayTarget": {
+      "Type": "AWS::BedrockAgentCore::GatewayTarget",
+      "Properties": {
+        "GatewayIdentifier": { "Fn::GetAtt": ["ResearchGateway", "GatewayIdentifier"] },
+        "Name": { "Ref": "TargetName" },
+        "Description": "One schema-bounded public market research Lambda target",
+        "CredentialProviderConfigurations": [
+          { "CredentialProviderType": "GATEWAY_IAM_ROLE" }
+        ],
+        "TargetConfiguration": {
+          "Mcp": {
+            "Lambda": {
+              "LambdaArn": {
+                "Fn::If": [
+                  "UseAcceptedTargetAlias",
+                  { "Fn::Sub": "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${TargetLambdaFunctionName}:accepted" },
+                  { "Fn::Sub": "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${TargetLambdaFunctionName}" }
+                ]
+              },
+              "ToolSchema": {
+                "InlinePayload": [
+                  {
+                    "Name": "pilot.read_market_context",
+                    "Description": "Read the one configured XRP/RLUSD XRPL Testnet spot order book. The Runtime rejects every other pair, venue, or timeframe before this tool call. No signing, payment, policy mutation, or private wallet data.",
+                    "InputSchema": {
+                      "Type": "object",
+                      "Required": ["requestId", "scopeDigest", "context"],
+                      "Properties": {
+                        "requestId": { "Type": "string" },
+                        "scopeDigest": { "Type": "string" },
+                        "context": {
+                          "Type": "object",
+                          "Description": "Must be the exact empty object; the fixed XRP/RLUSD Testnet spot configuration is injected by the Lambda target."
+                        }
+                      }
+                    },
+                    "OutputSchema": {
+                      "Type": "object",
+                      "Required": ["summary", "evidence", "caveats"],
+                      "Properties": {
+                        "summary": { "Type": "string" },
+                        "evidence": {
+                          "Type": "array",
+                          "Items": {
+                            "Type": "object",
+                            "Required": ["source", "claim"],
+                            "Properties": {
+                              "source": { "Type": "string" },
+                              "claim": { "Type": "string" },
+                              "freshness": { "Type": "string" }
+                            }
+                          }
+                        },
+                        "caveats": { "Type": "array", "Items": { "Type": "string" } }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "GatewayUrl": { "Value": { "Fn::GetAtt": ["ResearchGateway", "GatewayUrl"] } },
+    "GatewayToolName": { "Value": { "Fn::Sub": "${TargetName}___pilot.read_market_context" } },
+    "RuntimeExecutionRoleArn": { "Value": { "Fn::GetAtt": ["RuntimeExecutionRole", "Arn"] } },
+    "GatewayExecutionRoleArn": { "Value": { "Fn::GetAtt": ["GatewayExecutionRole", "Arn"] } },
+    "RuntimeReplayTableName": { "Value": { "Ref": "RuntimeReplayTable" } },
+    "RuntimeReplayTableArn": { "Value": { "Fn::GetAtt": ["RuntimeReplayTable", "Arn"] } }
+  }
+}

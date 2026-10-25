@@ -402,6 +402,98 @@ describe("wallet-bound authorization", () => {
     }
   });
 
+  it("binds work-agreement operations and signed escrow submissions to the wallet session", () => {
+    const owner = Wallet.generate();
+    const counterparty = Wallet.generate();
+    const other = Wallet.generate();
+    const session = sealWalletSession({
+      version: 1,
+      account: owner.classicAddress,
+      network: "testnet",
+      expiresAt: Date.now() + 60_000,
+    }, SECRET);
+    const bound = request(session);
+    const base = {
+      owner: owner.classicAddress,
+      network: "testnet",
+      agreement_id: "agreement-wallet-bound-1",
+    } as const;
+    const signedCreate = owner.sign({
+      TransactionType: "EscrowCreate",
+      Account: owner.classicAddress,
+      Destination: counterparty.classicAddress,
+      Amount: "1000",
+      FinishAfter: 800_000_000,
+      Fee: "12",
+      Sequence: 1,
+      LastLedgerSequence: 100,
+    }).tx_blob;
+    const foreignCreate = other.sign({
+      TransactionType: "EscrowCreate",
+      Account: other.classicAddress,
+      Destination: counterparty.classicAddress,
+      Amount: "1000",
+      FinishAfter: 800_000_000,
+      Fee: "12",
+      Sequence: 1,
+      LastLedgerSequence: 100,
+    }).tx_blob;
+    const signedPayment = owner.sign({
+      TransactionType: "Payment",
+      Account: owner.classicAddress,
+      Destination: counterparty.classicAddress,
+      Amount: "1000",
+      Fee: "12",
+      Sequence: 1,
+      LastLedgerSequence: 100,
+    }).tx_blob;
+    process.env.SESSION_SECRET = SECRET;
+    try {
+      const environment = { EXEC_NETWORK: "testnet" } as const;
+      expect(authorizeWalletHarborOperation(bound, "workAgreement.prepare", {
+        ...base,
+        action: "create",
+        idempotency_key: "agreement-prepare-key-1",
+      }, environment)).toBe(true);
+      expect(authorizeWalletHarborOperation(bound, "workAgreement.status", base, environment))
+        .toBe(true);
+      expect(authorizeWalletHarborOperation(bound, "workAgreement.submit", {
+        ...base,
+        approval_id: "agreement-approval-1",
+        idempotency_key: "agreement-prepare-key-1",
+        attempt_id: "agreement-attempt-1",
+        signed_blob: signedCreate,
+      }, environment)).toBe(true);
+      expect(authorizeWalletHarborOperation(bound, "workAgreement.submit", {
+        ...base,
+        approval_id: "agreement-approval-1",
+        idempotency_key: "agreement-prepare-key-1",
+        attempt_id: "agreement-attempt-1",
+        signed_blob: foreignCreate,
+      }, environment)).toBe(false);
+      expect(authorizeWalletHarborOperation(bound, "workAgreement.submit", {
+        ...base,
+        approval_id: "agreement-approval-1",
+        idempotency_key: "agreement-prepare-key-1",
+        attempt_id: "agreement-attempt-1",
+        signed_blob: signedPayment,
+      }, environment)).toBe(false);
+      expect(authorizeWalletHarborOperation(bound, "workAgreement.recover", {
+        ...base,
+        approval_id: "agreement-approval-1",
+        idempotency_key: "agreement-prepare-key-1",
+      }, { EXEC_NETWORK: "devnet" })).toBe(false);
+      expect(authorizeWalletHarborOperation(bound, "workAgreement.reject", {
+        ...base,
+        owner: other.classicAddress,
+        approval_id: "agreement-approval-1",
+        idempotency_key: "agreement-prepare-key-1",
+      }, environment)).toBe(false);
+    } finally {
+      delete process.env.SESSION_SECRET;
+    }
+  });
+
   it("accepts only the exact account.link DelegateSet for direct submission", async () => {
     const wallet = Wallet.generate();
     const other = Wallet.generate();

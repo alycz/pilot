@@ -559,11 +559,50 @@ should use a deliberately scoped principal rather than a personal credential.
 
 ## Provisioning and deployment
 
+### Free/QuickJS code-only profile
+
+[`wrangler.free-quickjs.jsonc`](wrangler.free-quickjs.jsonc) is an inert
+template for a no-spend deployment review. It has no Worker Loader binding and
+no cron, keeps mainnet, autonomous execution, QuickNode, Mastercard MCP, KMS,
+AP4M, and shared model access off, and exposes only MCP search. REST operations
+return a fail-closed deployment-profile error, and MCP `execute`
+stays unregistered until a separately authorized Workers Free CPU acceptance
+run shows that the QuickJS path fits the plan's CPU budget.
+
+The checked-in template is deliberately not deployable: its Worker, existing
+D1 database, and HTTPS custom-domain origin are placeholders. Generate an
+operator-specific local config only after those three targets are approved:
+
+```bash
+npm run config:free:generate -- \
+  --profile free-quickjs \
+  --worker-name <approved-worker-name> \
+  --database-name <approved-existing-d1-name> \
+  --database-id <approved-existing-d1-uuid> \
+  --origin https://<approved-harbor-origin> \
+  --output ./wrangler.free-quickjs.operator.jsonc
+```
+
+The generator only writes a new local file and refuses to overwrite the shared
+or template configs. It does not authenticate, probe remote features, create a
+Worker or D1 database, upload secrets, apply migrations, fund wallets, or
+deploy. The checked-in bundle can be verified locally without contacting
+Cloudflare:
+
+```bash
+npm run deploy:free:dry-run
+npm run cf-typegen:free:check
+```
+
+### Paid Dynamic Worker bootstrap
+
 The repository includes [`scripts/bootstrap.sh`](scripts/bootstrap.sh) for the
-single scoped Worker and D1 environment defined by the external run kit. It is
-not a general installer: it mutates Cloudflare configuration, writes secrets
-outside Git, checks amendments, and creates test-ledger fixtures. Read and
-approve its exact scope before use.
+single scoped paid Dynamic Worker and D1 environment defined by the external
+run kit. It is not a general installer: it mutates Cloudflare configuration,
+writes secrets outside Git, checks amendments, and creates test-ledger
+fixtures. It now rejects non-paid profiles and will not silently fall back to
+QuickJS when the remote Worker Loader probe fails. Read and approve its exact
+scope before use.
 
 ```bash
 ./scripts/bootstrap.sh
@@ -583,8 +622,11 @@ the offline development flow.
 | `npm test` | Regenerate catalog artifacts and run all offline Vitest suites |
 | `npm run test:smoke` | Run opt-in smoke tests against `HARBOR_SMOKE_URL` |
 | `npm run deploy` | Regenerate the catalog and deploy the scoped Worker |
+| `npm run deploy:free:dry-run` | Bundle the inert no-loader Free/QuickJS template locally; never deploy |
+| `npm run config:free:generate -- ...` | Write a new explicitly targeted Free/QuickJS config without cloud actions |
 | `node scripts/build-catalog.mjs` | Validate venue YAML and regenerate ignored catalog/operation artifacts |
 | `npm run cf-typegen` | Refresh Worker binding types from Wrangler configuration |
+| `npm run cf-typegen:free` | Refresh the no-loader Free/QuickJS binding types |
 
 The offline suite covers schemas, guards, adapters, builders, policy,
 reservation races, replay protection, migrations, execution reconciliation,
@@ -656,6 +698,7 @@ Harbor is implemented from scratch and depends on:
 - [`aws4fetch`](https://github.com/mhart/aws4fetch) — narrow SigV4 signing for the AWS trust-layer clients
 - [`@noble/curves`](https://github.com/paulmillr/noble-curves) — Ed25519 implementation for the local KMS stand-in
 - [`ripple-keypairs`](https://github.com/XRPLF/xrpl.js/tree/main/packages/ripple-keypairs) — independent XRPL-compatible verification in stand-in tests
+- [`viem`](https://viem.sh/) — exact ABI, event-log, address, and EIP-712 validation for the isolated XRPL EVM Testnet AP4M event adapter
 - [`wrangler`](https://developers.cloudflare.com/workers/wrangler/) — Worker and D1 development/deployment
 - [`@cloudflare/vitest-plugin`](https://developers.cloudflare.com/workers/testing/vitest-integration/) — Cloudflare Worker test integration available for later live suites
 - [`vitest`](https://vitest.dev/) — offline unit tests

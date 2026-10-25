@@ -25,6 +25,12 @@ const PUBLIC_CONFIG: PublicPilotConfig = {
 };
 
 describe("chat wallet restoration", () => {
+  it("mounts research context once inside the existing singleton ChatView", () => {
+    const source = readFileSync(new URL("./chat-view.tsx", import.meta.url), "utf8");
+    expect(source.match(/<CopilotChatContext\b/g)).toHaveLength(1);
+    expect(source.match(/<StrategyHubProvider\b/g)).toHaveLength(1);
+  });
+
   it("keeps Ledger provenance display client-local and never posts it to the vault", () => {
     const source = readFileSync(new URL("./chat-view.tsx", import.meta.url), "utf8");
     expect(source).not.toContain("ledger-owner-validation");

@@ -57,6 +57,22 @@ const ACCOUNT_SEQUENCE_LEASE_COLUMNS = [
   "state", "sequence", "first_ledger_sequence", "last_ledger_sequence", "tx_hash",
   "acquired_at", "updated_at", "released_at", "release_evidence",
 ];
+const ISSUED_X402_STATE_COLUMNS = [
+  "idempotency_key", "scope", "binding", "payer", "merchant_invoice_id", "invoice_id",
+  "sequence", "approval_id", "approval_digest", "status", "tx_hash", "signed_blob",
+  "result_json", "created_at", "updated_at",
+];
+const ISSUED_X402_BUDGET_COLUMNS = [
+  "idempotency_key", "binding", "payer", "asset_key", "amount", "amount_atoms",
+  "fee_drops", "budget_day", "state", "created_at", "updated_at",
+];
+const ISSUED_X402_BUDGET_LOCK_COLUMNS = [
+  "payer", "idempotency_key", "token", "acquired_at",
+];
+const ISSUED_X402_JOURNAL_COLUMNS = [
+  "idempotency_key", "payer", "merchant_invoice_id", "invoice_id", "state_status",
+  "budget_state", "tx_hash", "result_json", "updated_at",
+];
 const BASE_MIGRATION_NAMES = [
   "0001_init.sql",
   "0002_x402_payments.sql",
@@ -69,11 +85,12 @@ const BASE_MIGRATION_NAMES = [
 const MIGRATION_NAMES = [
   ...BASE_MIGRATION_NAMES,
   "0009_isolated_sequence_authority.sql",
+  "0010_issued_x402_authority.sql",
 ];
 const COMBINED_UPGRADE_BASELINE_SCHEMA_FINGERPRINT =
   "8087e790ee8db7f69c5c89368017d396ba4061ff952cef7280fa5923dcb6a2cf";
 const EXPECTED_SCHEMA_FINGERPRINT =
-  "9154aefdcea17dd27f2123d01847d642be1aecc645b7f6f1ab6edd091647172d";
+  "fffd9b39d46ef1f875153def89bea6cbb8589b484b8f32283208a0d8017599a4";
 
 export const LOCAL_X402_DATABASE_PROFILE_ISOLATED_V1 = "isolated-v1";
 export const LOCAL_X402_DATABASE_PROFILE_COMBINED_UPGRADE_BASELINE =
@@ -87,6 +104,10 @@ function databaseProfile(profile) {
         ...BASE_REQUIRED_TABLES,
         "payer_sequence_leases",
         "account_sequence_leases",
+        "issued_x402_state",
+        "issued_x402_budget",
+        "issued_x402_budget_locks",
+        "issued_x402_journal",
       ]),
       schemaFingerprint: EXPECTED_SCHEMA_FINGERPRINT,
       sequenceAuthority: true,
@@ -526,6 +547,35 @@ export function validateIsolatedX402Database(
         ACCOUNT_SEQUENCE_LEASE_COLUMNS, accountLeaseTypes, accountLeaseNotNull,
         new Map([["network", 1], ["account", 2]]),
       ));
+      expectedColumns.set("issued_x402_state", expectedColumnShape(
+        ISSUED_X402_STATE_COLUMNS,
+        new Map([["sequence", "INTEGER"]]),
+        new Set([
+          "scope", "binding", "payer", "merchant_invoice_id", "invoice_id", "sequence",
+          "approval_id", "approval_digest", "status", "created_at", "updated_at",
+        ]),
+        new Map([["idempotency_key", 1]]),
+      ));
+      expectedColumns.set("issued_x402_budget", expectedColumnShape(
+        ISSUED_X402_BUDGET_COLUMNS,
+        new Map(),
+        new Set(ISSUED_X402_BUDGET_COLUMNS.slice(1)),
+        new Map([["idempotency_key", 1]]),
+      ));
+      expectedColumns.set("issued_x402_budget_locks", expectedColumnShape(
+        ISSUED_X402_BUDGET_LOCK_COLUMNS,
+        new Map(),
+        new Set(ISSUED_X402_BUDGET_LOCK_COLUMNS.slice(1)),
+        new Map([["payer", 1]]),
+      ));
+      expectedColumns.set("issued_x402_journal", expectedColumnShape(
+        ISSUED_X402_JOURNAL_COLUMNS,
+        new Map(),
+        new Set([
+          "payer", "merchant_invoice_id", "invoice_id", "state_status", "updated_at",
+        ]),
+        new Map([["idempotency_key", 1]]),
+      ));
     }
     for (const [table, expected] of expectedColumns) {
       const actual = columnShape(database.prepare(`PRAGMA table_info(${table})`).all());
@@ -563,6 +613,15 @@ export function validateIsolatedX402Database(
         `CREATE INDEX idx_account_sequence_leases_state
           ON account_sequence_leases(network, account, state)`,
       );
+      expectedIndexes.set(
+        "idx_issued_x402_state_payer_status",
+        "CREATE INDEX idx_issued_x402_state_payer_status ON issued_x402_state (payer, status)",
+      );
+      expectedIndexes.set(
+        "idx_issued_x402_budget_payer_asset_day",
+        `CREATE INDEX idx_issued_x402_budget_payer_asset_day
+          ON issued_x402_budget (payer, asset_key, budget_day, state)`,
+      );
     }
     const actualIndexes = database.prepare(
       "SELECT name, sql FROM sqlite_schema WHERE type = 'index' AND sql IS NOT NULL ORDER BY name",
@@ -599,6 +658,23 @@ export function validateIsolatedX402Database(
         "unique (network, account, generation)",
         "unique (network, account, source, attempt_id)",
         "source in ('strategy', 'manual', 'ap4m', 'x402')",
+      ]);
+      requiredTableSql.set("issued_x402_state", [
+        "primary key", "unique (payer, sequence)",
+        "status in ('reserved', 'signing', 'signed', 'uncertain', 'delivered')",
+        "status = 'delivered' and tx_hash is not null",
+      ]);
+      requiredTableSql.set("issued_x402_budget", [
+        "state in ('reserved', 'uncertain', 'committed')",
+        "length(amount_atoms) between 1 and 96",
+        "length(fee_drops) between 1 and 19",
+      ]);
+      requiredTableSql.set("issued_x402_budget_locks", [
+        "payer text primary key", "token text not null unique",
+      ]);
+      requiredTableSql.set("issued_x402_journal", [
+        "foreign key (idempotency_key) references issued_x402_state(idempotency_key)",
+        "state_status in ('reserved', 'signing', 'signed', 'uncertain', 'delivered')",
       ]);
     }
     for (const [table, fragments] of requiredTableSql) {

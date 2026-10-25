@@ -1,0 +1,61 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Second-stage Pilot AgentCore caller role scoped to one already-created Runtime.",
+  "Parameters": {
+    "RuntimeId": {
+      "Type": "String",
+      "AllowedPattern": "^[A-Za-z][A-Za-z0-9_]{0,99}-[A-Za-z0-9]{10}$"
+    },
+    "PilotCallerRoleName": {
+      "Type": "String",
+      "AllowedPattern": "^[A-Za-z0-9+=,.@_-]{1,64}$"
+    }
+  },
+  "Resources": {
+    "PilotCallerRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${PilotCallerRoleName}"
+                }
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "InvokeExactResearchRuntime",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "bedrock-agentcore:InvokeAgentRuntime",
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:runtime/${RuntimeId}"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          { "Key": "pilot:project", "Value": "pilot" },
+          { "Key": "pilot:component", "Value": "agentcore-caller" },
+          { "Key": "pilot:authority", "Value": "invoke-one-runtime" },
+          { "Key": "pilot:environment", "Value": "testnet" }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "PilotCallerRoleArn": { "Value": { "Fn::GetAtt": ["PilotCallerRole", "Arn"] } }
+  }
+}

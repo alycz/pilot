@@ -29,6 +29,7 @@ export const X402_ISOLATED_V1_MIGRATIONS = Object.freeze([
 	"0006_x402_budget_accounting.sql",
 	"0007_x402_payer_provisioning.sql",
 	"0009_isolated_sequence_authority.sql",
+	"0010_issued_x402_authority.sql",
 ]);
 
 const PROFILES = Object.freeze({
@@ -61,6 +62,7 @@ const PROFILES = Object.freeze({
 			"0006_x402_budget_accounting.sql": "fc5cb8b7161c6b55390efff09e2a073fb260263b28747a22e5126ee718862626",
 			"0007_x402_payer_provisioning.sql": "7cbd4eca4b4a8b9ab8d1d570a0aac92f4658543d1b3446b4be28d685ae5a3f6b",
 			"0009_isolated_sequence_authority.sql": "05bd5e94572baa34fca5ebe3cac7e735b1d1b7fc205177b7a012cd02de07bae9",
+			"0010_issued_x402_authority.sql": "40aea548d97d9b985bb92e21b07d2ff04d4087948b56d2ff0c3c8b7558f803de",
 		}),
 	}),
 });

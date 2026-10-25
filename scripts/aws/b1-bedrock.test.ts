@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   BedrockProbeError,
+  liveBedrockProbeConfig,
   parseBedrockProbeArgs,
   runBedrockProbe,
   runSyntheticToolCallingChat,
@@ -81,6 +82,24 @@ describe("AWS-6 Bedrock probe", () => {
       eventLive: false,
     }, { liveRunner })).rejects.toMatchObject({ code: "AWS_MODE_REQUIRES_EVENT_LIVE" });
     expect(liveRunner).not.toHaveBeenCalled();
+  });
+
+  it("uses the same bounded region policy as hosted Pilot", () => {
+    expect(liveBedrockProbeConfig("amazon.nova-lite-v1:0", {
+      AWS_REGION: "us-east-2",
+      BEDROCK_DAILY_TURN_CAP: "25",
+    })).toEqual({
+      region: "us-east-2",
+      bedrockMode: "aws",
+      bedrockModels: ["amazon.nova-lite-v1:0"],
+      bedrockDailyTurnCap: 25,
+    });
+    expect(liveBedrockProbeConfig("amazon.nova-lite-v1:0", {
+      AWS_REGION: "us-east-1",
+    }).region).toBe("us-east-1");
+    expect(() => liveBedrockProbeConfig("amazon.nova-lite-v1:0", {
+      AWS_REGION: "us-west-2",
+    })).toThrow("AWS_REGION");
   });
 
   it("hides provider errors and model output behind fixed failure metadata", async () => {

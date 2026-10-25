@@ -1,0 +1,21 @@
+{
+  "fixtureKind": "deterministic-offline-xrpl-issued-reconciliation",
+  "notice": "OFFLINE FIXTURE ONLY. This is not live XRPL validated-ledger evidence.",
+  "fixtureId": "x402-issued-expired-absent-v1",
+  "network": "xrpl:1",
+  "transactionHash": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+  "unboundedResult": {
+    "error": "txnNotFound"
+  },
+  "validatedLedgerHead": 1021,
+  "boundedSearches": [
+    {
+      "minLedger": 1001,
+      "maxLedger": 1020,
+      "result": {
+        "error": "txnNotFound",
+        "searched_all": true
+      }
+    }
+  ]
+}

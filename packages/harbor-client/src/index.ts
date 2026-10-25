@@ -5,3 +5,4 @@ export * from "./request.js";
 export * from "./response.js";
 export * from "./types.js";
 export * from "./x402-endpoint.js";
+export * from "./x402-issued.js";

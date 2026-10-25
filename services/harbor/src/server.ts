@@ -9,16 +9,25 @@ import { scheduled as runScheduled } from "./cron";
 import { createHarborProvider } from "./executor/providers";
 import { createLocalX402Service } from "./exec/x402-runtime";
 import {
+	createLocalIssuedX402FixtureService,
+	type LocalIssuedX402RuntimeAdapter,
+} from "./exec/x402-issued-runtime";
+import {
 	createAp4mRuntimeServices,
 	type Ap4mRuntimeAdapter,
 } from "./exec/ap4m-runtime";
 import type { Ap4mPurchaseServices } from "./ops/ap4m";
+import { CAPABILITY_OPERATION_NAMES } from "./ops/capability";
 import type { X402Service } from "./x402-contract";
 import {
 	LOCAL_HARBOR_ORIGIN,
 	isLocalDevRequest,
 	probeLocalX402,
 } from "./local-x402";
+import {
+	isLocalX402IssuedFixtureRequest,
+	localX402IssuedFixtureMarkersPresent,
+} from "./local-x402-issued-fixture";
 import {
 	isLocalX402IsolatedV1Request,
 	localX402IsolatedV1MarkersPresent,
@@ -46,6 +55,14 @@ import type {
 } from "./quicknode/watchdog";
 import { KmsKekError, validateKmsConfig } from "./aws/kms";
 import { handleDemoModelQuotaRoute } from "./demo-model-quota-route";
+import {
+	OWNER_REVIEW_OPERATION_NAMES,
+	handleOwnerReviewX402Route,
+} from "./x402-owner-review-route";
+import {
+	WORK_AGREEMENT_OPERATION_NAMES,
+	handleWorkAgreementRoute,
+} from "./work-agreement-route";
 
 export interface Env {
 	DB: D1Database;
@@ -76,12 +93,18 @@ export interface Env {
 	HARBOR_LOCAL_READ_ONLY?: string;
 	HARBOR_LOCAL_AUTH_REQUIRED?: string;
 	HARBOR_LOCAL_CRON_DISABLED?: string;
+	HARBOR_LOCAL_CAPABILITY_RUNTIME_ENABLED?: string;
+	HARBOR_LOCAL_WORK_AGREEMENT_ENABLED?: string;
 	HARBOR_LOCAL_X402?: string;
 	HARBOR_LOCAL_X402_MERCHANT_PAY_TO?: string;
 	HARBOR_LOCAL_X402_RUNTIME_ENABLED?: string;
 	HARBOR_LOCAL_X402_SIGNING_PROFILE?: string;
+	HARBOR_LOCAL_X402_OWNER_REVIEW_ENABLED?: string;
 	HARBOR_LOCAL_X402_ISOLATED_V1_RUNTIME_ENABLED?: string;
 	HARBOR_LOCAL_X402_ISOLATED_V1_SIGNING_PROFILE?: string;
+	HARBOR_LOCAL_X402_ISSUED_FIXTURE_ENABLED?: string;
+	HARBOR_LOCAL_X402_ISSUED_FIXTURE_PROFILE?: string;
+	HARBOR_LOCAL_X402_ISSUED_RUNTIME_ADAPTER?: LocalIssuedX402RuntimeAdapter;
 	HARBOR_LOCAL_AP4M_X402_COMBINED_V1_RUNTIME_ENABLED?: string;
 	HARBOR_LOCAL_AP4M_X402_COMBINED_V1_SIGNING_PROFILE?: string;
 	HARBOR_LOCAL_TRADING_RUNTIME_ENABLED?: string;
@@ -125,8 +148,23 @@ export type AuthResult =
 	| { ok: false; response: Response };
 
 const LOCAL_ONLY_OPERATION_NAMES = new Set([
+	...CAPABILITY_OPERATION_NAMES,
 	"quicknode.test.registerLink",
 	"quicknode.test.deleteLink",
+]);
+const OWNER_REVIEW_ROUTE_PATHS = new Set(
+	OWNER_REVIEW_OPERATION_NAMES.map((name) => `/api/ops/${name}`),
+);
+export const CAPABILITY_ROUTE_PATHS = Object.freeze(
+	CAPABILITY_OPERATION_NAMES.map((name) => `/api/ops/${name}`),
+);
+export const WORK_AGREEMENT_ROUTE_PATHS = Object.freeze(
+	WORK_AGREEMENT_OPERATION_NAMES.map((name) => `/api/ops/${name}`),
+);
+const LOCAL_BEARER_REQUIRED_ROUTE_PATHS = new Set([
+	...OWNER_REVIEW_ROUTE_PATHS,
+	...CAPABILITY_ROUTE_PATHS,
+	...WORK_AGREEMENT_ROUTE_PATHS,
 ]);
 
 const productionAppRegistry = new OpRegistry(
@@ -168,6 +206,7 @@ export class HarborRpc extends WorkerEntrypoint<Env, HarborRpcProps> {
 				return ap4mConfigurationEnvelope();
 			}
 		}
+		const issuedFixtureService = await createLocalIssuedX402FixtureService(this.env);
 		const provider = createHarborProvider(
 			selectRuntimeRegistry(this.env, this.ctx.props.localDevRequest === true),
 			{
@@ -176,6 +215,9 @@ export class HarborRpc extends WorkerEntrypoint<Env, HarborRpcProps> {
 				db: this.env.DB,
 				env: this.env,
 				x402Service: createLocalX402Service(this.env),
+				...(issuedFixtureService === undefined
+					? {}
+					: { x402IssuedFixtureService: issuedFixtureService }),
 				...(ap4mServices === undefined ? {} : { ap4mServices }),
 			},
 		);
@@ -221,6 +263,9 @@ function targetsLocalX402Origin(request: Request): boolean {
 }
 
 function deriveLocalDevRequest(request: Request, env: Env): boolean {
+	if (localX402IssuedFixtureMarkersPresent(env)) {
+		return isLocalX402IssuedFixtureRequest(request, env);
+	}
 	if (localX402IsolatedV1MarkersPresent(env)) {
 		return isLocalX402IsolatedV1Request(request, env);
 	}
@@ -239,8 +284,10 @@ function authenticateWithLocalCapability(
 	localDevRequest: boolean,
 ): AuthResult {
 	if (
+		!LOCAL_BEARER_REQUIRED_ROUTE_PATHS.has(new URL(request.url).pathname) &&
 		isLegacyLocalDevRequest(request, env) &&
 		!localTradingSafetyMarkersPresent(env) &&
+		!localX402IssuedFixtureMarkersPresent(env) &&
 		(!targetsLocalX402Origin(request) ||
 			(localDevRequest && env.HARBOR_LOCAL_X402_RUNTIME_ENABLED !== "true"))
 	) {
@@ -387,6 +434,16 @@ export function createAp4mRuntimeFactory(
 	return (env) => createAp4mRuntimeServices(env, adapters);
 }
 
+export function restOperationsEnabledForDeployment(
+	env: object,
+): boolean {
+	const profile = "HARBOR_DEPLOYMENT_PROFILE" in env
+		? (env as Readonly<{ HARBOR_DEPLOYMENT_PROFILE?: unknown }>).HARBOR_DEPLOYMENT_PROFILE
+		: undefined;
+	if (profile === undefined) return true;
+	return profile === "paid-dynamic";
+}
+
 export function createWorker(
 	registry?: OpRegistry,
 	localX402Service: LocalX402ServiceFactory = createLocalX402Service,
@@ -477,6 +534,22 @@ export function createWorker(
 			});
 			if (demoQuotaResponse) return demoQuotaResponse;
 
+			const ownerReviewResponse = await handleOwnerReviewX402Route(request, {
+				principal: auth.principal,
+				localDevRequest,
+				db: env.DB,
+				env,
+			});
+			if (ownerReviewResponse) return ownerReviewResponse;
+
+			const workAgreementResponse = await handleWorkAgreementRoute(request, {
+				principal: auth.principal,
+				localDevRequest,
+				db: env.DB,
+				env,
+			});
+			if (workAgreementResponse) return workAgreementResponse;
+
 			let ap4mServices: Ap4mPurchaseServices | undefined;
 			try {
 				ap4mServices = ap4mRuntime(env);
@@ -485,6 +558,7 @@ export function createWorker(
 					return ap4mConfigurationFailure();
 				}
 			}
+			const issuedFixtureService = await createLocalIssuedX402FixtureService(env);
 			const ctx = {
 				principal: auth.principal,
 				localDevRequest,
@@ -492,9 +566,26 @@ export function createWorker(
 				env,
 				request,
 				x402Service: localX402Service(env),
+				...(issuedFixtureService === undefined
+					? {}
+					: { x402IssuedFixtureService: issuedFixtureService }),
 				...(ap4mServices === undefined ? {} : { ap4mServices }),
 			};
 			if (url.pathname.startsWith("/api/ops/")) {
+				if (!restOperationsEnabledForDeployment(env)) {
+					return Response.json(
+						{
+							ok: false,
+							error: {
+								service: "rest",
+								kind: "error",
+								message: "REST operations are disabled for this deployment profile",
+								code: "DEPLOYMENT_PROFILE_DISABLED",
+							},
+						},
+						{ status: 403, headers: { "cache-control": "no-store" } },
+					);
+				}
 				const opName = url.pathname.slice("/api/ops/".length);
 				return handleRestOperation(request, opName, ctx, requestRegistry);
 			}

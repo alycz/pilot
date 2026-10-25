@@ -950,7 +950,7 @@ def test_real_facilitator_targets_are_fixed_and_redirects_fail_closed(
     )
     monkeypatch.setattr(
         "apps.web.api.x402.verifier._inspect_transaction",
-        lambda signed_blob, requirement: inspected,
+        lambda signed_blob, requirement, approval_envelope=None, resource=None: inspected,
     )
     seen: list[tuple[str, Mapping[str, Any]]] = []
 

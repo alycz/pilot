@@ -30,8 +30,13 @@
 		"test:smoke": "vitest run --config vitest.smoke.config.mts",
 		"predeploy": "node scripts/build-catalog.mjs",
 		"deploy": "wrangler deploy",
+		"config:free:generate": "node scripts/configure-deployment.mjs",
+		"predeploy:free:dry-run": "node scripts/build-catalog.mjs",
+		"deploy:free:dry-run": "wrangler deploy --dry-run --config wrangler.free-quickjs.jsonc",
 		"cf-typegen": "wrangler types --env-file .env.example",
-		"cf-typegen:check": "wrangler types --env-file .env.example --check"
+		"cf-typegen:check": "wrangler types --env-file .env.example --check",
+		"cf-typegen:free": "wrangler types worker-configuration.free-quickjs.d.ts --config wrangler.free-quickjs.jsonc --env-interface FreeQuickJsEnv --include-runtime false",
+		"cf-typegen:free:check": "wrangler types worker-configuration.free-quickjs.d.ts --config wrangler.free-quickjs.jsonc --env-interface FreeQuickJsEnv --include-runtime false --check"
 	},
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.32.1",
@@ -40,6 +45,7 @@
 		"minisearch": "^7.2.0",
 		"quickjs-emscripten": "^0.32.0",
 		"ripple-keypairs": "^3.1.0",
+		"viem": "2.57.11",
 		"xrpl": "^5.3.0",
 		"yaml": "^2.9.1",
 		"zod": "^4.6.7"

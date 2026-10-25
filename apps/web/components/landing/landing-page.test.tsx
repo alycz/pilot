@@ -8,7 +8,7 @@ describe("landing architecture partner line", () => {
       fileURLToPath(new URL("./landing-page.tsx", import.meta.url)),
       "utf8",
     );
-    const partnerLine = "RPC, confirmations and agent-key monitoring on QuickNode";
+    const partnerLine = "QuickNode RPC, confirmation and key-monitoring contracts · provider calls default-off";
 
     expect(source.match(new RegExp(partnerLine, "g"))).toHaveLength(1);
     const architecture = source.slice(
@@ -17,5 +17,27 @@ describe("landing architecture partner line", () => {
     );
     expect(architecture).toContain(partnerLine);
     expect(architecture.match(/<Section\b/g)).toHaveLength(1);
+  });
+
+  it("keeps public readiness claims aligned with the mock and default-off runtime", () => {
+    const source = readFileSync(
+      fileURLToPath(new URL("./landing-page.tsx", import.meta.url)),
+      "utf8",
+    );
+
+    for (const staleClaim of [
+      "Live on Testnet today",
+      "Live end-to-end trades in the Pilot app",
+      "Pilot is live on Testnet",
+      "Pilot developer APIs · Live on XRPL Testnet",
+      "Ledger, QuickNode, AWS and Mastercard integrations",
+    ]) {
+      expect(source).not.toContain(staleClaim);
+    }
+
+    expect(source).toContain("Public runtime: explicit mock/default-off");
+    expect(source).toContain("The current public runtime makes no provider calls or transactions.");
+    expect(source).toContain("Ledger, QuickNode, AWS and Mastercard adapters are default-off");
+    expect(source).toContain("Testnet fixture");
   });
 });

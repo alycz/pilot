@@ -1,13 +1,27 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import re
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional, Protocol
 
 import httpx
 from xrpl.core.addresscodec import is_valid_classic_address
-from xrpl.core.binarycodec import decode
+from xrpl.core.binarycodec import decode, encode_for_signing
+from xrpl.core.keypairs import is_valid_message
+
+from .approval import (
+    ApprovalEnvelopeError,
+    extract_issued_approval_envelope,
+    validate_issued_envelope_transaction,
+)
+from .assets import (
+    IssuedCurrencyAsset,
+    NativeXrpAsset,
+    exact_decimal_equal,
+    parse_requirement_asset,
+)
 
 from .config import T54_TESTNET_FACILITATOR_URL, XRPL_TESTNET_JSON_RPC_URL
 from .protocol import ProtocolError, decode_bounded_json_bytes
@@ -16,6 +30,7 @@ from .protocol import ProtocolError, decode_bounded_json_bytes
 HASH_PATTERN = re.compile(r"^[A-F0-9]{64}$")
 POSITIVE_DROPS = re.compile(r"^[1-9][0-9]*$")
 TF_PARTIAL_PAYMENT = 0x00020000
+TF_FULLY_CANONICAL_SIG = 0x80000000
 TRANSACTION_HASH_PREFIX = bytes.fromhex("54584E00")
 MAX_FACILITATOR_RESPONSE_BYTES = 16 * 1024
 MAX_TX_SEARCH_LEDGER_COUNT = 1_000
@@ -25,6 +40,7 @@ ALLOWED_TRANSACTION_FIELDS = {
     "Destination",
     "Amount",
     "DeliverMax",
+    "SendMax",
     "InvoiceID",
     "SourceTag",
     "DestinationTag",
@@ -45,6 +61,12 @@ class VerificationRejected(VerificationError):
     pass
 
 
+class SettlementNotAttempted(VerificationRejected):
+    """A definitive local rejection that occurred before any submission."""
+
+    pass
+
+
 @dataclass(frozen=True)
 class VerificationReceipt:
     is_valid: bool
@@ -58,6 +80,11 @@ class VerificationReceipt:
     resource_url: str
     source_tag: int
     last_ledger_sequence: int = 0
+    asset: str = "XRP"
+    issuer: Optional[str] = None
+    evidence_source: str = "validated-ledger"
+    payer_xrp_balance_drops: Optional[str] = None
+    approval_digest: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -111,6 +138,8 @@ class PaymentFacilitator(Protocol):
 def _inspect_transaction(
     signed_blob: str,
     requirement: Mapping[str, Any],
+    approval_envelope: Optional[Mapping[str, Any]] = None,
+    resource: Optional[Mapping[str, Any]] = None,
 ) -> VerificationReceipt:
     try:
         transaction = decode(signed_blob)
@@ -123,11 +152,37 @@ def _inspect_transaction(
     assert isinstance(extra, dict)
     invoice_id = extra["invoiceId"]
     source_tag = extra["sourceTag"]
+    payment_asset = parse_requirement_asset(requirement)
     amount = transaction.get("DeliverMax", transaction.get("Amount"))
     if "DeliverMax" in transaction and "Amount" in transaction:
         raise VerificationRejected("ambiguous_amount")
-    if amount != requirement["amount"] or not isinstance(amount, str):
-        raise VerificationRejected("amount_mismatch")
+    if isinstance(payment_asset, NativeXrpAsset):
+        if amount != requirement["amount"] or not isinstance(amount, str):
+            raise VerificationRejected("amount_mismatch")
+        if "SendMax" in transaction:
+            raise VerificationRejected("send_max_for_xrp_forbidden")
+    else:
+        if not isinstance(amount, dict) or set(amount) != {"currency", "issuer", "value"}:
+            raise VerificationRejected("invalid_issued_amount")
+        if (
+            amount.get("currency") != payment_asset.currency
+            or amount.get("issuer") != payment_asset.issuer
+            or not isinstance(amount.get("value"), str)
+            or not exact_decimal_equal(amount["value"], requirement["amount"])
+        ):
+            raise VerificationRejected("issued_amount_mismatch")
+        send_max = transaction.get("SendMax")
+        if not isinstance(send_max, dict) or set(send_max) != {
+            "currency", "issuer", "value"
+        }:
+            raise VerificationRejected("issued_send_max_required")
+        if (
+            send_max.get("currency") != payment_asset.currency
+            or send_max.get("issuer") != payment_asset.issuer
+            or not isinstance(send_max.get("value"), str)
+            or not exact_decimal_equal(send_max["value"], amount["value"])
+        ):
+            raise VerificationRejected("issued_send_max_mismatch")
     if transaction.get("Destination") != requirement["payTo"]:
         raise VerificationRejected("destination_mismatch")
     if transaction.get("SourceTag") != source_tag:
@@ -136,10 +191,25 @@ def _inspect_transaction(
         raise VerificationRejected("destination_tag_mismatch")
     if "destinationTag" not in extra and "DestinationTag" in transaction:
         raise VerificationRejected("unexpected_destination_tag")
-    if transaction.get("InvoiceID", "").upper() != hashlib.sha256(
-        invoice_id.encode("utf-8")
-    ).hexdigest().upper():
-        raise VerificationRejected("invoice_binding_mismatch")
+    approval_digest: Optional[str] = None
+    if isinstance(payment_asset, IssuedCurrencyAsset):
+        if approval_envelope is None:
+            raise VerificationRejected("semantic_approval_envelope_required")
+        if resource is None:
+            raise VerificationRejected("semantic_approval_resource_required")
+        try:
+            approval_digest = validate_issued_envelope_transaction(
+                approval_envelope, transaction, requirement, resource
+            )
+        except ApprovalEnvelopeError as exc:
+            raise VerificationRejected(exc.code) from exc
+    else:
+        if approval_envelope is not None:
+            raise VerificationRejected("mixed_approval_contract_rejected")
+        if transaction.get("InvoiceID", "").upper() != hashlib.sha256(
+            invoice_id.encode("utf-8")
+        ).hexdigest().upper():
+            raise VerificationRejected("invoice_binding_mismatch")
     if (
         not isinstance(transaction.get("LastLedgerSequence"), int)
         or transaction["LastLedgerSequence"] <= 0
@@ -152,6 +222,8 @@ def _inspect_transaction(
     flags = transaction.get("Flags", 0)
     if not isinstance(flags, int) or flags & TF_PARTIAL_PAYMENT:
         raise VerificationRejected("partial_payment_forbidden")
+    if flags & ~TF_FULLY_CANONICAL_SIG:
+        raise VerificationRejected("unsupported_payment_flag")
     fee = transaction.get("Fee")
     payer = transaction.get("Account")
     if not isinstance(fee, str) or not POSITIVE_DROPS.fullmatch(fee):
@@ -164,6 +236,16 @@ def _inspect_transaction(
         raise VerificationRejected("missing_signing_public_key")
     if not isinstance(transaction.get("TxnSignature"), str) or not transaction["TxnSignature"]:
         raise VerificationRejected("missing_transaction_signature")
+    try:
+        signing_transaction = dict(transaction)
+        signature = bytes.fromhex(signing_transaction.pop("TxnSignature"))
+        signing_bytes = bytes.fromhex(encode_for_signing(signing_transaction))
+        if not is_valid_message(signing_bytes, signature, transaction["SigningPubKey"]):
+            raise VerificationRejected("invalid_transaction_signature")
+    except VerificationRejected:
+        raise
+    except Exception as exc:
+        raise VerificationRejected("invalid_transaction_signature") from exc
 
     transaction_hash = (
         hashlib.sha512(TRANSACTION_HASH_PREFIX + bytes.fromhex(signed_blob))
@@ -183,7 +265,25 @@ def _inspect_transaction(
         resource_url="",
         source_tag=source_tag,
         last_ledger_sequence=transaction["LastLedgerSequence"],
+        asset=requirement["asset"],
+        issuer=(payment_asset.issuer if isinstance(payment_asset, IssuedCurrencyAsset) else None),
+        approval_digest=approval_digest,
     )
+
+
+def _approval_envelope_for_payment(
+    payment_payload: Mapping[str, Any],
+    payment_requirement: Mapping[str, Any],
+) -> Optional[Mapping[str, Any]]:
+    payment_asset = parse_requirement_asset(payment_requirement)
+    if isinstance(payment_asset, IssuedCurrencyAsset):
+        try:
+            return extract_issued_approval_envelope(payment_payload)
+        except ApprovalEnvelopeError as exc:
+            raise VerificationRejected(exc.code) from exc
+    if "extensions" in payment_payload:
+        raise VerificationRejected("mixed_approval_contract_rejected")
+    return None
 
 
 class T54Facilitator:
@@ -388,7 +488,12 @@ class T54Facilitator:
         resource: Mapping[str, Any],
     ) -> VerificationReceipt:
         signed_blob = payment_payload["payload"]["signedTxBlob"]
-        inspected = _inspect_transaction(signed_blob, payment_requirement)
+        inspected = _inspect_transaction(
+            signed_blob,
+            payment_requirement,
+            _approval_envelope_for_payment(payment_payload, payment_requirement),
+            resource,
+        )
         result = await self._post_bounded(
             "/verify", self._request(payment_payload, payment_requirement)
         )
@@ -412,7 +517,12 @@ class T54Facilitator:
         resource: Mapping[str, Any],
     ) -> VerificationReceipt:
         signed_blob = payment_payload["payload"]["signedTxBlob"]
-        inspected = _inspect_transaction(signed_blob, payment_requirement)
+        inspected = _inspect_transaction(
+            signed_blob,
+            payment_requirement,
+            _approval_envelope_for_payment(payment_payload, payment_requirement),
+            resource,
+        )
         result = await self._post_bounded(
             "/settle", self._request(payment_payload, payment_requirement)
         )
@@ -518,8 +628,19 @@ class T54Facilitator:
             raise VerificationRejected("invalid_validated_ledger_result")
         if meta.get("TransactionResult") != "tesSUCCESS":
             raise VerificationRejected("ledger_transaction_failed")
+        payment_asset = parse_requirement_asset(payment_requirement)
         delivered = meta.get("delivered_amount", meta.get("DeliveredAmount"))
-        if delivered != payment_requirement["amount"] or not isinstance(delivered, str):
+        if isinstance(payment_asset, NativeXrpAsset):
+            if delivered != payment_requirement["amount"] or not isinstance(delivered, str):
+                raise VerificationRejected("ledger_delivered_amount_mismatch")
+        elif (
+            not isinstance(delivered, dict)
+            or set(delivered) != {"currency", "issuer", "value"}
+            or delivered.get("currency") != payment_asset.currency
+            or delivered.get("issuer") != payment_asset.issuer
+            or not isinstance(delivered.get("value"), str)
+            or not exact_decimal_equal(delivered["value"], payment_requirement["amount"])
+        ):
             raise VerificationRejected("ledger_delivered_amount_mismatch")
         if result.get("hash", transaction.get("hash")) != receipt.transaction:
             raise VerificationRejected("ledger_transaction_hash_mismatch")
@@ -546,7 +667,17 @@ class T54Facilitator:
         amount = transaction.get("DeliverMax", transaction.get("Amount"))
         if "DeliverMax" in transaction and "Amount" in transaction:
             raise VerificationRejected("ledger_ambiguous_amount")
-        if amount != payment_requirement["amount"] or not isinstance(amount, str):
+        if isinstance(payment_asset, NativeXrpAsset):
+            if amount != payment_requirement["amount"] or not isinstance(amount, str):
+                raise VerificationRejected("ledger_amount_mismatch")
+        elif (
+            not isinstance(amount, dict)
+            or set(amount) != {"currency", "issuer", "value"}
+            or amount.get("currency") != payment_asset.currency
+            or amount.get("issuer") != payment_asset.issuer
+            or not isinstance(amount.get("value"), str)
+            or not exact_decimal_equal(amount["value"], payment_requirement["amount"])
+        ):
             raise VerificationRejected("ledger_amount_mismatch")
         extra = payment_requirement["extra"]
         if transaction.get("SourceTag") != extra["sourceTag"]:
@@ -561,9 +692,17 @@ class T54Facilitator:
                 raise VerificationRejected("ledger_destination_tag_mismatch")
         elif "DestinationTag" in transaction:
             raise VerificationRejected("ledger_unexpected_destination_tag")
-        expected_invoice = hashlib.sha256(
-            extra["invoiceId"].encode("utf-8")
-        ).hexdigest().upper()
+        if isinstance(payment_asset, IssuedCurrencyAsset):
+            expected_invoice = receipt.approval_digest
+            if (
+                not isinstance(expected_invoice, str)
+                or not HASH_PATTERN.fullmatch(expected_invoice)
+            ):
+                raise VerificationRejected("ledger_approval_digest_missing")
+        else:
+            expected_invoice = hashlib.sha256(
+                extra["invoiceId"].encode("utf-8")
+            ).hexdigest().upper()
         if transaction.get("InvoiceID", "").upper() != expected_invoice:
             raise VerificationRejected("ledger_invoice_binding_mismatch")
         fee = transaction.get("Fee")
@@ -577,11 +716,24 @@ class T54Facilitator:
         flags = transaction.get("Flags", 0)
         if not isinstance(flags, int) or flags & TF_PARTIAL_PAYMENT:
             raise VerificationRejected("ledger_partial_payment_forbidden")
-        if any(
-            key in transaction
-            for key in ("Memos", "SendMax", "Paths", "DeliverMin", "Delegate")
-        ):
+        if flags & ~TF_FULLY_CANONICAL_SIG:
+            raise VerificationRejected("ledger_unsupported_payment_flag")
+        forbidden = ("Memos", "Paths", "DeliverMin", "Delegate")
+        if any(key in transaction for key in forbidden):
             raise VerificationRejected("ledger_unsupported_payment_field")
+        if isinstance(payment_asset, NativeXrpAsset) and "SendMax" in transaction:
+            raise VerificationRejected("ledger_unsupported_payment_field")
+        if isinstance(payment_asset, IssuedCurrencyAsset):
+            send_max = transaction.get("SendMax")
+            if (
+                not isinstance(send_max, dict)
+                or set(send_max) != {"currency", "issuer", "value"}
+                or send_max.get("currency") != payment_asset.currency
+                or send_max.get("issuer") != payment_asset.issuer
+                or not isinstance(send_max.get("value"), str)
+                or not exact_decimal_equal(send_max["value"], payment_requirement["amount"])
+            ):
+                raise VerificationRejected("ledger_send_max_mismatch")
         return ReconciliationResult("validated", ledger_index)
 
 
@@ -603,12 +755,35 @@ def validate_receipt(
         and receipt.last_ledger_sequence == 0
         and first_ledger_sequence is None
     )
+    payment_asset = parse_requirement_asset(requirement)
+    timeout = requirement.get("maxTimeoutSeconds")
+    max_ledger_delta = (
+        math.ceil(timeout / 5) + 2
+        if isinstance(timeout, int) and not isinstance(timeout, bool) and timeout > 0
+        else 0
+    )
+    effective_window = (
+        min(MAX_TX_SEARCH_LEDGER_COUNT, max_ledger_delta)
+        if isinstance(payment_asset, IssuedCurrencyAsset)
+        else MAX_TX_SEARCH_LEDGER_COUNT
+    )
     ledger_window_is_valid = first_ledger_sequence is None or (
         isinstance(first_ledger_sequence, int)
         and first_ledger_sequence > 0
         and receipt.last_ledger_sequence >= first_ledger_sequence
         and receipt.last_ledger_sequence - first_ledger_sequence + 1
-        <= MAX_TX_SEARCH_LEDGER_COUNT
+        <= effective_window
+    )
+    expected_issuer = (
+        payment_asset.issuer if isinstance(payment_asset, IssuedCurrencyAsset) else None
+    )
+    approval_digest_is_valid = (
+        (
+            isinstance(receipt.approval_digest, str)
+            and HASH_PATTERN.fullmatch(receipt.approval_digest) is not None
+        )
+        if isinstance(payment_asset, IssuedCurrencyAsset)
+        else receipt.approval_digest is None
     )
     if (
         receipt.is_valid is not True
@@ -616,7 +791,10 @@ def validate_receipt(
         or receipt.network != "xrpl:1"
         or not is_valid_classic_address(receipt.payer)
         or receipt.pay_to != requirement["payTo"]
-        or receipt.amount_drops != requirement["amount"]
+        or not exact_decimal_equal(receipt.amount_drops, requirement["amount"])
+        or receipt.asset != requirement["asset"]
+        or receipt.issuer != expected_issuer
+        or not approval_digest_is_valid
         or receipt.invoice_id != extra["invoiceId"]
         or receipt.resource_url != resource["url"]
         or receipt.source_tag != extra["sourceTag"]

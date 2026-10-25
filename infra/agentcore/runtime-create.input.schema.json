@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pilot.invalid/schemas/agentcore-runtime-create-input.json",
+  "title": "Pilot AgentCore Runtime staged creation input",
+  "description": "Account-time wrapper whose createInput member is the reviewed CreateAgentRuntime request body. MMDSv2 is intentionally absent because the create API does not accept metadataConfiguration.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["region", "destinationAccountId", "createInput", "postCreateVerification"],
+  "properties": {
+    "region": { "enum": ["us-east-1", "us-east-2"] },
+    "destinationAccountId": { "type": "string", "pattern": "^[0-9]{12}$" },
+    "createInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agentRuntimeName", "agentRuntimeArtifact", "roleArn", "protocolConfiguration", "networkConfiguration", "environmentVariables", "tags"],
+      "properties": {
+        "agentRuntimeName": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,47}$"
+        },
+        "agentRuntimeArtifact": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["containerConfiguration"],
+          "properties": {
+            "containerConfiguration": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["containerUri"],
+              "properties": {
+                "containerUri": {
+                  "type": "string",
+                  "pattern": "^[0-9]{12}\\.dkr\\.ecr\\.(?:us-east-1|us-east-2)\\.amazonaws\\.com/[a-z0-9]+(?:[._/-][a-z0-9]+)*@sha256:[a-f0-9]{64}$"
+                }
+              }
+            }
+          }
+        },
+        "roleArn": {
+          "type": "string",
+          "pattern": "^arn:aws:iam::[0-9]{12}:role/.+$"
+        },
+        "protocolConfiguration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["serverProtocol"],
+          "properties": { "serverProtocol": { "const": "HTTP" } }
+        },
+        "networkConfiguration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["networkMode"],
+          "properties": { "networkMode": { "enum": ["PUBLIC", "VPC"] } }
+        },
+        "environmentVariables": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "AGENTCORE_RUNTIME_SERVER_MODE",
+            "AGENTCORE_AWS_REGION",
+            "AGENTCORE_IDENTITY_CREDENTIAL_PROVIDER_NAME",
+            "AGENTCORE_GATEWAY_URL",
+            "AGENTCORE_GATEWAY_TOOL_NAME",
+            "AGENTCORE_GATEWAY_JWT_ISSUER",
+            "AGENTCORE_GATEWAY_JWT_JWKS_URL",
+            "AGENTCORE_GATEWAY_JWT_AUDIENCES_JSON",
+            "AGENTCORE_GATEWAY_JWT_ALLOWED_SUBJECTS_JSON",
+            "AGENTCORE_GATEWAY_JWT_ALLOWED_CLIENTS_JSON",
+            "AGENTCORE_GATEWAY_JWT_REQUIRED_SCOPES_JSON",
+            "AGENTCORE_GATEWAY_JWT_CLIENT_CLAIM",
+            "AGENTCORE_GATEWAY_JWT_TENANT_CLAIM",
+            "AGENTCORE_GATEWAY_JWT_DEPLOYMENT_TENANT_ID",
+            "AGENTCORE_GATEWAY_JWT_ALGORITHMS_JSON",
+            "AGENTCORE_REPLAY_TABLE",
+            "AGENTCORE_REPLAY_DEPLOYMENT_ID",
+            "AGENTCORE_REPLAY_LEASE_MS",
+            "AGENTCORE_REPLAY_RETENTION_MS",
+            "AGENTCORE_RUNTIME_REQUEST_TIMEOUT_MS",
+            "AGENTCORE_RUNTIME_MAX_REQUEST_BYTES",
+            "AGENTCORE_RUNTIME_MAX_RESPONSE_BYTES",
+            "AGENTCORE_RUNTIME_MAX_CONCURRENT_REQUESTS"
+          ],
+          "properties": {
+            "AGENTCORE_RUNTIME_SERVER_MODE": { "const": "aws" },
+            "AGENTCORE_AWS_REGION": { "enum": ["us-east-1", "us-east-2"] },
+            "AGENTCORE_IDENTITY_CREDENTIAL_PROVIDER_NAME": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$" },
+            "AGENTCORE_GATEWAY_URL": { "type": "string", "pattern": "^https://[0-9a-z](?:[0-9a-z-]{0,98}[0-9a-z])?-[0-9a-z]{10}\\.gateway\\.bedrock-agentcore\\.(?:us-east-1|us-east-2)\\.amazonaws\\.com/mcp$" },
+            "AGENTCORE_GATEWAY_TOOL_NAME": { "type": "string", "pattern": "^[A-Za-z0-9_-]+___pilot\\.read_market_context$" },
+            "AGENTCORE_GATEWAY_JWT_ISSUER": { "type": "string", "pattern": "^https://[^?#]+$" },
+            "AGENTCORE_GATEWAY_JWT_JWKS_URL": { "type": "string", "pattern": "^https://[^?#]+$" },
+            "AGENTCORE_GATEWAY_JWT_AUDIENCES_JSON": { "type": "string", "minLength": 3, "maxLength": 8192 },
+            "AGENTCORE_GATEWAY_JWT_ALLOWED_SUBJECTS_JSON": { "type": "string", "minLength": 3, "maxLength": 8192 },
+            "AGENTCORE_GATEWAY_JWT_ALLOWED_CLIENTS_JSON": { "type": "string", "minLength": 3, "maxLength": 8192 },
+            "AGENTCORE_GATEWAY_JWT_REQUIRED_SCOPES_JSON": { "type": "string", "minLength": 3, "maxLength": 8192 },
+            "AGENTCORE_GATEWAY_JWT_CLIENT_CLAIM": { "enum": ["client_id", "azp"] },
+            "AGENTCORE_GATEWAY_JWT_TENANT_CLAIM": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,127}$" },
+            "AGENTCORE_GATEWAY_JWT_DEPLOYMENT_TENANT_ID": { "type": "string", "pattern": "^[A-Za-z0-9_.:/-]{1,255}$" },
+            "AGENTCORE_GATEWAY_JWT_ALGORITHMS_JSON": { "enum": ["[\"RS256\"]", "[\"ES256\"]", "[\"RS256\",\"ES256\"]", "[\"ES256\",\"RS256\"]"] },
+            "AGENTCORE_REPLAY_TABLE": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{3,255}$" },
+            "AGENTCORE_REPLAY_DEPLOYMENT_ID": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$" },
+            "AGENTCORE_REPLAY_LEASE_MS": { "type": "string", "pattern": "^[0-9]{4,6}$" },
+            "AGENTCORE_REPLAY_RETENTION_MS": { "type": "string", "pattern": "^[0-9]{5,8}$" },
+            "AGENTCORE_RUNTIME_REQUEST_TIMEOUT_MS": { "type": "string", "pattern": "^[0-9]{3,5}$" },
+            "AGENTCORE_RUNTIME_MAX_REQUEST_BYTES": { "type": "string", "pattern": "^[0-9]{4,7}$" },
+            "AGENTCORE_RUNTIME_MAX_RESPONSE_BYTES": { "type": "string", "pattern": "^[0-9]{4,7}$" },
+            "AGENTCORE_RUNTIME_MAX_CONCURRENT_REQUESTS": { "type": "string", "pattern": "^[0-9]{1,2}$" }
+          }
+        },
+        "tags": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["pilot:project", "pilot:component", "pilot:authority", "pilot:environment"],
+          "properties": {
+            "pilot:project": { "const": "pilot" },
+            "pilot:component": { "const": "agentcore-runtime" },
+            "pilot:authority": { "const": "read-only-research" },
+            "pilot:environment": { "const": "testnet" }
+          }
+        }
+      }
+    },
+    "postCreateVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gateway", "jwtVerification"],
+      "properties": {
+        "gateway": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["url", "toolName", "protocolVersion", "authMode"],
+          "properties": {
+            "url": {
+              "type": "string",
+              "pattern": "^https://[0-9a-z](?:[0-9a-z-]{0,98}[0-9a-z])?-[0-9a-z]{10}\\.gateway\\.bedrock-agentcore\\.(?:us-east-1|us-east-2)\\.amazonaws\\.com/mcp$"
+            },
+            "toolName": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+___pilot\\.read_market_context$"
+            },
+            "protocolVersion": { "const": "2025-11-25" },
+            "authMode": { "const": "CUSTOM_JWT" }
+          }
+        },
+        "jwtVerification": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["discoveryUrl", "issuer", "audience", "clientId", "subject", "allowedScope", "tenantClaimName", "deploymentTenantId"],
+          "properties": {
+            "discoveryUrl": { "type": "string", "pattern": "^https://[^/?#]+(?:/[^?#]*)?/\\.well-known/openid-configuration$" },
+            "issuer": { "type": "string", "pattern": "^https://[^?#]+$" },
+            "audience": { "type": "string", "minLength": 1, "maxLength": 255 },
+            "clientId": { "type": "string", "minLength": 1, "maxLength": 255 },
+            "subject": { "type": "string", "pattern": "^[A-Za-z0-9_.:/-]{1,255}$" },
+            "allowedScope": { "const": "pilot.read_market_context" },
+            "tenantClaimName": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,255}$" },
+            "deploymentTenantId": { "type": "string", "pattern": "^[A-Za-z0-9_.:/-]{1,255}$" }
+          }
+        }
+      }
+    }
+  }
+}

@@ -112,6 +112,7 @@ const requiredOps = [
   "policy.get",
   "policy.set",
   "x402.pay",
+  "x402.payIssuedFixture",
   "tx.swap",
   "tx.offer",
   "tx.offerCancel",
@@ -262,6 +263,26 @@ const fixtureArgs = {
     max_price_drops: "5000",
     pay_to: X402_COMPARE_PAY_TO,
     idempotency_key: "mock-x402-operation-001",
+  },
+  "x402.payIssuedFixture": {
+    owner: ACCOUNT,
+    network: "testnet",
+    resource: "compare",
+    session_scope: "session-scope-001",
+    merchant: {
+      id: "merchant-local-001",
+      resource_method: "POST",
+      resource_url: "http://127.0.0.1:8000/api/x402/compare",
+    },
+    asset: {
+      kind: "xrpl-issued",
+      network: "xrpl:1",
+      currency: RLUSD.currency,
+      issuer: RLUSD.issuer,
+    },
+    max_amount: "0.01",
+    pay_to: DESTINATION,
+    idempotency_key: "issued-request-001",
   },
   "tx.swap": {
     account: ACCOUNT,
@@ -1432,10 +1453,12 @@ describe(`Harbor REST contract (${useLiveHarbor ? "live" : "mock"})`, () => {
     "tx.approvalPreflight",
     "tx.approvalReconcile",
     "tx.submit",
+    "x402.payIssuedFixture",
   ]);
   const intentionallyUnsupportedMockOps = new Set<HarborOpName>([
     "tx.approvalPreflight",
     "tx.approvalReconcile",
+    "x402.payIssuedFixture",
   ]);
 
   it("keeps the transport matrix exhaustive", () => {
@@ -1463,7 +1486,11 @@ describe(`Harbor REST contract (${useLiveHarbor ? "live" : "mock"})`, () => {
       if (!useLiveHarbor && intentionallyUnsupportedMockOps.has(name)) {
         expect(envelope.ok).toBe(false);
         if (envelope.ok) throw new Error("mock-only v2 proof unexpectedly succeeded");
-        expect(envelope.error.code).toBe("EXECUTION_CONTRACT_UNSUPPORTED");
+        expect(envelope.error.code).toBe(
+          name === "x402.payIssuedFixture"
+            ? "X402_ISSUED_FIXTURE_DISABLED"
+            : "EXECUTION_CONTRACT_UNSUPPORTED",
+        );
         return;
       }
 

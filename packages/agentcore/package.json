@@ -1,0 +1,38 @@
+{
+  "name": "@pilot/agentcore",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": { "types": "./src/index.ts", "import": "./src/index.ts", "default": "./src/index.ts" },
+    "./lambda-entry": { "types": "./src/lambda-entry.ts", "import": "./src/lambda-entry.ts", "default": "./src/lambda-entry.ts" },
+    "./lambda-target": { "types": "./src/lambda-target.ts", "import": "./src/lambda-target.ts", "default": "./src/lambda-target.ts" },
+    "./public-market": { "types": "./src/public-market.ts", "import": "./src/public-market.ts", "default": "./src/public-market.ts" },
+    "./runtime-entry": { "types": "./src/runtime-entry.ts", "import": "./src/runtime-entry.ts", "default": "./src/runtime-entry.ts" },
+    "./runtime-http": { "types": "./src/runtime-http.ts", "import": "./src/runtime-http.ts", "default": "./src/runtime-http.ts" },
+    "./runtime-production": { "types": "./src/runtime-production.ts", "import": "./src/runtime-production.ts", "default": "./src/runtime-production.ts" },
+    "./standin": { "types": "./src/standin.ts", "import": "./src/standin.ts", "default": "./src/standin.ts" }
+  },
+  "scripts": {
+    "build:lambda": "node scripts/build-lambda.mjs",
+    "smoke:lambda": "node scripts/smoke-lambda.mjs",
+    "verify:lambda": "pnpm build:lambda && pnpm smoke:lambda",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "test:runtime-http": "vitest run test/runtime-http.test.ts test/runtime-entry.test.ts test/runtime-production.test.ts",
+    "start:runtime": "tsx src/runtime-entry.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-agentcore": "3.1156.0",
+    "@aws-sdk/client-dynamodb": "3.1156.0",
+    "@pilot/agent": "workspace:*",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.7.2",
+    "esbuild": "0.28.2",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

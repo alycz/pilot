@@ -119,6 +119,10 @@ export const UNTRUSTED_FIELD_RULES: Readonly<
       path: ["merchant", "body", "comparison", "*"],
     },
   ],
+  "x402.payIssuedFixture": [
+    { kind: "merchant-response", path: ["merchant_invoice_id"] },
+    { kind: "merchant-response", path: ["merchant_body", "**"] },
+  ],
 });
 
 /**
@@ -139,6 +143,15 @@ export const OP_SCREENING_CLASSIFICATION: Readonly<
   "ap4m.purchase": "untrusted",
   "channel.list": "structured",
   "channel.status": "structured",
+  // Local capability results contain only strict first-party identifiers,
+  // counters, timestamps, fixed fixture data, and exact owner-review fields.
+  // Secret handles and resolved values never enter an operation result.
+  "capability.activate": "structured",
+  "capability.invoke": "structured",
+  "capability.prepare": "structured",
+  "capability.prepareRevoke": "structured",
+  "capability.revoke": "structured",
+  "capability.status": "structured",
   "credential.ids": "structured",
   "credential.payerAccept": "structured",
   "credential.status": "structured",
@@ -234,6 +247,7 @@ export const OP_SCREENING_CLASSIFICATION: Readonly<
   "venues.get": "trusted",
   "venues.list": "trusted",
   "x402.pay": "untrusted",
+  "x402.payIssuedFixture": "untrusted",
   "yield.options": "trusted",
 });
 

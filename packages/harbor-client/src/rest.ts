@@ -9,6 +9,7 @@ import {
   readBoundedResponseText,
 } from "./response.js";
 import { HarborArgsSchemas, HarborResultSchemas } from "./types.js";
+import { compareX402IssuedAmounts } from "./x402-issued.js";
 import type {
   ArgsFor,
   HarborClient,
@@ -165,12 +166,18 @@ export class HarborRestClient implements HarborClient {
       response = await this.fetchImpl!(dispatch.url, dispatch.init);
       body = await readBoundedResponseText(
         response,
-        name === "x402.pay" ? MAX_X402_RESPONSE_BYTES : MAX_HARBOR_RESPONSE_BYTES,
+        name === "x402.pay" || name === "x402.payIssuedFixture"
+          ? MAX_X402_RESPONSE_BYTES
+          : MAX_HARBOR_RESPONSE_BYTES,
       );
     } catch (error) {
-      if (name === "x402.pay" && dispatched && controller.signal.aborted) {
+      if (
+        (name === "x402.pay" || name === "x402.payIssuedFixture") &&
+        dispatched &&
+        controller.signal.aborted
+      ) {
         throw new Error(
-          "Harbor REST x402.pay was interrupted after dispatch; settlement outcome is unknown and recovery must reuse the same idempotency key",
+          `Harbor REST ${name} was interrupted after dispatch; settlement outcome is unknown and recovery must reuse the same idempotency key`,
         );
       }
       throw error;
@@ -183,8 +190,12 @@ export class HarborRestClient implements HarborClient {
       throw new HarborHttpError({
         op: name,
         status: response.status,
-        statusText: name === "x402.pay" ? "Upstream x402 error" : redact(response.statusText, this.apiKey),
-        responseBody: name === "x402.pay" ? undefined : body ? redact(body, this.apiKey) : undefined,
+        statusText: name === "x402.pay" || name === "x402.payIssuedFixture"
+          ? "Upstream x402 error"
+          : redact(response.statusText, this.apiKey),
+        responseBody: name === "x402.pay" || name === "x402.payIssuedFixture"
+          ? undefined
+          : body ? redact(body, this.apiKey) : undefined,
       });
     }
 
@@ -245,6 +256,25 @@ export class HarborRestClient implements HarborClient {
           ))
         ) {
           throw new Error("Harbor REST x402.pay returned a result outside the requested owner, network, resource, idempotency, merchant, or exact price binding");
+        }
+      }
+      if (name === "x402.payIssuedFixture") {
+        const request = validatedArgs as ArgsFor<"x402.payIssuedFixture">;
+        const result = parsed.data.data as ResultFor<"x402.payIssuedFixture">;
+        if (
+          result.session_scope !== request.session_scope ||
+          result.merchant.id !== request.merchant.id ||
+          result.merchant.resource_method !== request.merchant.resource_method ||
+          result.merchant.resource_url !== request.merchant.resource_url ||
+          result.idempotency_key !== request.idempotency_key ||
+          result.asset.network !== request.asset.network ||
+          result.asset.currency !== request.asset.currency ||
+          result.asset.issuer !== request.asset.issuer ||
+          result.payer !== request.owner ||
+          result.pay_to !== request.pay_to ||
+          compareX402IssuedAmounts(result.amount, request.max_amount) > 0
+        ) {
+          throw new Error("Harbor REST x402.payIssuedFixture returned fixture evidence outside the authorized binding");
         }
       }
     }

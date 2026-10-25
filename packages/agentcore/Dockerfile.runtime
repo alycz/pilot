@@ -1,0 +1,22 @@
+# syntax=docker/dockerfile:1.7
+FROM --platform=linux/arm64 node:24.14.0-bookworm-slim AS dependencies
+
+ARG TARGETARCH
+RUN test "${TARGETARCH}" = "arm64"
+RUN corepack enable && corepack prepare pnpm@10.32.1 --activate
+
+WORKDIR /app
+COPY . .
+RUN pnpm install --frozen-lockfile --filter pilot --filter @pilot/agentcore...
+
+FROM --platform=linux/arm64 node:24.14.0-bookworm-slim AS runtime
+
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=dependencies --chown=node:node /app /app
+
+USER node
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:8080/ping').then(r=>{if(!r.ok)throw Error()})"]
+CMD ["/app/node_modules/.bin/tsx", "/app/packages/agentcore/src/runtime-entry.ts"]

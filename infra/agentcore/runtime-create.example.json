@@ -1,0 +1,68 @@
+{
+  "region": "us-east-2",
+  "destinationAccountId": "000000000000",
+  "createInput": {
+    "agentRuntimeName": "PilotResearchRuntime",
+    "agentRuntimeArtifact": {
+      "containerConfiguration": {
+        "containerUri": "000000000000.dkr.ecr.us-east-2.amazonaws.com/pilot-agentcore@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    "roleArn": "arn:aws:iam::000000000000:role/pilot-agentcore-runtime-example",
+    "protocolConfiguration": {
+      "serverProtocol": "HTTP"
+    },
+    "networkConfiguration": {
+      "networkMode": "PUBLIC"
+    },
+    "environmentVariables": {
+      "AGENTCORE_RUNTIME_SERVER_MODE": "aws",
+      "AGENTCORE_AWS_REGION": "us-east-2",
+      "AGENTCORE_IDENTITY_CREDENTIAL_PROVIDER_NAME": "pilot-agentcore-gateway-oauth",
+      "AGENTCORE_GATEWAY_URL": "https://pilotgateway-0000000000.gateway.bedrock-agentcore.us-east-2.amazonaws.com/mcp",
+      "AGENTCORE_GATEWAY_TOOL_NAME": "PilotReadTarget___pilot.read_market_context",
+      "AGENTCORE_GATEWAY_JWT_ISSUER": "https://identity.example.invalid/",
+      "AGENTCORE_GATEWAY_JWT_JWKS_URL": "https://identity.example.invalid/.well-known/jwks.json",
+      "AGENTCORE_GATEWAY_JWT_AUDIENCES_JSON": "[\"pilot-agentcore-gateway\"]",
+      "AGENTCORE_GATEWAY_JWT_ALLOWED_SUBJECTS_JSON": "[\"pilot-runtime\"]",
+      "AGENTCORE_GATEWAY_JWT_ALLOWED_CLIENTS_JSON": "[\"pilot-agentcore-runtime\"]",
+      "AGENTCORE_GATEWAY_JWT_REQUIRED_SCOPES_JSON": "[\"pilot.read_market_context\"]",
+      "AGENTCORE_GATEWAY_JWT_CLIENT_CLAIM": "client_id",
+      "AGENTCORE_GATEWAY_JWT_TENANT_CLAIM": "tenant_id",
+      "AGENTCORE_GATEWAY_JWT_DEPLOYMENT_TENANT_ID": "pilot-agentcore-event-workload",
+      "AGENTCORE_GATEWAY_JWT_ALGORITHMS_JSON": "[\"RS256\"]",
+      "AGENTCORE_REPLAY_TABLE": "pilot-agentcore-replay-example",
+      "AGENTCORE_REPLAY_DEPLOYMENT_ID": "pilot-agentcore-event-workload",
+      "AGENTCORE_REPLAY_LEASE_MS": "30000",
+      "AGENTCORE_REPLAY_RETENTION_MS": "86400000",
+      "AGENTCORE_RUNTIME_REQUEST_TIMEOUT_MS": "30000",
+      "AGENTCORE_RUNTIME_MAX_REQUEST_BYTES": "65536",
+      "AGENTCORE_RUNTIME_MAX_RESPONSE_BYTES": "262144",
+      "AGENTCORE_RUNTIME_MAX_CONCURRENT_REQUESTS": "1"
+    },
+    "tags": {
+      "pilot:project": "pilot",
+      "pilot:component": "agentcore-runtime",
+      "pilot:authority": "read-only-research",
+      "pilot:environment": "testnet"
+    }
+  },
+  "postCreateVerification": {
+    "gateway": {
+      "url": "https://pilotgateway-0000000000.gateway.bedrock-agentcore.us-east-2.amazonaws.com/mcp",
+      "toolName": "PilotReadTarget___pilot.read_market_context",
+      "protocolVersion": "2025-11-25",
+      "authMode": "CUSTOM_JWT"
+    },
+    "jwtVerification": {
+      "discoveryUrl": "https://identity.example.invalid/.well-known/openid-configuration",
+      "issuer": "https://identity.example.invalid/",
+      "audience": "pilot-agentcore-gateway",
+      "clientId": "pilot-agentcore-runtime",
+      "subject": "pilot-runtime",
+      "allowedScope": "pilot.read_market_context",
+      "tenantClaimName": "tenant_id",
+      "deploymentTenantId": "pilot-agentcore-event-workload"
+    }
+  }
+}

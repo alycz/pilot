@@ -26,6 +26,7 @@ import {
 import { ApprovalSubmissionScope } from "@/components/approval/approval-scope";
 import { normalizeIssuedCurrencyCodes } from "@/components/approval/normalize-transaction";
 import { Ap4mReceiptCard, DeclinedCard, IntentCard, type LedgerOwnerSigner } from "@/components/cards";
+import { CopilotChatContext } from "@/components/copilot/copilot-chat-context";
 import { DeviceStatus } from "@/components/ledger/device-status";
 import { DEMO_STRATEGY_PROMPTS } from "@/components/strategy/demo-strategy";
 import { StrategyHubProvider, useStrategyHub } from "@/components/strategy/strategy-hub";
@@ -1199,6 +1200,12 @@ function ChatViewInner() {
         </div>
         <div ref={conversationRef} className={`pilot-chat-conversation mx-auto w-full min-w-0 max-w-4xl flex-1 px-4 pt-8 sm:px-6 lg:px-8 ${demoMode ? "pb-56" : "pb-60"}`}>
           <h2 className="sr-only">Conversation</h2>
+          <CopilotChatContext
+            pathname={pathname}
+            publicConfig={publicConfig}
+            walletSession={walletSession}
+            onUseDraft={fillComposer}
+          />
           <div className="space-y-9" aria-live="polite">
             {turns.map((turn) => (
               <article key={turn.id} className="min-w-0 space-y-5">

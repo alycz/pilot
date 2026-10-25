@@ -44,6 +44,12 @@ function object(value: unknown): Record<string, unknown> | undefined {
 }
 
 function resolveAdapter(ctx: OpContext): MastercardMcpAdapter {
+  const env = object(ctx.env);
+  const enabled = env?.MASTERCARD_MCP_ENABLED;
+  if (enabled !== undefined && enabled !== "true") {
+    throw new Error("Mastercard MCP integration is disabled");
+  }
+
   const injected = ctx.mastercardMcp;
   const injectedRecord = object(injected);
   if (
@@ -56,7 +62,6 @@ function resolveAdapter(ctx: OpContext): MastercardMcpAdapter {
     return injected as MastercardMcpAdapter;
   }
 
-  const env = object(ctx.env);
   const db = (ctx.db ?? env?.DB) as D1Database | undefined;
   if (!db || (typeof db !== "object" && typeof db !== "function")) {
     return mastercardMcp;

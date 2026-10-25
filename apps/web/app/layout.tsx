@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import type { ReactNode } from "react";
 
+import { BacktestSessionLifecycleGuard } from "@/components/backtests/integration/client/session-lifecycle-guard";
 import { HarnessChatHost } from "@/components/harness-chat";
 import { DelegationLifecycleGuard } from "@/components/shell/delegation-lifecycle-guard";
 
@@ -53,6 +54,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
     <html lang="en" className={`${inter.variable} ${newsreader.variable} ${fragmentMono.variable}`} suppressHydrationWarning>
       <body className="min-h-dvh bg-background font-sans text-foreground antialiased">
         <HarnessChatHost>{children}</HarnessChatHost>
+        <BacktestSessionLifecycleGuard />
         <DelegationLifecycleGuard />
       </body>
     </html>

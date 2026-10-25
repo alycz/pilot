@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import {
   CardTrustSchema,
   ExecResultSchema,
@@ -34,6 +36,9 @@ import {
   guardrailNoticeFromEnvelope,
   type GuardrailNoticeSink,
 } from "./guardrail-notice";
+import {
+  type ProposalProvider,
+} from "./proposal-provider";
 import { createAp4mModelTools, type Ap4mToolContext } from "./ap4m";
 import { createStrategyProposalTool } from "./strategy-proposal";
 
@@ -80,6 +85,8 @@ export interface AgentToolOptions {
   strategyPaperObservation?: () =>
     | Promise<Record<string, unknown>>
     | Record<string, unknown>;
+  /** Optional advisory provider. It receives no Harbor, wallet, or signing capability. */
+  agentCore?: ProposalProvider;
 }
 
 export type PreferenceProposalEvent = {
@@ -124,6 +131,18 @@ const PreferenceProposalSchema = z
     reason: z.string().trim().min(1).max(500).optional(),
   })
   .strict();
+
+const AgentCoreResearchSchema = z
+  .object({
+    query: z.string().trim().min(1).max(4_000),
+  })
+  .strict();
+
+const AGENTCORE_PUBLIC_MARKET_CONTEXT = Object.freeze({
+  pair: "XRP/RLUSD",
+  venue: "xrpl-testnet-dex",
+  timeframe: "spot",
+} as const);
 
 const HarborExecuteSchema = z
   .object({
@@ -705,6 +724,7 @@ export function createAgentTools(options: AgentToolOptions) {
     mutationInvocationClaimed = true;
     return true;
   };
+  let agentCoreInvocationClaimed = false;
   let guardrailNoticeEmitted = false;
   const turnOptions: AgentToolOptions = {
     ...options,
@@ -754,6 +774,32 @@ export function createAgentTools(options: AgentToolOptions) {
       ? { ap4m: { ...options.ap4m, claimMutation } }
       : {}),
   });
+  const agentCoreTools = options.agentCore?.enabled
+    ? {
+      agentcore_research: tool({
+        description:
+          "Ask the configured AgentCore runtime for bounded read-only XRP/RLUSD XRPL Testnet spot research. The server fixes all market selectors. It cannot build, approve, sign, submit, or pay for transactions; any later action still requires propose_intent and Harbor policy.",
+        inputSchema: AgentCoreResearchSchema,
+        execute: async ({ query }, callOptions) => {
+          if (mutationInvocationClaimed || agentCoreInvocationClaimed) {
+            throw new Error("AgentCore research is limited to one isolated read-only call per chat run");
+          }
+          agentCoreInvocationClaimed = true;
+          return options.agentCore!.propose({
+            requestId: `agentcore-${randomUUID()}`,
+            purpose: "read",
+            prompt: query,
+            context: AGENTCORE_PUBLIC_MARKET_CONTEXT,
+          }, { signal: callOptions?.abortSignal });
+        },
+      }),
+    }
+    : {};
+
+  // AgentCore output is untrusted external evidence. Its dedicated model run
+  // never co-exposes transaction, payment, preference, or memory tools, so a
+  // prompt injection cannot spend the already-verified wallet proof.
+  if (options.agentCore?.enabled) return agentCoreTools;
 
   return {
     ...harborTools,
@@ -792,7 +838,6 @@ export function createAgentTools(options: AgentToolOptions) {
               "This authenticated run already invoked propose_intent; the same wallet proof cannot authorize another mutating execution.",
           };
         }
-
         const result = await executeProposedIntent(intent, turnOptions);
         if (result.state === "blocked") blockedIntents.add(fingerprint);
         return result;

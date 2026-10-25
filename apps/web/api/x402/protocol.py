@@ -7,6 +7,20 @@ import re
 from json.decoder import scanstring
 from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Tuple
 
+from .approval import (
+    ApprovalEnvelopeError,
+    approval_extension_offer,
+    extract_issued_approval_envelope,
+    validate_issued_approval_envelope,
+)
+from .assets import (
+    IssuedCurrencyAsset,
+    NativeXrpAsset,
+    PaymentOffer,
+    build_requirement,
+    parse_requirement_asset,
+)
+
 
 MAX_PAYMENT_HEADER_BYTES = 24 * 1024
 MAX_PAYMENT_DECODED_BYTES = 16 * 1024
@@ -222,10 +236,29 @@ def validate_payment_payload(
     payload: Mapping[str, Any],
     expected_resource: Mapping[str, Any],
     expected_requirement: Mapping[str, Any],
-) -> Tuple[str, str]:
+    *,
+    expected_merchant_id: Optional[str] = None,
+    expected_first_ledger_sequence: Optional[int] = None,
+    expected_resource_method: str = "POST",
+    approval_now: Optional[float] = None,
+) -> Tuple[str, str, Optional[Mapping[str, Any]]]:
+    try:
+        issued = isinstance(
+            parse_requirement_asset(expected_requirement), IssuedCurrencyAsset
+        )
+    except ValueError as exc:
+        raise ProtocolError("invalid_payment_requirements", 500) from exc
+    if issued and "extensions" not in payload:
+        raise ProtocolError("semantic_approval_envelope_required", 402)
     _exact_keys(
         payload,
-        ("x402Version", "resource", "accepted", "payload"),
+        (
+            "x402Version",
+            "resource",
+            "accepted",
+            "payload",
+            *(("extensions",) if issued else ()),
+        ),
         "unsupported_payment_control",
     )
     if payload.get("x402Version") != 2:
@@ -256,7 +289,23 @@ def validate_payment_payload(
         or not HEX_PATTERN.fullmatch(signed_blob)
     ):
         raise ProtocolError("invalid_signed_tx_blob")
-    return invoice_id, signed_blob.upper()
+    approval_envelope: Optional[Mapping[str, Any]] = None
+    if issued:
+        try:
+            approval_envelope = extract_issued_approval_envelope(payload)
+            validate_issued_approval_envelope(
+                approval_envelope,
+                requirement=expected_requirement,
+                resource=expected_resource,
+                expected_merchant_id=expected_merchant_id,
+                expected_first_ledger_sequence=expected_first_ledger_sequence,
+                expected_resource_method=expected_resource_method,
+                approval_now=approval_now,
+            )
+        except (ApprovalEnvelopeError, ValueError) as exc:
+            code = getattr(exc, "code", "invalid_semantic_approval_envelope")
+            raise ProtocolError(code, 402) from exc
+    return invoice_id, signed_blob.upper(), approval_envelope
 
 
 def assert_bounded_json(
@@ -306,22 +355,24 @@ def build_challenge(
     amount: str,
     timeout_seconds: int,
     source_tag: int,
+    offer: Optional[PaymentOffer] = None,
     error: str = "PAYMENT-SIGNATURE header is required",
 ) -> Dict[str, Any]:
+    resolved_offer = offer or PaymentOffer(NativeXrpAsset(), amount)
     return {
         "x402Version": 2,
         "error": error,
         "resource": dict(resource),
-        "accepts": [
-            {
-                "scheme": "exact",
-                "network": "xrpl:1",
-                "asset": "XRP",
-                "payTo": pay_to,
-                "amount": amount,
-                "maxTimeoutSeconds": timeout_seconds,
-                "extra": {"sourceTag": source_tag, "invoiceId": invoice_id},
-            }
-        ],
-        "extensions": {},
+        "accepts": [build_requirement(
+            offer=resolved_offer,
+            pay_to=pay_to,
+            max_timeout_seconds=timeout_seconds,
+            source_tag=source_tag,
+            invoice_id=invoice_id,
+        )],
+        "extensions": (
+            approval_extension_offer()
+            if isinstance(resolved_offer.asset, IssuedCurrencyAsset)
+            else {}
+        ),
     }

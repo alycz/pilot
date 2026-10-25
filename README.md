@@ -443,6 +443,9 @@ Pilot preserves its product branding and required third-party notices.
 | [Vercel AI SDK](https://ai-sdk.dev/), [Amazon Bedrock Provider](https://ai-sdk.dev/providers/ai-sdk-providers/amazon-bedrock), and [OpenRouter AI SDK Provider](https://github.com/OpenRouterTeam/ai-sdk-provider) | Agent streaming, tool calls, and model access | Apache-2.0 / MIT; see projects |
 | [Zod](https://zod.dev/) | Runtime schemas and TypeScript validation | MIT |
 | [xrpl.js](https://js.xrpl.org/) | XRP Ledger JSON-RPC and WebSocket client | ISC |
+| [viem](https://viem.sh/) | Strict ABI, receipt-event, address, and EIP-712 validation for the default-off XRPL EVM Testnet AP4M event adapter | MIT |
+| [AWS SDK for JavaScript v3](https://github.com/aws/aws-sdk-js-v3) | Default-off AgentCore Runtime/Gateway invocation and conditional DynamoDB replay fencing for the bounded read-only research lane | Apache-2.0 |
+| [esbuild](https://esbuild.github.io/) | Deterministic local Lambda bundle construction for the optional AgentCore runtime package | MIT |
 | [xrpl-connect](https://github.com/XRPL-Commons/xrpl-connect) | Owner-wallet connection and sign-only approvals | See project |
 | [Ledger Device Management Kit](https://github.com/LedgerHQ/device-sdk-ts), XRP signer kit, WebHID and Speculos transports | Sign-only hardware and virtual-device owner approvals | Apache-2.0 |
 | [RxJS](https://rxjs.dev/) | Ledger Device Management Kit observable transport | Apache-2.0 |
@@ -484,6 +487,7 @@ Pilot preserves its product branding and required third-party notices.
 | [RFC 9421 HTTP Message Signatures](https://www.rfc-editor.org/rfc/rfc9421), [Web Bot Auth](https://webbotauth.org/), [`web-bot-auth`](https://www.npmjs.com/package/web-bot-auth), and [`http-message-signatures`](https://www.npmjs.com/package/http-message-signatures) | Agent HTTP identity protocol and implementation references; the current merchant verifier uses `cryptography` rather than importing these JavaScript packages |
 | [`@sd-jwt/core`, `@sd-jwt/sd-jwt-vc`, and `@sd-jwt/crypto-nodejs`](https://github.com/openwallet-foundation-labs/sd-jwt-js) | SD-JWT interoperability references; the shipped merchant verifier is the pinned Verifiable Intent Python subset above |
 | [Mastercard Agent Pay for Machines](https://www.mastercard.com/us/en/business/artificial-intelligence/mastercard-agent-pay/agent-pay-for-machines.html) | AP4M discover/authorize/execute/settle model; the partner-gated AP4M rail is not connected |
+| [AP4M XRPL EVM event integration guide](https://hackathon.ap4m.build/integration-guide) and [public event config](https://hackathon.ap4m.build/public/config) | Exact Testnet chain, allowlisted contract and RLUSD-token profile used by the default-off mock-only event adapter |
 
 No source code is imported from Stellar projects or unrelated wallet/agent
 implementations.

@@ -10,6 +10,15 @@ from typing import Any, Callable, Mapping, Optional
 from fastapi import FastAPI, Header, Request
 from fastapi.responses import JSONResponse
 
+from .assets import IssuedCurrencyAsset, NativeXrpAsset, PaymentOffer, parse_requirement_asset
+from .budget import (
+    BudgetConflict,
+    BudgetDisabled,
+    BudgetExceeded,
+    InsufficientXrpReserve,
+    IssuedAssetBudgetLedger,
+    IssuedAssetIdentity,
+)
 from .config import MerchantConfig, RESOURCE_PATH, RESOURCE_URL
 from .protocol import (
     ProtocolError,
@@ -22,6 +31,7 @@ from .protocol import (
 from .store import InvoiceCapacityError, InvoiceStore
 from .verifier import (
     PaymentFacilitator,
+    SettlementNotAttempted,
     T54Facilitator,
     VerificationError,
     VerificationRejected,
@@ -49,13 +59,26 @@ class MerchantService:
         *,
         clock: Callable[[], float],
         invoice_id_factory: Callable[[], str],
+        offer: Optional[PaymentOffer] = None,
+        budget: Optional[IssuedAssetBudgetLedger] = None,
+        allow_fixture_evidence: bool = False,
+        merchant_id: Optional[str] = None,
+        resource_info: Mapping[str, Any] = RESOURCE_INFO,
+        merchant_body: Mapping[str, Any] = MERCHANT_BODY,
     ) -> None:
         self.config = config
         self.verifier = verifier
         self.clock = clock
         self.invoice_id_factory = invoice_id_factory
+        self.offer = offer or PaymentOffer(NativeXrpAsset(), config.price_drops)
+        self.budget = budget
+        self.allow_fixture_evidence = allow_fixture_evidence
+        self.merchant_id = merchant_id
+        self.resource_info = dict(resource_info)
+        self.merchant_body = dict(merchant_body)
         self._store: Optional[InvoiceStore] = None
-        assert_bounded_json(MERCHANT_BODY, require_object=True)
+        assert_bounded_json(self.resource_info, require_object=True)
+        assert_bounded_json(self.merchant_body, require_object=True)
 
     @property
     def store(self) -> InvoiceStore:
@@ -84,11 +107,12 @@ class MerchantService:
         invoice_id = self.invoice_id_factory()
         challenge = build_challenge(
             invoice_id=invoice_id,
-            resource=RESOURCE_INFO,
+            resource=self.resource_info,
             pay_to=self.config.pay_to,
             amount=self.config.price_drops,
             timeout_seconds=self.config.max_timeout_seconds,
             source_tag=self.config.source_tag,
+            offer=self.offer,
             error=error,
         )
         requirement = challenge["accepts"][0]
@@ -120,6 +144,7 @@ class MerchantService:
             amount=invoice.requirement["amount"],
             timeout_seconds=invoice.requirement["maxTimeoutSeconds"],
             source_tag=invoice.requirement["extra"]["sourceTag"],
+            offer=self.offer,
             error=error,
         )
         return JSONResponse(
@@ -128,7 +153,9 @@ class MerchantService:
             headers={"PAYMENT-REQUIRED": encode_header(challenge)},
         )
 
-    async def paid_response(self, payment_signature: str) -> JSONResponse:
+    async def paid_response(
+        self, payment_signature: str, resource_method: str
+    ) -> JSONResponse:
         try:
             payload = decode_payment_header(payment_signature)
             accepted = payload.get("accepted")
@@ -140,8 +167,21 @@ class MerchantService:
             invoice = self.store.get(invoice_id)
             if invoice is None:
                 raise ProtocolError("unknown_invoice_id", 402)
-            validated_invoice_id, _ = validate_payment_payload(
-                payload, invoice.resource, invoice.requirement
+            validated_invoice_id, _, _ = validate_payment_payload(
+                payload,
+                invoice.resource,
+                invoice.requirement,
+                expected_merchant_id=self.merchant_id,
+                expected_first_ledger_sequence=invoice.first_ledger_sequence,
+                expected_resource_method=resource_method,
+                # Freshness gates the first verification/signature claim. Once
+                # settlement is durable or terminal, exact replay must remain
+                # able to reconcile or return the cached result after expiry.
+                approval_now=(
+                    self.clock()
+                    if invoice.state in {"pending", "verifying"}
+                    else None
+                ),
             )
             if validated_invoice_id != invoice_id:
                 raise ProtocolError("invoice_binding_mismatch", 402)
@@ -170,7 +210,36 @@ class MerchantService:
             )
         if claim.outcome == "conflict":
             return JSONResponse(status_code=409, content={"error": "invoice_replay_conflict"})
+        if claim.outcome == "rejected":
+            assert claim.invoice.response_body is not None
+            if self.budget is not None and not self.budget.release(
+                claim.invoice.invoice_id
+            ):
+                return JSONResponse(
+                    status_code=503,
+                    content={
+                        "error": "budget_release_uncertain",
+                        "retryable": True,
+                        "phase": "settle",
+                        "settlementAttempted": False,
+                    },
+                    headers={"Retry-After": "1"},
+                )
+            return JSONResponse(status_code=402, content=claim.invoice.response_body)
         if claim.outcome == "not_included":
+            if self.budget is not None and not self.budget.release_not_included(
+                claim.invoice.invoice_id
+            ):
+                return JSONResponse(
+                    status_code=503,
+                    content={
+                        "error": "budget_release_uncertain",
+                        "retryable": True,
+                        "phase": "reconcile",
+                        "settlementAttempted": True,
+                    },
+                    headers={"Retry-After": "1"},
+                )
             return self._not_included_response(claim.invoice)
         if claim.outcome == "reconcile":
             return await self._reconcile(claim.invoice, fingerprint)
@@ -184,6 +253,8 @@ class MerchantService:
                 max_fee_drops=self.config.max_payer_fee_drops,
                 first_ledger_sequence=invoice.first_ledger_sequence,
             )
+            if receipt.evidence_source == "deterministic-offline-fixture" and not self.allow_fixture_evidence:
+                raise VerificationRejected("fixture_evidence_not_permitted")
         except VerificationRejected as exc:
             if not self.store.release(
                 invoice_id, fingerprint, claim.invoice.claim_generation
@@ -206,6 +277,32 @@ class MerchantService:
                 headers={"Retry-After": "1"},
             )
 
+        budget_key: Optional[str] = None
+        if self.budget is not None:
+            payment_asset = parse_requirement_asset(invoice.requirement)
+            if not isinstance(payment_asset, IssuedCurrencyAsset):
+                return JSONResponse(status_code=500, content={"error": "issued_budget_asset_mismatch"})
+            if receipt.payer_xrp_balance_drops is None:
+                return JSONResponse(status_code=503, content={"error": "payer_xrp_balance_unavailable", "retryable": False})
+            budget_key = invoice.invoice_id
+            try:
+                self.budget.reserve(
+                    idempotency_key=budget_key,
+                    invoice_id=invoice.invoice_id,
+                    payer=receipt.payer,
+                    asset=IssuedAssetIdentity(
+                        network=payment_asset.network,
+                        currency=payment_asset.currency,
+                        issuer=payment_asset.issuer,
+                    ),
+                    amount=invoice.requirement["amount"],
+                    fee_drops=receipt.fee_drops,
+                    payer_xrp_balance_drops=receipt.payer_xrp_balance_drops,
+                )
+            except (BudgetConflict, BudgetDisabled, BudgetExceeded, InsufficientXrpReserve) as exc:
+                self.store.release(invoice_id, fingerprint, claim.invoice.claim_generation)
+                return JSONResponse(status_code=402, content={"error": str(exc)})
+
         transition = self.store.mark_settling(
             invoice_id,
             fingerprint,
@@ -213,8 +310,12 @@ class MerchantService:
             receipt,
         )
         if transition.outcome == "expired":
+            if budget_key is not None:
+                self.budget.release(budget_key)
             return JSONResponse(status_code=402, content={"error": "expired_invoice"})
         if transition.outcome != "settling":
+            if budget_key is not None:
+                self.budget.release(budget_key)
             return JSONResponse(status_code=409, content={"error": "invoice_claim_lost"})
         try:
             settled = await self.verifier.settle(
@@ -229,8 +330,37 @@ class MerchantService:
             )
             if settled != receipt:
                 raise VerificationRejected("settlement_receipt_mismatch")
+        except SettlementNotAttempted as exc:
+            rejected_body = {
+                "error": str(exc),
+                "retryable": False,
+                "phase": "settle",
+                "settlementAttempted": False,
+            }
+            self.store.mark_rejected(
+                invoice_id,
+                fingerprint,
+                receipt.transaction,
+                rejected_body,
+            )
+            if budget_key is not None and not self.budget.release(budget_key):
+                return JSONResponse(
+                    status_code=503,
+                    content={
+                        "error": "budget_release_uncertain",
+                        "retryable": True,
+                        "phase": "settle",
+                        "settlementAttempted": False,
+                    },
+                    headers={"Retry-After": "1"},
+                )
+            return JSONResponse(
+                status_code=402,
+                content=rejected_body,
+            )
         except (VerificationRejected, VerificationError):
-            pass
+            if budget_key is not None:
+                self.budget.mark_uncertain(budget_key)
         return await self._reconcile(transition.invoice, fingerprint)
 
     async def _reconcile(self, invoice: Any, fingerprint: str) -> JSONResponse:
@@ -258,6 +388,8 @@ class MerchantService:
         except VerificationError:
             reconciliation = None
         if reconciliation is None or reconciliation.status == "pending":
+            if self.budget is not None:
+                self.budget.mark_uncertain(invoice.invoice_id)
             return JSONResponse(
                 status_code=503,
                 content={
@@ -276,20 +408,35 @@ class MerchantService:
                 receipt.transaction,
                 reconciliation.validated_ledger_index,
             )
+            if self.budget is not None:
+                if not self.budget.release_not_included(invoice.invoice_id):
+                    return JSONResponse(
+                        status_code=503,
+                        content={
+                            "error": "budget_release_uncertain",
+                            "retryable": True,
+                            "phase": "reconcile",
+                            "settlementAttempted": True,
+                        },
+                        headers={"Retry-After": "1"},
+                    )
             return self._not_included_response(terminal)
-        payment_response = encode_header(
-            {
-                "success": True,
-                "transaction": receipt.transaction,
-                "network": "xrpl:1",
-                "payer": receipt.payer,
-            }
-        )
+        payment_response_body = {
+            "success": True,
+            "transaction": receipt.transaction,
+            "network": "xrpl:1",
+            "payer": receipt.payer,
+        }
+        if receipt.evidence_source == "deterministic-offline-fixture":
+            payment_response_body["evidenceSource"] = receipt.evidence_source
+        payment_response = encode_header(payment_response_body)
+        if self.budget is not None and not self.budget.commit(invoice.invoice_id):
+            return JSONResponse(status_code=503, content={"error": "budget_commit_uncertain", "retryable": False, "phase": "reconcile", "settlementAttempted": True})
         delivered = self.store.complete(
             invoice.invoice_id,
             fingerprint,
             receipt.transaction,
-            MERCHANT_BODY,
+            self.merchant_body,
             payment_response,
         )
         assert delivered.response_body is not None
@@ -320,6 +467,12 @@ def create_app(
     *,
     clock: Callable[[], float] = time.time,
     invoice_id_factory: Callable[[], str] = lambda: f"pilot-compare-{uuid.uuid4().hex}",
+    offer: Optional[PaymentOffer] = None,
+    budget: Optional[IssuedAssetBudgetLedger] = None,
+    allow_fixture_evidence: bool = False,
+    merchant_id: Optional[str] = None,
+    resource_info: Mapping[str, Any] = RESOURCE_INFO,
+    merchant_body: Mapping[str, Any] = MERCHANT_BODY,
 ) -> FastAPI:
     resolved_config = config or MerchantConfig.from_env()
     service = MerchantService(
@@ -331,6 +484,12 @@ def create_app(
         ),
         clock=clock,
         invoice_id_factory=invoice_id_factory,
+        offer=offer,
+        budget=budget,
+        allow_fixture_evidence=allow_fixture_evidence,
+        merchant_id=merchant_id,
+        resource_info=resource_info,
+        merchant_body=merchant_body,
     )
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -362,13 +521,22 @@ def create_app(
             return JSONResponse(status_code=403, content={"error": "loopback_only"})
         return await call_next(request)
 
-    @application.get(RESOURCE_PATH)
+    @application.api_route(RESOURCE_PATH, methods=["GET", "POST"])
     async def compare(
+        request: Request,
         payment_signature: Optional[str] = Header(default=None, alias="PAYMENT-SIGNATURE")
     ) -> JSONResponse:
         if payment_signature is None:
             return await service.issue_challenge()
-        return await service.paid_response(payment_signature)
+        issued = isinstance(service.offer.asset, IssuedCurrencyAsset)
+        expected_method = "POST" if issued else "GET"
+        if request.method != expected_method:
+            return JSONResponse(
+                status_code=405,
+                content={"error": "resource_method_mismatch"},
+                headers={"Allow": expected_method},
+            )
+        return await service.paid_response(payment_signature, request.method)
 
     application.state.x402_service = service
     return application

@@ -4,6 +4,7 @@ import { isAbsolute, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { resolveChatModel } from "../../apps/web/lib/aws/bedrock";
+import { readPilotAwsConfig, type PilotAwsConfig } from "../../apps/web/lib/aws/config";
 
 const MODEL_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/;
 const STANDIN_MODELS = [
@@ -152,6 +153,21 @@ export async function runSyntheticToolCallingChat(model: string): Promise<boolea
   );
 }
 
+export function liveBedrockProbeConfig(
+  modelId: string,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): PilotAwsConfig {
+  if (!MODEL_ID_PATTERN.test(modelId)) {
+    throw new BedrockProbeError("INVALID_MODELS");
+  }
+  const baseConfig = readPilotAwsConfig(env);
+  return {
+    ...baseConfig,
+    bedrockMode: "aws",
+    bedrockModels: [modelId],
+  };
+}
+
 async function loadWebPackage(name: "ai" | "zod"): Promise<Record<string, unknown>> {
   const requireFromWeb = createRequire(
     new URL("../../apps/web/package.json", import.meta.url),
@@ -190,12 +206,7 @@ export async function runAuthorizedBedrockToolCallingChat(
 
   const resolved = await resolveChatModel(
     { provider: "bedrock", model: modelId },
-    { env, config: {
-      region: "us-east-1",
-      bedrockMode: "aws",
-      bedrockModels: [modelId],
-      bedrockDailyTurnCap: 50,
-    } },
+    { env, config: liveBedrockProbeConfig(modelId, env) },
   );
   const result = await generateText({
     model: resolved.model,

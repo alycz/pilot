@@ -49,6 +49,12 @@ import type {
 } from "@pilot/contracts";
 import { z } from "zod";
 import { isValidClassicAddress } from "xrpl";
+import {
+  X402IssuedFixtureResultSchema,
+  X402IssuedPayArgsSchema,
+  type X402IssuedFixtureResult,
+  type X402IssuedPayArgs,
+} from "./x402-issued.js";
 
 export const OnboardingReadinessResultSchema = z
   .object({
@@ -1112,6 +1118,10 @@ export interface HarborOperationMap {
     args: X402PayArgs;
     result: X402PayResult;
   };
+  "x402.payIssuedFixture": {
+    args: X402IssuedPayArgs;
+    result: X402IssuedFixtureResult;
+  };
 }
 
 export type HarborOpName = keyof HarborOperationMap;
@@ -1994,6 +2004,7 @@ export const HarborArgsSchemas = {
     pay_to: z.literal(X402_COMPARE_PAY_TO),
     idempotency_key: X402IdempotencyKeySchema,
   }).strict(),
+  "x402.payIssuedFixture": X402IssuedPayArgsSchema,
 } satisfies HarborArgsSchemaMap;
 
 const TxSubmitResultSchema = z.union([
@@ -2693,6 +2704,7 @@ export const HarborResultSchemas = {
   "strategy.globalKill.get": StrategyKillSwitchSchema,
   "strategy.globalKill.set": StrategyKillSwitchSchema,
   "x402.pay": X402PayResultSchema,
+  "x402.payIssuedFixture": X402IssuedFixtureResultSchema,
 } satisfies Record<HarborOpName, z.ZodTypeAny>;
 
 export interface HarborOp {

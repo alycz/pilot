@@ -83,7 +83,7 @@ describe("getModelAccess", () => {
     process.env.DEMO_MODEL_MAX_STEPS = "4";
     process.env.MODEL_DEFAULT = "provider/default:free";
     process.env.OPENROUTER_ALLOWED_MODELS = "provider/account-model";
-    process.env.AWS_REGION = "us-east-1";
+    process.env.AWS_REGION = "us-east-2";
     process.env.BEDROCK_MODELS = "amazon.nova-lite-v1:0";
     process.env.BEDROCK_DAILY_TURN_CAP = "50";
   });

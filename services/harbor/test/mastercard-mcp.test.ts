@@ -349,6 +349,27 @@ Overview: Consumer-permissioned access to financial data.
 });
 
 describe("Mastercard operations", () => {
+  it("does not contact the sponsor adapter when explicitly disabled", async () => {
+    const mastercardMcp = {
+      services: vi.fn(),
+      docs: vi.fn(),
+      page: vi.fn(),
+      search: vi.fn(),
+    } as unknown as MastercardMcpAdapter;
+    const ctx = {
+      principal: "mastercard-disabled-test",
+      env: { MASTERCARD_MCP_ENABLED: "false" },
+      mastercardMcp,
+    } as Parameters<(typeof ops)[number]["handler"]>[0];
+
+    await expect(
+      Promise.resolve().then(() =>
+        operation("mastercard.services").handler(ctx, {}),
+      ),
+    ).rejects.toThrow("Mastercard MCP integration is disabled");
+    expect(mastercardMcp.services).not.toHaveBeenCalled();
+  });
+
   it("registers strict operations and delegates through the injected adapter", async () => {
     const mastercardMcp: MastercardMcpAdapter = {
       services: vi.fn(async () => ({

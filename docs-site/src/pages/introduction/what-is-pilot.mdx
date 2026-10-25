@@ -25,7 +25,7 @@ Pilot's execution engine runs as a service named `harbor` (Cloudflare Worker, `s
 ## What makes it different
 
 - **Agents never hold a key that matters.** The owner key stays in your wallet or on your Ledger. Pilot's engine holds only a narrow, encrypted *delegate* key that can sign the seven transaction types you granted on-ledger, and nothing else.
-- **Built on XRPL's native permission system.** Delegation uses `DelegateSet` (XLS-75 Permission Delegation, live on Mainnet since 8 October 2026). Revoking is one owner-signed transaction.
+- **Built on XRPL's native permission system.** Delegation uses `DelegateSet` (XLS-75 Permission Delegation). Revoking is one owner-signed transaction.
 - **A policy engine decides, not the model.** Every transaction passes 11 ordered rules (network, link, transaction type, issuer allowlist, preflight, simulation, slippage, per-transaction and daily caps). Small, allowed actions auto-execute; anything bigger comes back to you for a sign-only approval of the exact transaction; anything unsafe is blocked and never retried.
 - **Bring your own model.** Sign in with OpenRouter or use Amazon Bedrock. No model vendor is hard-wired.
 - **Memory that you can read.** Validated trades, policy and preferences are written to an Obsidian-compatible Markdown vault. Preferences are proposed, never silently saved.

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vocs dev",
-    "build": "vocs build",
+    "build": "vocs build && node scripts/fix-base-path-html.mjs",
     "preview": "vocs preview"
   },
   "dependencies": {

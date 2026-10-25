@@ -160,6 +160,7 @@ class LedgerWallet implements PilotWallet {
   private forgetLease: LedgerDeviceLease | undefined;
   private connectedAddress: string | undefined;
   private publicKey: string | undefined;
+  private appVersion: string | undefined;
   private connectRequest: Promise<string> | undefined;
   private connectionGeneration = 0;
   private signQueue: Promise<void> = Promise.resolve();
@@ -211,6 +212,7 @@ class LedgerWallet implements PilotWallet {
       this.lease = lease;
       this.forgetLease = lease;
       const app = await lease.getAppConfig(this.emit);
+      this.appVersion = app.version;
       if (versionBelow(app.version, "2.8.2")) {
         console.warn("Ledger XRP app 2.8.2 or newer is recommended.");
       }
@@ -241,6 +243,7 @@ class LedgerWallet implements PilotWallet {
         this.lease = undefined;
         this.connectedAddress = undefined;
         this.publicKey = undefined;
+        this.appVersion = undefined;
       }
       throw walletError(error, "connect");
     }).finally(() => {
@@ -258,6 +261,14 @@ class LedgerWallet implements PilotWallet {
       );
     }
     return this.connectedAddress;
+  }
+
+  async ledgerAppVersion(): Promise<string> {
+    await this.connect();
+    if (this.appVersion === undefined) {
+      throw new PilotWalletError("CONNECT_FAILED", "The Ledger app version is unavailable.");
+    }
+    return this.appVersion;
   }
 
   async verifyAddressOnDevice(): Promise<void> {
@@ -349,6 +360,7 @@ class LedgerWallet implements PilotWallet {
     this.connectRequest = undefined;
     this.connectedAddress = undefined;
     this.publicKey = undefined;
+    this.appVersion = undefined;
     this.lease?.release();
     this.lease = undefined;
     this.emit(IDLE_STATE);
@@ -359,6 +371,7 @@ class LedgerWallet implements PilotWallet {
     this.connectRequest = undefined;
     this.connectedAddress = undefined;
     this.publicKey = undefined;
+    this.appVersion = undefined;
     const lease = this.lease;
     this.lease = undefined;
     const forgetLease = lease ?? this.forgetLease;

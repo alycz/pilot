@@ -31,6 +31,7 @@
 		"predeploy": "node scripts/build-catalog.mjs",
 		"deploy": "wrangler deploy",
 		"config:free:generate": "node scripts/configure-deployment.mjs",
+		"migrations:free:check": "node scripts/verify-free-quickjs-migrations.mjs",
 		"predeploy:free:dry-run": "node scripts/build-catalog.mjs",
 		"deploy:free:dry-run": "wrangler deploy --dry-run --config wrangler.free-quickjs.jsonc",
 		"cf-typegen": "wrangler types --env-file .env.example",

@@ -14,6 +14,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  FREE_QUICKJS_MIGRATION_DIRECTORY,
+  FREE_QUICKJS_MIGRATIONS,
   TRADING_ISOLATED_V1_MIGRATION_DIRECTORY,
   TRADING_ISOLATED_V1_MIGRATIONS,
   X402_ISOLATED_V1_MIGRATION_DIRECTORY,
@@ -22,9 +24,33 @@ import {
 } from "../scripts/isolated-migration-profiles.mjs";
 
 const roots: string[] = [];
+const profiles = ["free-quickjs", "trading-isolated-v1", "x402-isolated-v1"] as const;
+type Profile = (typeof profiles)[number];
+
+function profileContract(profile: Profile) {
+  if (profile === "free-quickjs") {
+    return {
+      directory: FREE_QUICKJS_MIGRATION_DIRECTORY,
+      names: FREE_QUICKJS_MIGRATIONS,
+      sourceDirectory: "migrations",
+    };
+  }
+  if (profile === "trading-isolated-v1") {
+    return {
+      directory: TRADING_ISOLATED_V1_MIGRATION_DIRECTORY,
+      names: TRADING_ISOLATED_V1_MIGRATIONS,
+      sourceDirectory: "migrations",
+    };
+  }
+  return {
+    directory: X402_ISOLATED_V1_MIGRATION_DIRECTORY,
+    names: X402_ISOLATED_V1_MIGRATIONS,
+    sourceDirectory: "migrations-local-x402",
+  };
+}
 
 function syntheticProfile(
-  profile: "trading-isolated-v1" | "x402-isolated-v1",
+  profile: Profile,
 ): {
   profileRoot: string;
   repoRoot: string;
@@ -33,23 +59,16 @@ function syntheticProfile(
 } {
   const repoRoot = mkdtempSync(join(process.cwd(), ".migration-profile-test-"));
   roots.push(repoRoot);
-  const trading = profile === "trading-isolated-v1";
-  const sourceRoot = join(repoRoot, trading ? "migrations" : "migrations-local-x402");
-  const profileRoot = join(
-    repoRoot,
-    trading
-      ? TRADING_ISOLATED_V1_MIGRATION_DIRECTORY
-      : X402_ISOLATED_V1_MIGRATION_DIRECTORY,
-  );
-  const names = trading
-    ? TRADING_ISOLATED_V1_MIGRATIONS
-    : X402_ISOLATED_V1_MIGRATIONS;
+  const contract = profileContract(profile);
+  const sourceRoot = join(repoRoot, contract.sourceDirectory);
+  const profileRoot = join(repoRoot, contract.directory);
+  const names = contract.names;
   mkdirSync(sourceRoot, { recursive: true });
   mkdirSync(profileRoot, { recursive: true });
   for (const name of names) {
     const content = readFileSync(join(
       process.cwd(),
-      trading ? "migrations" : "migrations-local-x402",
+      contract.sourceDirectory,
       name,
     ));
     writeFileSync(join(sourceRoot, name), content);
@@ -66,13 +85,12 @@ afterEach(() => {
 
 describe("isolated migration profiles", () => {
   it.each([
+    ["free-quickjs", FREE_QUICKJS_MIGRATION_DIRECTORY],
     ["trading-isolated-v1", TRADING_ISOLATED_V1_MIGRATION_DIRECTORY],
     ["x402-isolated-v1", X402_ISOLATED_V1_MIGRATION_DIRECTORY],
   ] as const)("validates the checked-in %s frozen profile", async (profile, directory) => {
     await expect(validateIsolatedMigrationProfile(process.cwd(), profile)).resolves.toEqual({
-      migrationNames: profile === "trading-isolated-v1"
-        ? TRADING_ISOLATED_V1_MIGRATIONS
-        : X402_ISOLATED_V1_MIGRATIONS,
+      migrationNames: profileContract(profile).names,
       profileDirectory: directory,
     });
   });
@@ -116,8 +134,10 @@ describe("isolated migration profiles", () => {
   });
 
   it.each([
+    ["free-quickjs", "9999_unreviewed.sql"],
     ["trading-isolated-v1", "9999_unreviewed.sql"],
     ["x402-isolated-v1", "9999_unreviewed.sql"],
+    ["free-quickjs", "0007_duplicate.sql"],
     ["trading-isolated-v1", "0006_duplicate.sql"],
     ["x402-isolated-v1", "0007_duplicate.sql"],
   ] as const)(
@@ -130,7 +150,7 @@ describe("isolated migration profiles", () => {
     },
   );
 
-  it.each(["trading-isolated-v1", "x402-isolated-v1"] as const)(
+  it.each(profiles)(
     "rejects matching source and profile content drift in %s",
     async (profile) => {
       const fixture = syntheticProfile(profile);
@@ -142,7 +162,7 @@ describe("isolated migration profiles", () => {
     },
   );
 
-  it.each(["trading-isolated-v1", "x402-isolated-v1"] as const)(
+  it.each(profiles)(
     "rejects missing or byte-drifted migrations in %s",
     async (profile) => {
       const missing = syntheticProfile(profile);
@@ -157,7 +177,7 @@ describe("isolated migration profiles", () => {
     },
   );
 
-  it.each(["trading-isolated-v1", "x402-isolated-v1"] as const)(
+  it.each(profiles)(
     "rejects a linked migration in %s",
     async (profile) => {
       const fixture = syntheticProfile(profile);
@@ -169,7 +189,7 @@ describe("isolated migration profiles", () => {
     },
   );
 
-  it.each(["trading-isolated-v1", "x402-isolated-v1"] as const)(
+  it.each(profiles)(
     "rejects symlinked source and profile directories in %s",
     async (profile) => {
       const linkedProfile = syntheticProfile(profile);
@@ -188,7 +208,7 @@ describe("isolated migration profiles", () => {
     },
   );
 
-  it.each(["trading-isolated-v1", "x402-isolated-v1"] as const)(
+  it.each(profiles)(
     "rejects hard-linked migrations in %s",
     async (profile) => {
       const fixture = syntheticProfile(profile);
@@ -200,7 +220,7 @@ describe("isolated migration profiles", () => {
     },
   );
 
-  it.each(["trading-isolated-v1", "x402-isolated-v1"] as const)(
+  it.each(profiles)(
     "rejects a migration path swapped after descriptor open in %s",
     async (profile) => {
       const fixture = syntheticProfile(profile);
@@ -225,7 +245,7 @@ describe("isolated migration profiles", () => {
     },
   );
 
-  it.each(["trading-isolated-v1", "x402-isolated-v1"] as const)(
+  it.each(profiles)(
     "rejects a profile directory swapped after descriptor open in %s",
     async (profile) => {
       const fixture = syntheticProfile(profile);

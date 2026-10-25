@@ -4,6 +4,8 @@ import { lstatSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { FREE_QUICKJS_MIGRATION_DIRECTORY } from "./isolated-migration-profiles.mjs";
+
 export const FREE_QUICKJS_PROFILE = "free-quickjs";
 
 function fail(message) {
@@ -55,18 +57,52 @@ export function buildFreeQuickJsConfig(input) {
 	const d1Name = resourceName(input.databaseName, "database name");
 	const d1Id = databaseId(input.databaseId);
 	const origin = publicOrigin(input.origin);
+	const entrypoint = input.entrypoint ?? "src/server.ts";
+	const migrationsDirectory = input.migrationsDirectory ?? FREE_QUICKJS_MIGRATION_DIRECTORY;
+	if (
+		typeof entrypoint !== "string" ||
+		entrypoint.length === 0 ||
+		entrypoint.includes("\0")
+	) {
+		fail("entrypoint must be an explicit path");
+	}
+	if (
+		typeof migrationsDirectory !== "string" ||
+		migrationsDirectory.length === 0 ||
+		migrationsDirectory.includes("\0")
+	) {
+		fail("migration directory must be an explicit path");
+	}
 	const hostname = new URL(origin).hostname;
+	const workersDev = hostname.endsWith(".workers.dev");
+	if (workersDev) {
+		const accountSubdomain = hostname.slice(
+			workerName.length + 1,
+			-".workers.dev".length,
+		);
+		if (
+			!hostname.startsWith(`${workerName}.`) ||
+			!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(accountSubdomain)
+		) {
+			fail("workers.dev origin must exactly match the Worker name and one account subdomain");
+		}
+	}
 
 	return {
 		$schema: "node_modules/wrangler/config-schema.json",
 		name: workerName,
-		main: "src/server.ts",
-		workers_dev: false,
-		routes: [{ pattern: hostname, custom_domain: true }],
+		main: entrypoint,
+		workers_dev: workersDev,
+		...(workersDev ? {} : { routes: [{ pattern: hostname, custom_domain: true }] }),
 		compatibility_date: "2026-10-06",
 		compatibility_flags: ["nodejs_compat"],
 		d1_databases: [
-			{ binding: "DB", database_name: d1Name, database_id: d1Id },
+			{
+				binding: "DB",
+				database_name: d1Name,
+				database_id: d1Id,
+				migrations_dir: migrationsDirectory,
+			},
 		],
 		triggers: { crons: [] },
 		observability: { enabled: false },
@@ -77,6 +113,8 @@ export function buildFreeQuickJsConfig(input) {
 			HARBOR_PUBLIC_URL: origin,
 			EXEC_NETWORK: "testnet",
 			MAINNET_EXECUTION: "false",
+			HARBOR_MOCK: "1",
+			LIVE: "0",
 			EXECUTOR: "quickjs",
 			HARBOR_MCP_EXECUTION_ENABLED: "false",
 			AUTONOMOUS_STRATEGY_RUNNER: "false",
@@ -84,6 +122,9 @@ export function buildFreeQuickJsConfig(input) {
 			MASTERCARD_MCP_ENABLED: "false",
 			KMS_MODE: "off",
 			AP4M_DEMO_ENABLED: "false",
+			AP4M_EVM_EVENT_ENABLED: "false",
+			AP4M_EVM_EVENT_MODE: "off",
+			GUARDRAILS_MODE: "off",
 			HARBOR_DEMO_QUOTA_ENABLED: "0",
 		},
 	};
@@ -146,6 +187,8 @@ export function writeFreeQuickJsConfig(argv) {
 		databaseName: values["--database-name"],
 		databaseId: values["--database-id"],
 		origin: values["--origin"],
+		entrypoint: resolve(serviceRoot, "src/server.ts"),
+		migrationsDirectory: resolve(serviceRoot, FREE_QUICKJS_MIGRATION_DIRECTORY),
 	});
 	writeFileSync(canonicalOutput, `${JSON.stringify(config, null, 2)}\n`, { flag: "wx", mode: 0o644 });
 	return canonicalOutput;

@@ -13,7 +13,7 @@ import {
   WALLET_SESSION_COOKIE_OPTIONS,
   WALLET_SUBMISSIONS_COOKIE,
 } from "../../../../../lib/wallet-session";
-import { FileWalletActionProofConsumer } from "../../../../../lib/wallet-action-proof";
+import { createWalletActionProofConsumer } from "../../../../../lib/wallet-action-proof-consumer";
 import {
   OAUTH_COOKIE_OPTIONS,
   OPENROUTER_PENDING_SESSION_COOKIE,
@@ -104,14 +104,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       body.tx_blob,
       { now },
     );
-    const consumer = new FileWalletActionProofConsumer(
-      process.env.P_LIVE_RLUSD_ACQUISITION_STATE_DIR,
-      "wallet-auth-proofs-v1",
-    );
     let consumed: boolean;
     try {
+      const consumer = createWalletActionProofConsumer(
+        verified.session,
+        "wallet-auth",
+      );
       consumed = await consumer.consume(
-        `wallet-auth:${verified.nonce}`,
+        verified.nonce,
         verified.challengeExpiresAt,
         now,
       );

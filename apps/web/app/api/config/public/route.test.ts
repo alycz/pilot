@@ -97,6 +97,32 @@ describe("public Pilot config", () => {
     }, request(LOCAL_URL))).rejects.toThrow("STRUCTURED_PREFERENCE_STORAGE_NOT_CONFIGURED");
   });
 
+  it("publishes hosted structured preferences only for complete remote private storage", async () => {
+    const environment = {
+      ...HOSTED_PROFILE,
+      EXEC_NETWORK: "testnet",
+      HARBOR_MOCK: "1",
+      PILOT_STRUCTURED_PREFERENCES: "1",
+      PILOT_PERSONALIZATION_BACKEND: "harbor-d1",
+      PILOT_PERSONALIZATION_TENANT_ID: "private-tenant",
+      SESSION_SECRET: PROOF_SECRET,
+      PILOT_HOSTED_STATE_API_KEY: `pilot-hosted-state:${"H".repeat(32)}`,
+    } as const;
+    const config = await resolvePublicPilotConfig(environment, request(HOSTED_URL));
+    expect(config.structuredPreferencesEnabled).toBe(true);
+    expect(JSON.stringify(config)).not.toContain("private-tenant");
+
+    for (const invalid of [
+      { ...environment, PILOT_HOSTED_STATE_API_KEY: undefined },
+      { ...environment, SESSION_SECRET: "short" },
+      { ...environment, PILOT_PERSONALIZATION_STATE_DIR: "/ambiguous/local-state" },
+      { ...environment, PILOT_PERSONALIZATION_BACKEND: "unknown" },
+    ]) {
+      await expect(resolvePublicPilotConfig(invalid, request(HOSTED_URL)))
+        .rejects.toThrow("STRUCTURED_PREFERENCE_STORAGE_NOT_CONFIGURED");
+    }
+  });
+
   it("publishes the fixed isolated build marker only for its exact slot", async () => {
     const environment = {
       EXEC_NETWORK: "testnet",
@@ -154,6 +180,40 @@ describe("public Pilot config", () => {
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
+  });
+
+  it("reports hosted proof readiness only for the dedicated HTTPS state credential", async () => {
+    const dedicated = `pilot-hosted-state:${"H".repeat(32)}`;
+    expect(await resolveWalletActionProofConfigured({
+      ...HOSTED_PROFILE,
+      SESSION_SECRET: PROOF_SECRET,
+      PILOT_HOSTED_STATE_API_KEY: dedicated,
+    })).toBe(true);
+    for (const environment of [
+      { ...HOSTED_PROFILE, SESSION_SECRET: PROOF_SECRET },
+      { ...HOSTED_PROFILE, SESSION_SECRET: PROOF_SECRET, HARBOR_API_KEY: dedicated },
+      { ...HOSTED_PROFILE, SESSION_SECRET: PROOF_SECRET,
+        PILOT_HOSTED_STATE_API_KEY: dedicated, HARBOR_URL: "http://harbor.example" },
+      { ...HOSTED_PROFILE, SESSION_SECRET: PROOF_SECRET,
+        PILOT_HOSTED_STATE_API_KEY: dedicated, HARBOR_URL: "https://127.0.0.1:8791" },
+      { ...HOSTED_PROFILE, SESSION_SECRET: PROOF_SECRET,
+        PILOT_HOSTED_STATE_API_KEY: dedicated,
+        HARBOR_API_KEY: `other-principal:${"H".repeat(32)}` },
+      { ...HOSTED_PROFILE, SESSION_SECRET: PROOF_SECRET,
+        PILOT_HOSTED_STATE_API_KEY: dedicated,
+        HARBOR_API_KEY: `pilot-hosted-state:${"B".repeat(32)}` },
+      { ...HOSTED_PROFILE, SESSION_SECRET: PROOF_SECRET,
+        PILOT_HOSTED_STATE_API_KEY: dedicated,
+        HARBOR_API_KEY: "malformed" },
+    ]) {
+      expect(await resolveWalletActionProofConfigured(environment)).toBe(false);
+    }
+    expect(await resolveWalletActionProofConfigured({
+      ...HOSTED_PROFILE,
+      SESSION_SECRET: PROOF_SECRET,
+      PILOT_HOSTED_STATE_API_KEY: dedicated,
+      HARBOR_API_KEY: `pilot-general:${"G".repeat(32)}`,
+    })).toBe(true);
   });
 
   it("reports false for nonexistent, symlinked, regular-file, and group/world-accessible paths", async () => {

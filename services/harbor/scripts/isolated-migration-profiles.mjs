@@ -46,6 +46,7 @@ export const FREE_QUICKJS_MIGRATIONS = Object.freeze([
 	"0008_quicknode_rpc_counters.sql",
 	"0009_aws_kms_delegate_keys.sql",
 	"0010_ap4m_channel_purchase.sql",
+	"0017_hosted_pilot_state.sql",
 ]);
 
 const PROFILES = Object.freeze({
@@ -66,6 +67,7 @@ const PROFILES = Object.freeze({
 			"0008_quicknode_rpc_counters.sql": "88bb144b9dba6a4a92a2ed80e10a6ffda6eeb8f67e2cbe4f5c90c12c0d2c5fd3",
 			"0009_aws_kms_delegate_keys.sql": "38db2663ab897d46da23e904190d7541cabbb686173153abe274248bf240bbab",
 			"0010_ap4m_channel_purchase.sql": "4c27d6cfe254e993eeb4d392ad42196b43bde941da71b9aef1bc07e665e30e91",
+			"0017_hosted_pilot_state.sql": "c5f0b77b231e40138fe17b3cb07690182b0da2519956ecf46e3844de31c3562b",
 		}),
 	}),
 	"trading-isolated-v1": Object.freeze({

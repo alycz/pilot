@@ -773,9 +773,11 @@ export async function verifyAndConsumeWalletActionProof(
     throw new Error("A fresh wallet action proof is required.");
   }
   verifySignature(challenge, txBlob);
-  const consumer = options.consumer ?? new FileWalletActionProofConsumer(
-    process.env.P_LIVE_RLUSD_ACQUISITION_STATE_DIR,
-  );
+  const consumer = options.consumer ??
+    (await import("./wallet-action-proof-consumer")).createWalletActionProofConsumer(
+      session,
+      "chat",
+    );
   if (!await consumer.consume(
     challenge.nonce,
     challenge.expiresAt,
@@ -795,14 +797,21 @@ export async function verifyAndConsumeWalletActionProof(
 export async function verifyLocalChatWalletActionProof(
   request: Request,
   requestBody: string,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
 ): Promise<void> {
   const session = readWalletSession(request);
   if (!session) throw new Error("A wallet-bound session is required.");
+  const configuredEnvironment = environment === process.env
+    ? process.env
+    : { ...process.env, ...environment };
+  const consumer = (await import("./wallet-action-proof-consumer"))
+    .createWalletActionProofConsumer(session, "chat", configuredEnvironment);
   await verifyAndConsumeWalletActionProof(
     session,
     request.headers.get(WALLET_ACTION_CHALLENGE_HEADER),
     request.headers.get(WALLET_ACTION_PROOF_HEADER),
     "chat",
     requestBody,
+    { consumer, secret: configuredEnvironment.SESSION_SECRET },
   );
 }

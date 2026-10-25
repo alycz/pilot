@@ -1,3 +1,5 @@
+import { createHmac } from "node:crypto";
+
 import { describe, expect, it } from "vitest";
 
 import { sealWalletSession, WALLET_SESSION_COOKIE } from "../../../../../lib/wallet-session";
@@ -50,6 +52,30 @@ describe("authenticated backtest access", () => {
     expect(first?.accountScopeId).toBe(replacement?.accountScopeId);
     expect(first?.sessionScopeId).not.toBe(replacement?.sessionScopeId);
     expect(first?.accountScopeId).not.toBe(other?.accountScopeId);
+    expect(first?.accountScopeId).toBe(createHmac("sha256", SECRET)
+      .update("pilot.backtest.account.v2\0", "utf8")
+      .update(`testnet\0${OWNER}`, "utf8")
+      .digest("hex"));
+  });
+
+  it("keys otherwise enumerable account scopes with the deployment session secret", () => {
+    const first = resolveAuthenticatedBacktestScope(request(), ENVIRONMENT);
+    const otherSecret = `${SECRET}-replacement`;
+    const cookie = sealWalletSession({
+      version: 1,
+      account: OWNER,
+      network: "testnet",
+      expiresAt: Date.now() + 60_000,
+    }, otherSecret);
+    const replacement = resolveAuthenticatedBacktestScope(new Request("https://pilot.example/api/research/backtests/run", {
+      headers: {
+        cookie: `${WALLET_SESSION_COOKIE}=${encodeURIComponent(cookie)}`,
+        origin: "https://pilot.example",
+        "sec-fetch-site": "same-origin",
+      },
+    }), { ...ENVIRONMENT, SESSION_SECRET: otherSecret });
+    expect(first?.accountScopeId).not.toBe(replacement?.accountScopeId);
+    expect(first?.sessionScopeId).not.toBe(replacement?.sessionScopeId);
   });
 
   it("treats missing, tampered, expired, and misconfigured sessions as signed out", () => {

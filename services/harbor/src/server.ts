@@ -55,6 +55,7 @@ import type {
 } from "./quicknode/watchdog";
 import { KmsKekError, validateKmsConfig } from "./aws/kms";
 import { handleDemoModelQuotaRoute } from "./demo-model-quota-route";
+import { handleHostedStateRoute } from "./hosted-state/route";
 import {
 	OWNER_REVIEW_OPERATION_NAMES,
 	handleOwnerReviewX402Route,
@@ -86,6 +87,11 @@ export interface Env {
 	HARBOR_DEMO_MAX_INPUT_BYTES?: string;
 	HARBOR_DEMO_MAX_OUTPUT_TOKENS?: string;
 	HARBOR_DEMO_MAX_STEPS?: string;
+	HARBOR_HOSTED_STATE_ENABLED?: string;
+	HARBOR_HOSTED_STATE_PRINCIPAL?: string;
+	HARBOR_RESEARCH_QUOTA_POLICY_VERSION?: string;
+	HARBOR_RESEARCH_QUOTA_ACCOUNT_HOURLY_RUNS?: string;
+	HARBOR_RESEARCH_QUOTA_SESSION_HOURLY_RUNS?: string;
 	EXECUTOR?: "dynamic" | "quickjs";
 	EXEC_NETWORK?: Network;
 	MAINNET_EXECUTION?: string;
@@ -244,6 +250,27 @@ function configuredKeys(value: string | undefined): Map<string, string> {
 	return keys;
 }
 
+function hostedStateCredentialIsUniquelyScoped(
+	keys: ReadonlyMap<string, string>,
+	statePrincipal: string | undefined,
+	principal: string,
+	token: string,
+): boolean {
+	const normalizedStatePrincipal = statePrincipal?.trim();
+	if (!normalizedStatePrincipal) return true;
+	const stateToken = keys.get(normalizedStatePrincipal);
+	if (!stateToken) return true;
+	if (principal === normalizedStatePrincipal) {
+		for (const [candidatePrincipal, candidateToken] of keys) {
+			if (candidatePrincipal !== normalizedStatePrincipal && equalCredential(candidateToken, stateToken)) {
+				return false;
+			}
+		}
+		return equalCredential(token, stateToken);
+	}
+	return !equalCredential(token, stateToken);
+}
+
 function isLegacyLocalDevRequest(request: Request, env: Env): boolean {
 	if (env.HARBOR_LOCAL_DEV !== "true") return false;
 	try {
@@ -309,8 +336,18 @@ function authenticateWithLocalCapability(
 	const separator = credential.indexOf(":");
 	const principal = separator > 0 ? credential.slice(0, separator) : "";
 	const token = separator > 0 ? credential.slice(separator + 1) : "";
-	const expected = configuredKeys(env.HARBOR_API_KEYS).get(principal);
-	if (!expected || !equalCredential(token, expected)) {
+	const keys = configuredKeys(env.HARBOR_API_KEYS);
+	const expected = keys.get(principal);
+	if (
+		!expected ||
+		!equalCredential(token, expected) ||
+		!hostedStateCredentialIsUniquelyScoped(
+			keys,
+			env.HARBOR_HOSTED_STATE_PRINCIPAL,
+			principal,
+			token,
+		)
+	) {
 		return {
 			ok: false,
 			response: Response.json(
@@ -525,6 +562,40 @@ export function createWorker(
 				localDevRequest,
 			);
 			if (!auth.ok) return auth.response;
+
+			const hostedStateResponse = await handleHostedStateRoute(request, {
+				principal: auth.principal,
+				localDevRequest,
+				database: env.DB,
+				environment: env,
+			});
+			if (hostedStateResponse) return hostedStateResponse;
+
+			// The hosted-state credential is deliberately narrower than an ordinary
+			// Harbor principal. Even though both use the same constant-time bearer
+			// parser, it must never inherit access to REST operations or MCP tools.
+			const hostedStatePrincipal = env.HARBOR_HOSTED_STATE_PRINCIPAL?.trim();
+			if (hostedStatePrincipal && auth.principal === hostedStatePrincipal) {
+				return Response.json(
+					{
+						ok: false,
+						error: {
+							service: "hosted-state",
+							kind: "error",
+							message: "Hosted-state credentials cannot access Harbor operations",
+							code: "HOSTED_STATE_PRINCIPAL_SCOPE_DENIED",
+						},
+					},
+					{
+						status: 403,
+						headers: {
+							"cache-control": "no-store",
+							"content-security-policy": "default-src 'none'",
+							"x-content-type-options": "nosniff",
+						},
+					},
+				);
+			}
 
 			const demoQuotaResponse = await handleDemoModelQuotaRoute(request, {
 				principal: auth.principal,

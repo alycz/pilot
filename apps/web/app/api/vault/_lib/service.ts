@@ -1,4 +1,5 @@
-import { createVaultFromEnv, type VaultService } from "@pilot/vault";
+import type { VaultService } from "@pilot/vault";
+import { createAppVaultFromEnv } from "../../../../lib/vault-service";
 
 let service: VaultService | undefined;
 
@@ -22,7 +23,7 @@ function policyClient() {
 /** Server-only singleton; the Harbor key and vault token never enter route responses. */
 export function getVaultService(): VaultService {
   if (service) return service;
-  service = createVaultFromEnv(undefined, async ({ owner, network, policy }) => {
+  service = createAppVaultFromEnv(undefined, async ({ owner, network, policy }) => {
     // P-core is deliberately fixture-backed. This is the policy.set mock call;
     // P-live replaces it with the server-side Harbor route without changing vault code.
     if (process.env.HARBOR_MOCK !== "1") {

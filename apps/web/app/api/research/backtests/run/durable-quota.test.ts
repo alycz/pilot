@@ -5,12 +5,13 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import ts from "typescript";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { BacktestQuotaError, type BacktestAccessScope } from "./access-control";
 import {
   BACKTEST_QUOTA_POLICY_VERSION,
   createConfiguredBacktestQuota,
+  type HarborD1BacktestQuotaConfig,
   readBacktestQuotaConfig,
   SqliteBacktestExternalReadQuota,
   type SqliteBacktestQuotaConfig,
@@ -32,6 +33,16 @@ function config(directory: string, overrides: Partial<SqliteBacktestQuotaConfig>
     policyVersion: BACKTEST_QUOTA_POLICY_VERSION,
     accountMaximum: 2,
     sessionMaximum: 2,
+    ...overrides,
+  };
+}
+
+function hostedConfig(overrides: Partial<HarborD1BacktestQuotaConfig> = {}): HarborD1BacktestQuotaConfig {
+  return {
+    backend: "harbor-d1",
+    policyVersion: BACKTEST_QUOTA_POLICY_VERSION,
+    accountMaximum: 12,
+    sessionMaximum: 4,
     ...overrides,
   };
 }
@@ -170,6 +181,52 @@ describe("durable backtest quota configuration", () => {
       ...environment,
       BACKTEST_QUOTA_STATE_DIR: join(ancestorLink, "nested"),
     })).toThrow(/canonical path/i);
+  });
+
+  it("permits serverless external reads only through the explicit shared Harbor D1 policy", () => {
+    expect(readBacktestQuotaConfig({
+      BACKTEST_EXTERNAL_READS_ENABLED: "1",
+      BACKTEST_QUOTA_BACKEND: "harbor-d1",
+      BACKTEST_QUOTA_POLICY_VERSION,
+      BACKTEST_QUOTA_ACCOUNT_HOURLY_RUNS: "12",
+      BACKTEST_QUOTA_SESSION_HOURLY_RUNS: "4",
+      VERCEL: "1",
+    })).toEqual(hostedConfig());
+    expect(() => readBacktestQuotaConfig({
+      BACKTEST_EXTERNAL_READS_ENABLED: "1",
+      BACKTEST_QUOTA_BACKEND: "process-memory",
+      BACKTEST_QUOTA_POLICY_VERSION,
+      BACKTEST_QUOTA_ACCOUNT_HOURLY_RUNS: "12",
+      BACKTEST_QUOTA_SESSION_HOURLY_RUNS: "4",
+      VERCEL: "1",
+    })).toThrow(/must be sqlite-single-host or harbor-d1/i);
+  });
+
+  it("composes the shared adapter only for the explicit Harbor D1 backend", () => {
+    const shared = { reserve: () => undefined };
+    const createHarborD1Quota = vi.fn(() => shared);
+    const environment = {
+      BACKTEST_EXTERNAL_READS_ENABLED: "1",
+      BACKTEST_QUOTA_BACKEND: "harbor-d1",
+      BACKTEST_QUOTA_POLICY_VERSION,
+      BACKTEST_QUOTA_ACCOUNT_HOURLY_RUNS: "12",
+      BACKTEST_QUOTA_SESSION_HOURLY_RUNS: "4",
+      VERCEL: "1",
+    };
+    expect(createConfiguredBacktestQuota(environment, { createHarborD1Quota })).toBe(shared);
+    expect(createHarborD1Quota).toHaveBeenCalledWith(hostedConfig(), environment);
+  });
+
+  it("fails closed when the hosted policy is selected without the dedicated state client configuration", () => {
+    const quota = createConfiguredBacktestQuota({
+      BACKTEST_EXTERNAL_READS_ENABLED: "1",
+      BACKTEST_QUOTA_BACKEND: "harbor-d1",
+      BACKTEST_QUOTA_POLICY_VERSION,
+      BACKTEST_QUOTA_ACCOUNT_HOURLY_RUNS: "12",
+      BACKTEST_QUOTA_SESSION_HOURLY_RUNS: "4",
+      VERCEL: "1",
+    });
+    expect(() => quota.reserve(scope("a", "b"), 1_000)).toThrowError(BacktestQuotaError);
   });
 
   it("fails closed without creating state when durable quota is disabled", () => {

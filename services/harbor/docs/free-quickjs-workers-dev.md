@@ -7,8 +7,9 @@ This runbook requires four separately approved operator inputs:
 - account subdomain: `<approved-account-subdomain>`
 - public origin: `https://<approved-worker-name>.<approved-account-subdomain>.workers.dev`
 - network: XRPL Testnet
-- migration ceiling: every frozen migration in `migrations-free-quickjs/`,
-  ending at `0010_ap4m_channel_purchase.sql`
+- migration inventory: the frozen base migrations through
+  `0010_ap4m_channel_purchase.sql`, then only
+  `0017_hosted_pilot_state.sql`; feature migrations `0011`–`0016` remain absent
 
 It does not authorize a deployment. Run the remote steps only from the intended
 Cloudflare account after an operator separately approves resource creation and
@@ -20,7 +21,10 @@ The generated profile has no Worker Loader, cron, custom-domain route, source
 maps, or observability. It fixes `workers_dev=true` and keeps mainnet, REST
 execution, autonomous execution, MCP execute, QuickNode, Mastercard/AP4M,
 AP4M EVM, KMS, AWS Guardrails, and shared model quota disabled. `HARBOR_MOCK=1`
-and `LIVE=0` make the remaining non-executing profile explicit. Enabling any of
+and `LIVE=0` make the remaining non-executing profile explicit. The hosted
+Pilot state routes are also disabled until an exact dedicated principal and
+finite Research policy are reviewed; that principal is never an ops/MCP key.
+Enabling any of
 those capabilities is a separate reviewed change, not an operator override.
 
 ## 1. Offline verification
@@ -87,7 +91,7 @@ pointing to the reviewed `src/server.ts`, and every safety variable from the
 checked-in template. Regenerate the operator config rather than editing those
 paths if the checkout moves.
 
-## 4. Backup and apply only migrations through 0010
+## 4. Backup and apply only the reviewed sparse migration inventory
 
 Set the task-specific path for the following commands:
 
@@ -95,16 +99,17 @@ Set the task-specific path for the following commands:
 PILOT_HARBOR_CONFIG=/absolute/owner-private/path/wrangler.free-quickjs.operator.jsonc
 npx wrangler d1 migrations list DB --remote --config "$PILOT_HARBOR_CONFIG"
 npx wrangler d1 export DB --remote --config "$PILOT_HARBOR_CONFIG" \
-  --output /absolute/owner-private/path/approved-harbor-before-0010.sql
+  --output /absolute/owner-private/path/approved-harbor-before-hosted-state.sql
 npx wrangler d1 migrations apply DB --remote --config "$PILOT_HARBOR_CONFIG"
 npx wrangler d1 migrations list DB --remote --config "$PILOT_HARBOR_CONFIG"
 ```
 
-The config's frozen migration directory contains twelve files because the
+The config's frozen migration directory contains thirteen files because the
 canonical history has two reviewed `0002` files and two reviewed `0008` files.
-The final applied filename must be `0010_ap4m_channel_purchase.sql`; `0011` and
-later must not appear. Stop on any different inventory, partial application, or
-unknown outcome. Check remote state before retrying a command.
+After the base through `0010`, the only later filename may be
+`0017_hosted_pilot_state.sql`; `0011` through `0016` must not appear. Stop on
+any different inventory, partial application, or unknown outcome. Check remote
+state before retrying a command.
 
 ## 5. Secret, bundle, and deploy gates
 

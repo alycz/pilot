@@ -177,6 +177,14 @@ approval requirements, or signing. Validated trades continue to be journaled
 separately with unavailable execution metrics labeled as unavailable rather
 than converted into performance claims.
 
+Hosted mode encrypts each preference or workflow-lesson document before it
+leaves Pilot, bounds every encrypted document to a 1 MiB plaintext envelope,
+and limits each dedicated Harbor principal to 4,096 personalization rows.
+Record-level “forget” retains the application's content-free tombstone for
+idempotency; the separate exact-digest internal deletion primitive physically
+removes an entire scoped document for account cleanup without exposing that
+operation to the browser, model tools, Harbor REST operations, or MCP.
+
 ## Environment reference
 
 [`.env.example`](.env.example) contains names, public defaults, and empty secret
@@ -192,6 +200,7 @@ launcher rejects generic `.env*` files.
 | `HARBOR_MOCK` | Public behavior | Literal `1` for fixtures or `0` for a reviewed Harbor. Any other value fails closed. |
 | `HARBOR_URL` | Server | Exact profile-bound upstream. The isolated launcher pins `http://127.0.0.2:8791`; caller-selected alternatives are rejected. |
 | `HARBOR_API_KEY` | Secret, server-only | Bearer used only by Pilot's server-side Harbor client. Never expose it through `NEXT_PUBLIC_*`. |
+| `PILOT_HOSTED_STATE_API_KEY` | Secret, server-only | Dedicated named bearer for the private hosted-state operations. Its principal and token must both differ from `HARBOR_API_KEY`; Harbor rejects shared credentials and denies its principal ordinary ops and MCP. |
 | `HARBOR_X402_URL` | Server | Present only in the argument-free isolated x402 launcher and fixed to `http://127.0.0.2:8792`. It is used only for `x402.pay`; browser input and ordinary Harbor operations cannot select it. |
 | `HARBOR_X402_API_KEY` | Secret, server-only | Dedicated named x402 bearer loaded from the fixed capability file. Its principal and token must both differ from `HARBOR_API_KEY`; it is never browser-visible. |
 | `EXEC_NETWORK` | Public behavior | `testnet` or `devnet` for supported local development. Mainnet execution is prohibited. |
@@ -215,9 +224,12 @@ launcher rejects generic `.env*` files.
 | `VAULT_BACKEND`, `VAULT_PATH` | Server | Select filesystem vault storage and its root. Wallet-scoped data remains isolated. |
 | `VAULT_GITHUB_TOKEN`, `VAULT_REPO` | Secret/server | Optional GitHub-backed vault configuration; not needed for fixture development. |
 | `PILOT_STRUCTURED_PREFERENCES` | Server gate | Default `0`. Literal `1` enables reviewable structured preferences and validated-experience workflow lessons without changing legacy profile strings or transaction policy. |
+| `PILOT_PERSONALIZATION_BACKEND` | Server | `local` uses the owner-private filesystem path below. `harbor-d1` is hosted-only, requires the dedicated state bearer and `SESSION_SECRET`, encrypts values before Harbor, and never falls back to local storage. |
 | `PILOT_PERSONALIZATION_TENANT_ID` | Server | Required with the structured-preference gate. The browser cannot choose tenant, wallet, or network scope. |
 | `PILOT_PERSONALIZATION_STATE_DIR` | Private path | Required with the structured-personalization gate. Must be a current-user-owned local directory with mode `0700` (or stricter) outside `VAULT_PATH`; preferences, workflow lessons, and their evidence references are never written to the GitHub vault backend. |
 | `PILOT_PERSONALIZATION_FIXTURE` | Development-only gate | Default `0`. Literal `1` enables the fixed synthetic personalization browser scope only with mock Harbor, structured preferences, a configured private state directory, and a development/test runtime. Production, hosted, isolated, or live-Harbor modes reject it. The fixture cookie is not wallet authorization. |
+| `BACKTEST_EXTERNAL_READS_ENABLED`, `BACKTEST_QUOTA_BACKEND` | Server gate | Default off. Local single-host work may use `sqlite-single-host`; hosted/serverless work must use `harbor-d1`. Incomplete or unavailable shared quota configuration blocks the provider read. |
+| `BACKTEST_QUOTA_POLICY_VERSION`, `BACKTEST_QUOTA_ACCOUNT_HOURLY_RUNS`, `BACKTEST_QUOTA_SESSION_HOURLY_RUNS` | Server limits | Exact shared policy and finite hourly account/session reservations. Pilot sends only `SESSION_SECRET`-HMAC scopes; malformed requests are rejected before quota is consumed. |
 | `STABLE_CODE_TESTNET`, `STABLE_ISSUER_TESTNET` | Public data | Optional Testnet asset display metadata. The isolated acquisition remains fixed to official Testnet RLUSD. |
 
 OpenRouter OAuth uses PKCE S256 plus a single-use state cookie. Because the

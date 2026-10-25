@@ -707,8 +707,8 @@ export class VaultService {
 
   private personalizationStore() {
     const store = this.options.personalizationStore;
-    if (!store || store.localPrivateStorage !== true) {
-      throw new Error("Structured preferences require configured local private storage");
+    if (!store || (store.privateStorage !== "local" && store.privateStorage !== "remote")) {
+      throw new Error("Structured preferences require configured private storage");
     }
     return store;
   }

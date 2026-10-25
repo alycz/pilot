@@ -3,6 +3,7 @@ import {
   type PublicPilotConfig,
 } from "../../../../lib/harbor-browser";
 import { resolveStableAsset } from "../../../../lib/stable-asset";
+import { isHarborHostedStateConfigured } from "../../../../lib/harbor-hosted-state-client";
 import { validateWalletActionProofDirectory } from "../../../../lib/wallet-action-proof";
 import {
   resolveProfileDevSignerEnabled,
@@ -19,6 +20,9 @@ export async function resolveWalletActionProofConfigured(
 ): Promise<boolean> {
   const secret = environment.SESSION_SECRET?.trim();
   if (!secret || secret.length < 32) return false;
+  if (environment.PILOT_DEPLOYMENT_PROFILE === "hosted") {
+    return isHarborHostedStateConfigured(environment);
+  }
   try {
     await validateDirectory(environment.P_LIVE_RLUSD_ACQUISITION_STATE_DIR);
     return true;
@@ -46,8 +50,21 @@ export async function resolvePublicPilotConfig(
 
   const buildMarker = resolveProfilePublicBuildMarker(environment);
   const personalizationTenant = resolveStructuredPreferenceTenant(environment);
-  if (personalizationTenant && !environment.PILOT_PERSONALIZATION_STATE_DIR?.trim()) {
-    throw new Error("STRUCTURED_PREFERENCE_STORAGE_NOT_CONFIGURED");
+  if (personalizationTenant) {
+    const backend = environment.PILOT_PERSONALIZATION_BACKEND?.trim() || "local";
+    if (backend === "harbor-d1") {
+      const secret = environment.SESSION_SECRET;
+      if (
+        environment.PILOT_DEPLOYMENT_PROFILE !== "hosted" ||
+        environment.PILOT_PERSONALIZATION_STATE_DIR?.trim() ||
+        !secret || secret !== secret.trim() || Buffer.byteLength(secret, "utf8") < 32 ||
+        !isHarborHostedStateConfigured(environment)
+      ) {
+        throw new Error("STRUCTURED_PREFERENCE_STORAGE_NOT_CONFIGURED");
+      }
+    } else if (backend !== "local" || !environment.PILOT_PERSONALIZATION_STATE_DIR?.trim()) {
+      throw new Error("STRUCTURED_PREFERENCE_STORAGE_NOT_CONFIGURED");
+    }
   }
   const ledger = resolveProfileLedgerConfig(environment, request);
   return PublicPilotConfigSchema.parse({

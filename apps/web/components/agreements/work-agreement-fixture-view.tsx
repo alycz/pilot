@@ -89,7 +89,6 @@ export function WorkAgreementFixtureViewComponent() {
     <div className="mx-auto min-h-[calc(100dvh-4rem)] max-w-5xl space-y-6 px-4 py-10 sm:px-6">
       <header className="grid gap-5 border-b border-border pb-8 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
         <div className="space-y-3">
-          <p className="label-mono">Demo · deterministic local fixture</p>
           <h1 className="font-display text-4xl font-medium tracking-tight sm:text-5xl">
             Sample escrow-backed work agreement
           </h1>
@@ -100,19 +99,13 @@ export function WorkAgreementFixtureViewComponent() {
         </div>
         <div className="flex flex-wrap gap-2">
           <button className="min-h-11 rounded-md border border-border bg-card px-4 text-sm font-medium hover:bg-secondary" onClick={reset} type="button">
-            Reset demo
+            Reset
           </button>
           <Link className="inline-flex min-h-11 items-center rounded-md border border-border bg-card px-4 text-sm font-medium hover:bg-secondary" href="/onboarding">
             Connect a wallet (optional)
           </Link>
         </div>
       </header>
-
-      <section className="rounded-xl border border-approval/30 bg-approval/[0.05] p-4 text-sm leading-6" role="note">
-        <strong>Simulated agreement only.</strong> No wallet opens, no valid signature exists, no escrow is
-        created, and no provider or XRPL request is made. Sample ledger indexes and hashes below are
-        deterministic fixture labels—not chain-validated receipts.
-      </section>
 
       <DemoTimeline view={view} deliveryReviewed={deliveryReviewed} />
 

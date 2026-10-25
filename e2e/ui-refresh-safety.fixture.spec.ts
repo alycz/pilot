@@ -289,7 +289,7 @@ test("hosted mock mode keeps signed-out chat on the complete local illustrative 
     await page.getByRole("button", { name: "Send message" }).click();
     await expect(page.locator('[data-card-state="validated"]')).toHaveCount(attempt + 1);
   }
-  const demoReceipts = page.getByLabel("Demo capability preview");
+  const demoReceipts = page.getByLabel("Capability preview");
   await expect(demoReceipts).toHaveCount(2);
   for (const label of [
     "Bedrock Guardrails",
@@ -299,7 +299,7 @@ test("hosted mock mode keeps signed-out chat on the complete local illustrative 
     "QuickNode webhook",
     "QuickNode Streams",
   ]) await expect(demoReceipts.first().getByText(label, { exact: true })).toBeVisible();
-  await expect(demoReceipts.first().getByText("Demo", { exact: true })).toHaveCount(1);
+  await expect(demoReceipts.first().getByText("Demo", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/\(mock\)/)).toHaveCount(0);
   await expect(page.getByText("Simulated · no wallet or ledger transaction", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/model connection is not available/i)).toHaveCount(0);

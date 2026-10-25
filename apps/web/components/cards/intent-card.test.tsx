@@ -97,7 +97,7 @@ describe("IntentCard AWS trust receipt", () => {
     expect(markup).toContain("account 1");
   });
 
-  it("uses the single-label demo presentation only when explicitly requested", () => {
+  it("uses neutral capability presentation only when explicitly requested", () => {
     const trustedEvent: CardEvent = {
       ...event,
       trust: {
@@ -110,7 +110,7 @@ describe("IntentCard AWS trust receipt", () => {
       event: trustedEvent,
     }));
 
-    expect(markup).toContain('aria-label="Demo capability preview"');
+    expect(markup).toContain('aria-label="Capability preview"');
     expect(markup).toContain("Bedrock Guardrails");
     expect(markup).toContain("Amazon Bedrock");
     expect(markup).not.toContain("(mock)");

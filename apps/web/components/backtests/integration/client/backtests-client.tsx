@@ -182,16 +182,16 @@ export function BacktestsClient() {
       <section aria-labelledby="backtest-config-title" className="bg-background px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <form onSubmit={(event) => void run(event)} className="mx-auto max-w-6xl space-y-6 rounded-xl border border-border bg-card p-4 shadow-sm sm:p-6">
           <div className="flex flex-col gap-4 rounded-xl border border-primary/30 bg-primary/[0.05] p-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="label-mono text-primary">{dataMode === "demo" ? "Demo · simulated sample results" : "Historical research · external public data"}</p>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-                {dataMode === "demo"
-                  ? "Try the complete workflow immediately. A fixed synthetic price path is calculated in this browser; no wallet, account, model, provider, signing service, or execution endpoint is used."
-                  : "This optional lane requests public historical market-level data. Provider and validation failures remain visible and never fall back to the sample demo."}
-              </p>
-            </div>
+            {dataMode === "historical" ? (
+              <div>
+                <p className="label-mono text-primary">Historical research · external public data</p>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+                  This optional lane requests public historical market-level data. Provider and validation failures remain visible and never fall back to the sample.
+                </p>
+              </div>
+            ) : null}
             <div className="flex shrink-0 flex-wrap gap-2">
-              <button type="button" aria-pressed={dataMode === "demo"} onClick={() => chooseMode("demo")} className={`min-h-11 rounded-md border px-3 text-xs font-medium ${dataMode === "demo" ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-foreground"}`}>Sample demo</button>
+              <button type="button" aria-pressed={dataMode === "demo"} onClick={() => chooseMode("demo")} className={`min-h-11 rounded-md border px-3 text-xs font-medium ${dataMode === "demo" ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-foreground"}`}>Sample</button>
               <button type="button" aria-pressed={dataMode === "historical"} onClick={() => chooseMode("historical")} className={`min-h-11 rounded-md border px-3 text-xs font-medium ${dataMode === "historical" ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-foreground"}`}>Historical data</button>
               <Link href="/onboarding" className="inline-flex min-h-11 items-center rounded-md border border-border px-3 text-xs font-medium text-foreground">Connect wallet (optional)</Link>
             </div>

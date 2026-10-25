@@ -5,7 +5,7 @@ import React, { useMemo, useState } from "react";
 
 import { researchArbitrage, type ArbitrageResearchResult } from "./arbitrage";
 import { runBacktest, type BacktestConfig, type BacktestMetrics, type BacktestReport } from "./backtest";
-import { DETERMINISTIC_STRATEGY_FIXTURE, FIXTURE_DISCLOSURE } from "./fixtures";
+import { DETERMINISTIC_STRATEGY_FIXTURE } from "./fixtures";
 
 export type ResearchHypothesisId = "balanced" | "tight-band" | "cost-stress";
 
@@ -135,7 +135,7 @@ export function StrategyResearchWorkbench() {
           <div className="max-w-4xl">
             <p className="label-mono flex items-center gap-2 text-primary">
               <FlaskConical className="size-3.5" aria-hidden="true" />
-              Strategy research · simulation only
+              Strategy research
             </p>
             <h1 id="research-title" className="mt-3 text-2xl font-medium tracking-tight sm:text-3xl font-display">
               Test assumptions before preparing an action
@@ -149,17 +149,6 @@ export function StrategyResearchWorkbench() {
 
       <div className="grid min-w-0 gap-5 px-4 py-6 sm:px-6 lg:px-8 lg:py-8 xl:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="min-w-0 space-y-5">
-          <section aria-labelledby="dataset-boundary-title" className="rounded-xl border border-warning/35 bg-warning/[0.045] shadow-sm">
-            <div className="flex gap-3 px-4 py-4 sm:px-5">
-              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden="true" />
-              <div>
-                <p className="label-mono text-warning">Fixture data · historical coverage unavailable</p>
-                <h2 id="dataset-boundary-title" className="mt-1 text-base font-medium">Reproducible software evidence, not market performance</h2>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">{FIXTURE_DISCLOSURE}</p>
-              </div>
-            </div>
-          </section>
-
           <section aria-labelledby="demo-controls-title" className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
             <header className="border-b border-border px-4 py-4 sm:px-5">
               <p className="label-mono text-primary">Interactive simulated research</p>
@@ -212,7 +201,7 @@ export function StrategyResearchWorkbench() {
               </div>
               <div className="flex flex-col-reverse gap-2 sm:flex-row">
                 <button type="button" onClick={reset} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-border px-4 text-sm font-medium hover:bg-muted/60">
-                  <RotateCcw className="size-3.5" aria-hidden="true" /> Reset demo
+                  <RotateCcw className="size-3.5" aria-hidden="true" /> Reset
                 </button>
                 <button type="button" onClick={run} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">
                   <Play className="size-3.5" aria-hidden="true" /> Run simulated research

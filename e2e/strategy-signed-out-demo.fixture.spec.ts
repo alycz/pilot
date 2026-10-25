@@ -149,7 +149,7 @@ test("signed-out visitors can explore deterministic bounded decisions without co
   await expect(decision).not.toHaveText(initialDecision ?? "");
   await expect(decision).toContainText(/trade|blocked/i);
 
-  const reset = page.getByRole("button", { name: "Reset demo" });
+  const reset = page.getByRole("button", { name: "Reset", exact: true });
   await reset.click();
   await expect(decision).toContainText(/hold/i);
 
@@ -222,7 +222,7 @@ test("mobile reduced-motion demo remains manual, keyboard operable, and containe
   await step.press("Enter");
   await expect(decision).not.toHaveText(before ?? "");
 
-  const reset = page.getByRole("button", { name: "Reset demo" });
+  const reset = page.getByRole("button", { name: "Reset", exact: true });
   await reset.focus();
   await reset.press("Space");
   await expect(decision).toContainText(/hold/i);

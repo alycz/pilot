@@ -14,7 +14,7 @@ describe("BacktestsClient", () => {
       expect(markup).toContain(label);
     }
     expect(markup).toContain("Run simulated sample");
-    expect(markup).toContain("Demo · simulated sample results");
+    expect(markup).toContain(">Sample<");
     expect(markup).toContain("Synthetic sample data · not historical, live, or executable");
     expect(markup).toContain("Sample strategy return");
     expect(markup).toContain("Sample hold benchmark");
@@ -23,7 +23,7 @@ describe("BacktestsClient", () => {
     expect(markup).toContain("Connect wallet (optional)");
     expect(markup).toContain("rounded-xl");
     expect(markup).toContain("rounded-md");
-    expect(markup).toContain("no wallet, account, model, provider, signing service, or execution endpoint is used");
+    expect(markup).not.toContain("Demo · simulated sample results");
     expect(markup).not.toContain("Explain saved evidence in chat");
     vi.unstubAllGlobals();
   });

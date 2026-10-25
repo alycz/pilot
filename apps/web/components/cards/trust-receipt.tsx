@@ -272,7 +272,7 @@ export function TrustReceipt({ appearance = "default", presentation = "default",
   const hasAws = awsChips.some((chip) => chip !== null);
   const hasQuickNode = quickNodeChips.some((chip) => chip !== null);
   const receiptLabel = presentation === "demo"
-    ? "Demo capability preview"
+    ? "Capability preview"
     : hasAws && hasQuickNode
     ? "AWS and QuickNode trust receipt"
     : hasQuickNode
@@ -281,9 +281,6 @@ export function TrustReceipt({ appearance = "default", presentation = "default",
 
   return (
     <section aria-label={receiptLabel} className="min-w-0">
-      {presentation === "demo" ? (
-        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-primary">Demo</p>
-      ) : null}
       <ul className="flex min-w-0 flex-wrap items-start gap-2" role="list">
         {chips.map((chip) => <TrustChip appearance={appearance} chip={chip} key={chip.id} />)}
       </ul>

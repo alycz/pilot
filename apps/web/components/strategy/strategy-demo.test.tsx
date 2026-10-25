@@ -135,7 +135,7 @@ describe("signed-out strategy demo surface", () => {
     const markup = renderToStaticMarkup(createElement(SignedOutStrategyDemo));
     for (const control of [
       ">Review simulated mandate<",
-      ">Reset demo<",
+      ">Reset<",
       'aria-label="Target XRP share"',
       'aria-label="Allowed drift either way"',
       'aria-label="Maximum per simulated trade"',

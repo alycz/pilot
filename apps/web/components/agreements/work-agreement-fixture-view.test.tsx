@@ -15,10 +15,8 @@ describe("work-agreement fixture UI", () => {
     });
     const markup = renderToStaticMarkup(page);
     expect(markup).toContain("Sample escrow-backed work agreement");
-    expect(markup).toContain("Simulated agreement only");
-    expect(markup).toContain("no valid signature exists");
-    expect(markup).toContain("no provider or XRPL request is made");
-    expect(markup).toContain("not chain-validated receipts");
+    expect(markup).toContain(">Reset<");
+    expect(markup).not.toContain("Simulated agreement only");
     expect(markup).toContain("Simulate owner approval · create");
     expect(markup.match(/<main(?:\s|>)/g)).toHaveLength(1);
     expect(metadata.title).toBe("Ledger work agreements");
@@ -28,7 +26,7 @@ describe("work-agreement fixture UI", () => {
     const page = await WorkAgreementFixturePage({});
     const markup = renderToStaticMarkup(page);
     expect(markup).toContain("Sample escrow-backed work agreement");
-    expect(markup).toContain("Simulated agreement only");
+    expect(markup).not.toContain("Simulated agreement only");
     expect(markup).not.toContain("Prepare escrow agreement");
     expect(markup.match(/<main(?:\s|>)/g)).toHaveLength(1);
   });

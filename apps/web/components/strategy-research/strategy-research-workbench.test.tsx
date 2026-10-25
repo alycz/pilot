@@ -15,9 +15,7 @@ describe("strategy research workbench", () => {
   it("shows explicit fixture, assumptions, benchmark, drawdown, coverage, and OOS boundaries", () => {
     const markup = renderToStaticMarkup(createElement(StrategyResearchWorkbench));
     for (const text of [
-      "Strategy research · simulation only",
-      "Fixture data · historical coverage unavailable",
-      "Reproducible software evidence, not market performance",
+      "Strategy research",
       "Hold benchmark",
       "Maximum drawdown",
       "Training window",
@@ -45,7 +43,9 @@ describe("strategy research workbench", () => {
     expect(markup).toContain("Net cash flow");
     expect(markup).toContain("boundary observation remain inside return and drawdown");
     expect(markup).toContain("Run simulated research");
-    expect(markup).toContain("Reset demo");
+    expect(markup).toContain("> Reset<");
+    expect(markup).not.toContain("Fixture data · historical coverage unavailable");
+    expect(markup).not.toContain("Reproducible software evidence, not market performance");
     expect(markup).toContain('aria-label="Simulated hypothesis comparison"');
     expect(markup).not.toMatch(/Approve transaction|Submit transaction|Start autonomous|Sign transaction/);
   });

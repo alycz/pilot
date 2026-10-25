@@ -279,7 +279,7 @@ function Hero() {
               href="/chat"
               className="bracket bracket-light inline-flex h-10 items-center gap-2 bg-primary px-4 pointer-coarse:h-11 text-[13px] font-medium text-primary-foreground transition hover:bg-primary/90 rounded-md"
             >
-              Launch workspace <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+              Launch Pilot <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
             </Link>
             <Link
               href="/markets"
@@ -943,7 +943,7 @@ function FinalCta() {
             href="/chat"
             className="bracket bracket-light inline-flex h-10 items-center gap-2 bg-primary px-4 pointer-coarse:h-11 text-[13px] font-medium text-primary-foreground transition hover:bg-primary/90 rounded-md"
           >
-            Launch workspace <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+            Launch Pilot <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
           </Link>
           <Link
             href="/onboarding"

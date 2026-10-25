@@ -244,21 +244,18 @@ function WorkspaceHeader({
   selected,
 }: Pick<AnalyticsWorkspaceProps, "query" | "refreshing" | "onQueryChange" | "onRefresh"> & { selected?: AnalyticsSnapshot }) {
   return (
-    <header className="border-b border-border bg-sidebar/45">
-      <div className={`${pageInner} grid gap-5 py-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end`}>
+    <header className="border-b border-border">
+      <div className={`${pageInner} grid gap-6 py-8 sm:py-10 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end`}>
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 border border-primary/35 bg-primary-soft px-2 py-1 text-xs text-primary rounded">
-              <Activity className="h-3 w-3" aria-hidden="true" /> Analytics
-            </span>
+          <p className="label-mono flex flex-wrap items-center gap-2">
+            <Activity className="size-3.5 text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))]" aria-hidden="true" />
+            XRPL markets · Analytics
             {selected ? (
-              <span className="border border-border px-2 py-1 text-xs text-muted-foreground rounded">
-                {selected.provenance.network} · {selected.provenance.mode}
-              </span>
+              <span className="text-muted-foreground">· {selected.provenance.network} · {selected.provenance.mode}</span>
             ) : null}
-          </div>
-          <h1 className="mt-3 text-balance text-2xl font-semibold tracking-[-0.035em] sm:text-3xl font-display">XRPL market workspace</h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+          </p>
+          <h1 className="mt-3 max-w-3xl text-balance text-[1.75rem] font-semibold leading-tight tracking-[-0.02em] text-foreground font-display">XRPL market workspace</h1>
+          <p className="label-mono mt-3 max-w-3xl leading-6">
             Inspect real DEX and AMM observations, executable-liquidity estimates, and bounded peer comparisons. Every panel keeps its network, issuer identity, source, units, and observation time attached.
           </p>
         </div>

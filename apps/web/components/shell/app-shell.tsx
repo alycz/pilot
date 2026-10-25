@@ -14,7 +14,7 @@ import {
   Map,
   Menu,
   MessageCircle,
-  Navigation2,
+  Navigation,
   Settings2,
   Sparkles,
   WalletCards,
@@ -89,7 +89,6 @@ const navigation = [
 export function AppShell({
   active = "chat",
   title,
-  eyebrow,
   ownHeading = false,
   children,
 }: {
@@ -212,9 +211,9 @@ export function AppShell({
           >
             <Menu className="h-4 w-4" />
           </button>
-          <div className="flex min-w-0 items-baseline gap-3">
+          {/* Just the page name: the grey eyebrow is not shown in the approved design. */}
+          <div className="flex min-w-0 items-baseline">
             {ownHeading ? <p className="truncate text-lg font-medium tracking-[-0.01em]">{title}</p> : <h1 className="truncate text-lg font-medium tracking-[-0.01em]">{title}</h1>}
-            {eyebrow ? <p className="label-mono hidden truncate md:block">{eyebrow}</p> : null}
           </div>
           <div className="ml-auto flex min-w-0 items-center gap-5">
             {signedOut ? <DemoAccountCta /> : null}
@@ -234,8 +233,8 @@ export function AppShell({
 
 function Brand() {
   return (
-    <Link href="/" className="flex items-center gap-2.5 focus-visible:outline-offset-4 pointer-coarse:min-h-11" aria-label="Pilot home">
-      <Navigation2 className="h-5 w-5 rotate-45 text-foreground" strokeWidth={1.75} aria-hidden="true" />
+    <Link href="/" className="flex items-center gap-1.5 text-primary focus-visible:outline-offset-4 pointer-coarse:min-h-11" aria-label="Pilot home">
+      <Navigation className="h-5 w-5 shrink-0" strokeWidth={2.25} aria-hidden="true" />
       <span className="text-lg font-medium tracking-tight">Pilot</span>
     </Link>
   );
@@ -284,20 +283,23 @@ function DemoAccountCta() {
   );
 }
 
-/** Signed-out state stays explicit on every app page. */
+/**
+ * Signed-out state stays explicit on every app page, as one quiet line
+ * rather than a highlighted card.
+ */
 function SidebarDemoCard() {
   return (
-    <div role="note" aria-label="Demo mode" className="bracket bracket-accent rounded-xl border border-primary/30 bg-[color-mix(in_srgb,var(--primary)_5%,var(--sidebar))] p-3">
-      <p className="label-mono flex items-center gap-2 text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))]">
+    <div role="note" aria-label="Demo mode" className="px-1 text-[12px] leading-[1.125rem] text-muted-foreground">
+      <p className="flex items-center gap-2 font-medium text-foreground">
         <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
         Demo mode
       </p>
-      <p className="mt-2 text-[12px] leading-[1.125rem] text-muted-foreground">
-        Chat, Portfolio and Memory run on sample data until you connect a wallet.
+      <p className="mt-1">
+        Chat, Portfolio and Memory use sample data until you connect a wallet.{" "}
+        <Link href="/onboarding" className="link-dashed inline-flex min-h-11 items-center gap-1 font-medium text-foreground pointer-fine:min-h-0">
+          Get started <ArrowRight className="h-3 w-3" aria-hidden="true" />
+        </Link>
       </p>
-      <Link href="/onboarding" className="link-dashed mt-3 inline-flex min-h-11 items-center gap-1.5 text-[13px] font-medium text-foreground">
-        Get started <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-      </Link>
     </div>
   );
 }

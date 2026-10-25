@@ -24,7 +24,7 @@ export const mastercardIntegration = {
     },
     {
       id: "pilot",
-      label: "Workspace",
+      label: "Pilot",
       detail: "Binds the active mandate and exposes only merchant and SKU to the model.",
     },
     {

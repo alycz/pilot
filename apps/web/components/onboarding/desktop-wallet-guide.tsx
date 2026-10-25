@@ -28,7 +28,7 @@ export function DesktopWalletGuide({ smallScreen = false }: { smallScreen?: bool
         </aside>
       ) : null}
 
-      <div className="flex flex-col gap-3 border border-border bg-background/60 p-4 sm:flex-row sm:items-center sm:justify-between rounded-xl">
+      <div className="flex flex-col gap-3 border border-border bg-background/60 p-4 rounded-xl">
         <div className="min-w-0">
           <h3 className="text-sm font-medium" id="desktop-wallet-guide-title">Don’t have a wallet yet?</h3>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">I already have a wallet, or I need a wallet: use GemWallet (recommended) or Crossmark. Account creation, import, and recovery stay inside the wallet extension. Switch the wallet to XRPL Testnet before connecting.</p>
@@ -47,7 +47,7 @@ export function DesktopWalletGuide({ smallScreen = false }: { smallScreen?: bool
         <ShieldCheck aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-[color-mix(in_oklab,var(--executed)_80%,var(--foreground))]" />
         Pilot never asks for a seed phrase, recovery phrase, mnemonic, or private key. Those stay in your wallet.
       </p>
-      <aside aria-label="Mobile wallet availability" className="border border-border bg-surface p-3 text-xs leading-5 text-muted-foreground rounded-xl">
+      <aside aria-label="Mobile wallet availability" className="text-xs leading-5 text-muted-foreground">
         Mobile wallet actions are not available yet, and Xaman remains unavailable for this non-broadcast wallet-auth proof. You can still <a className="underline underline-offset-4" href="/chat">Continue to read-only Pilot</a>.
       </aside>
     </section>

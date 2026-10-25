@@ -26,7 +26,7 @@ import {
   LoaderCircle,
   Network as NetworkIcon,
   ShieldCheck,
-  Navigation2,
+  Navigation,
   WalletCards,
   X,
 } from "lucide-react";
@@ -4689,9 +4689,9 @@ export function OnboardingFlow({
     <div className="flex min-h-dvh flex-col">
     <header className="border-b border-border">
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-3 px-4 sm:px-8 lg:px-12">
-        <a href="/" className="flex items-center gap-2.5 focus-visible:outline-offset-4" aria-label="Workspace home">
-          <Navigation2 aria-hidden="true" className="h-[1.05rem] w-[1.05rem] rotate-45 text-foreground" strokeWidth={1.75} />
-          <span className="text-[15px] font-medium tracking-tight">Workspace</span>
+        <a href="/" className="flex items-center gap-1.5 focus-visible:outline-offset-4" aria-label="Pilot home">
+          <Navigation aria-hidden="true" className="h-[1.05rem] w-[1.05rem] shrink-0 text-primary" strokeWidth={2.25} />
+          <span className="text-[15px] font-medium tracking-tight text-primary">Pilot</span>
           <span className="label-mono ml-1 hidden sm:inline">Guided setup</span>
         </a>
         {/* A full navigation (not client routing) so the unresolved-delegation beforeunload warning still applies. */}

@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function MarketsPage() {
   return (
-    <AppShell active="markets" eyebrow="XRP Ledger" title="Market Analytics" ownHeading>
+    <AppShell active="markets" title="Markets" ownHeading>
       <AnalyticsView />
     </AppShell>
   );

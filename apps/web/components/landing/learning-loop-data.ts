@@ -22,7 +22,7 @@ export type LoopNode = {
 
 /** Pilot sits in the middle: every hop between the other parts goes through it. */
 export const loopNodes: readonly LoopNode[] = [
-  { id: "pilot", label: "Workspace", role: "Runs the conversation", x: 50, y: 50 },
+  { id: "pilot", label: "Pilot", role: "Runs the conversation", x: 50, y: 50 },
   { id: "you", label: "You", role: "Ask, sign, review", x: 13, y: 50 },
   { id: "model", label: "AI model", role: "Your chosen model", x: 50, y: 12 },
   { id: "harbor", label: "Engine", role: "Builds, checks limits", x: 87, y: 50 },

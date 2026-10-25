@@ -9,11 +9,14 @@ export default defineConfig({
   titleTemplate: '%s · Pilot Docs',
   description:
     'Pilot is the agentic DeFi terminal for the XRP Ledger: one MCP server and REST API for every XRPL venue, plus a policy-bound trading harness that never holds your keys.',
-  iconUrl: '/icon.svg',
+  // iconUrl is not prefixed with basePath automatically.
+  iconUrl: '/docs/icon.svg',
   accentColor: '#1f56c7',
   colorScheme: 'light',
   // Static HTML output so the site deploys to Vercel, Netlify or any static host.
   renderStrategy: 'full-static',
+  // Served under the Pilot app at /docs (Next rewrites /docs/* to this deployment).
+  basePath: '/docs',
   banner: {
     content:
       'Pilot executes on XRPL Testnet and Devnet only. Mainnet is read-only. [See what is live →](/reference/status)',

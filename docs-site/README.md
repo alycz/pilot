@@ -21,8 +21,14 @@ npm run preview
 
 ## Deploy
 
-- **Vercel:** set the project root to `docs-site`, build command `npm run build`, output directory `dist/public`.
-- **Netlify / any static host:** publish `dist/public`.
+The site is built with `basePath: '/docs'` so it can live on the Pilot domain.
+
+1. **Deploy the docs** as their own Vercel project with root directory `docs-site`. `vercel.json` sets the build and output and maps `/docs/*` to the files, so the deployment also works on its own URL.
+2. **Mount them in Pilot:** set `PILOT_DOCS_ORIGIN=https://<docs-deployment>` on the Pilot project and redeploy. Pilot then proxies `/docs/*` to it, and the **Docs** link in the site header (next to Integrations) opens them. Without it, `/docs` shows a fallback page.
+
+Locally: `npm run dev` here, then start Pilot with `PILOT_DOCS_ORIGIN=http://127.0.0.1:5173`.
+
+On the Pilot domain, bare `/docs` redirects to `/docs/introduction/what-is-pilot`. The docs router needs `/docs/` with a trailing slash, which Next normalizes away, so the docs landing page is only shown on the docs deployment's own URL.
 
 ## Structure
 

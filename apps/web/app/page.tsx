@@ -7,7 +7,7 @@ import { SimulatedDevice } from "@/components/ledger/simulated-device";
 import trustSetTranscript from "@/components/ledger/transcripts/trust-set.json";
 
 export const metadata: Metadata = {
-  title: { absolute: "XRPL agent infrastructure and trading workspace" },
+  title: { absolute: "Agentic DeFi Terminal for XRPL" },
   description:
     "An execution service provides XRPL market data and controlled transactions to this AI trading workspace.",
 };

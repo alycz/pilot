@@ -7,6 +7,7 @@ import {
 	HOSTED_STATE_MAX_CIPHERTEXT_CHARS,
 	HOSTED_STATE_MAX_PERSONALIZATION_ROWS,
 	HOSTED_STATE_MAX_SESSION_BINDINGS,
+	HOSTED_STATE_PROOF_MAX_FUTURE_MS,
 	HostedStateError,
 	readHostedStateConfig,
 } from "../src/hosted-state/contracts";
@@ -147,13 +148,16 @@ describe("D1 hosted Pilot state", () => {
 		}))).rejects.toMatchObject({ status: 409 });
 		await expect(store.consumeWalletProof(PRINCIPAL, proofInput({
 			nonceDigest: "f".repeat(64),
-			expiresAtMs: NOW + 60_001,
+			expiresAtMs: NOW + HOSTED_STATE_PROOF_MAX_FUTURE_MS + 1,
 		}))).rejects.toMatchObject({ status: 409 });
 
-		await store.consumeWalletProof(PRINCIPAL, proofInput());
-		now -= 1;
 		await expect(store.consumeWalletProof(PRINCIPAL, proofInput({
 			nonceDigest: "0".repeat(64),
+			expiresAtMs: NOW + HOSTED_STATE_PROOF_MAX_FUTURE_MS,
+		}))).resolves.toEqual({ consumed: true });
+		now -= 1;
+		await expect(store.consumeWalletProof(PRINCIPAL, proofInput({
+			nonceDigest: "1".repeat(64),
 		}))).rejects.toMatchObject({ status: 503 });
 	});
 

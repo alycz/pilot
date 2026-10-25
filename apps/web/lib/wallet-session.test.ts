@@ -17,6 +17,7 @@ import {
   openWalletSession,
   sealWalletSession,
   verifyWalletChallenge,
+  verifyWalletChallengeForConsumption,
   WALLET_SESSION_COOKIE,
   WALLET_SUBMISSIONS_COOKIE,
 } from "./wallet-session";
@@ -239,6 +240,30 @@ describe("wallet-bound authorization", () => {
     const sealed = sealWalletSession(session, SECRET);
     expect(sealed).not.toContain(wallet.classicAddress);
     expect(openWalletSession(sealed, { now: 2_001, secret: SECRET })).toEqual(session);
+  });
+
+  it("anchors identical signed challenges to one stable session expiry", () => {
+    const wallet = Wallet.generate();
+    const issuedAt = 1_000;
+    const issued = issueWalletChallenge(wallet.classicAddress, "testnet", {
+      now: issuedAt,
+      nonce: "S".repeat(43),
+      secret: SECRET,
+    });
+    const txBlob = wallet.sign(issued.txJson as never).tx_blob;
+
+    const first = verifyWalletChallengeForConsumption(issued.cookie, txBlob, {
+      now: issuedAt + 1_000,
+      secret: SECRET,
+    });
+    const replay = verifyWalletChallengeForConsumption(issued.cookie, txBlob, {
+      now: issuedAt + 2 * 60_000,
+      secret: SECRET,
+    });
+
+    expect(replay).toEqual(first);
+    expect(first.challengeExpiresAt).toBe(issuedAt + 5 * 60_000);
+    expect(first.session.expiresAt).toBe(issuedAt + 60 * 60_000);
   });
 
   it("rejects challenge replay after expiry and any transaction mutation", () => {

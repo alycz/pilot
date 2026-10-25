@@ -8,7 +8,10 @@ export const HOSTED_STATE_MAX_REQUEST_BYTES = 1_410_000;
 export const HOSTED_STATE_MAX_ROWS = 4_096;
 export const HOSTED_STATE_MAX_PERSONALIZATION_ROWS = 4_096;
 export const HOSTED_STATE_MAX_SESSION_BINDINGS = 4_096;
-export const HOSTED_STATE_PROOF_MAX_FUTURE_MS = 60_000;
+// Pilot wallet-auth challenges are valid for five minutes. Keep the durable
+// replay marker for that same bounded window so a freshly issued proof is
+// accepted immediately rather than only during its final minute.
+export const HOSTED_STATE_PROOF_MAX_FUTURE_MS = 5 * 60_000;
 export const HOSTED_STATE_RESEARCH_WINDOW_MS = 3_600_000;
 export const HOSTED_STATE_RESEARCH_RETENTION_MS = 7_200_000;
 export const HOSTED_STATE_SESSION_MAX_FUTURE_MS = 3_900_000;

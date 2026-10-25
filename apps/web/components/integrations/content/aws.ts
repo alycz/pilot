@@ -18,7 +18,7 @@ export const awsIntegration = {
   zones: [
     {
       id: "pilot",
-      label: "Workspace",
+      label: "Pilot",
       detail:
         "The browser presents requests and receipts. AWS and Harbor credentials stay server-side, and Pilot never holds an XRPL owner key.",
     },

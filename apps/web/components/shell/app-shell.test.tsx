@@ -9,13 +9,13 @@ import {
 } from "./app-shell";
 
 describe("AppShell navigation", () => {
-  it("links to the interactive system explainer from desktop and mobile navigation", () => {
+  it("keeps the explainer on the landing page instead of the app navigation", () => {
     const markup = renderToStaticMarkup(
       <AppShell title="Pilot"><div>Content</div></AppShell>,
     );
 
-    expect(markup.match(/href="\/how-it-works"/g)).toHaveLength(2);
-    expect(markup.match(/>How it works</g)).toHaveLength(2);
+    expect(markup).not.toContain('href="/how-it-works"');
+    expect(markup).not.toContain(">How it works<");
   });
 
   it("links to autonomous strategy controls from desktop and mobile navigation", () => {

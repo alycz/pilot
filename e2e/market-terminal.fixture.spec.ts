@@ -19,7 +19,7 @@ test.beforeEach(async ({ page, lane }) => {
 });
 
 test("markets terminal retains search and panel state across mobile navigation and resize", async ({ page }, testInfo) => {
-  await page.goto("/markets");
+  await page.goto("/markets/analytics");
   await expect(page.getByRole("heading", { level: 1, name: "XRPL market workspace" })).toBeVisible();
   await page.getByRole("button", { name: "Illustrative demo" }).click();
 
@@ -71,7 +71,7 @@ test("markets terminal retains search and panel state across mobile navigation a
 });
 
 test("read-only modes cannot expose an approval entry", async ({ page }) => {
-  await page.goto("/markets");
+  await page.goto("/markets/analytics");
   const workspace = page.getByRole("main", { name: "XRPL market analytics workspace" });
 
   await page.getByRole("button", { name: "Illustrative demo" }).click();
@@ -92,7 +92,7 @@ test("markets publishes only the six sanitized terminal fields to the persistent
   });
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/markets");
+  await page.goto("/markets/analytics");
   await page.getByRole("button", { name: "Illustrative demo" }).click();
   const workspace = page.getByRole("main", { name: "XRPL market analytics workspace" });
   await expect(workspace.getByText("Illustrative demo fixture.")).toBeVisible();
@@ -138,7 +138,7 @@ test("live market loading state honors reduced motion before a bounded read fail
     });
   });
 
-  await page.goto("/markets");
+  await page.goto("/markets/analytics");
   const loading = page.getByLabel("Loading market analytics");
   try {
     await expect(loading).toBeVisible();

@@ -113,7 +113,6 @@ test("demo offer edits stay local and retain simulated provenance", async ({ pag
   await page.goto(pilotRoutes.portfolio);
   const offers = page.getByRole("region", { name: "Open offers table" });
   await expect(offers).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByRole("note", { name: "Demo mode" })).toContainText(/sample data/i);
 
   await offers.getByRole("button", { name: /Offer #42: Buy 60 RLUSD/ }).click();
   const dialog = page.getByRole("dialog");
@@ -148,7 +147,7 @@ test("signed-out approval is visibly simulated and never crosses an authority bo
   });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto(pilotRoutes.chat);
-  await expect(page.getByText(/This is a simulated demo/i)).toBeVisible();
+  await expect(page.getByText(/Hi, I’m Pilot\. Pick a prompt below/)).toBeVisible();
 
   await page.getByLabel("Message Pilot").fill("Swap 500 RLUSD for XRP, max 1% slippage");
   await page.getByRole("button", { name: "Send message" }).click();

@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ArrowRight,
   Bot,
   BookOpenText,
   CandlestickChart,
@@ -14,7 +13,7 @@ import {
   Map,
   Menu,
   MessageCircle,
-  Navigation2,
+  Navigation,
   Settings2,
   Sparkles,
   WalletCards,
@@ -71,25 +70,23 @@ function isSignedOut(identity: ShellIdentityLabels): boolean {
   return identity.walletStatus === "disconnected" || identity.walletStatus === "unavailable";
 }
 
-type NavKey = "chat" | "markets" | "backtests" | "strategy-research" | "map" | "portfolio" | "strategy" | "agreements" | "memory" | "how-it-works";
+type NavKey = "chat" | "markets" | "backtests" | "strategy-research" | "map" | "portfolio" | "strategy" | "agreements" | "memory";
 
 const navigation = [
   { key: "chat", label: "Chat", href: "/chat", icon: MessageCircle },
   { key: "markets", label: "Markets", href: "/markets", icon: CandlestickChart },
-  { key: "backtests", label: "Backtests", href: "/research/backtests", icon: CandlestickChart },
-  { key: "strategy-research", label: "Research lab", href: "/strategy-research", icon: BookOpenText },
   { key: "map", label: "Map", href: "/map", icon: Map },
   { key: "portfolio", label: "Portfolio", href: "/portfolio", icon: CircleDollarSign },
+  { key: "memory", label: "Memory", href: "/memory", icon: Sparkles },
+  { key: "backtests", label: "Backtests", href: "/research/backtests", icon: CandlestickChart },
+  { key: "strategy-research", label: "Research lab", href: "/strategy-research", icon: BookOpenText },
   { key: "strategy", label: "Strategy", href: "/strategy", icon: Bot },
   { key: "agreements", label: "Agreements", href: "/agreements", icon: Handshake },
-  { key: "memory", label: "Memory", href: "/memory", icon: Sparkles },
-  { key: "how-it-works", label: "How it works", href: "/how-it-works", icon: BookOpenText },
 ] as const;
 
 export function AppShell({
   active = "chat",
   title,
-  eyebrow,
   ownHeading = false,
   children,
 }: {
@@ -151,7 +148,6 @@ export function AppShell({
           <div className="mt-auto space-y-3 pt-5 lg:pb-14">
             {/* Page-specific footer context (e.g. chat's Live context) is portalled in here. */}
             <div id={SHELL_SIDEBAR_FOOTER_SLOT_ID} className="empty:hidden" />
-            {signedOut ? <SidebarDemoCard /> : null}
             {!signedIn ? null : (
               <>
                 <div className="xl:hidden"><NetworkBadge identity={identity} /></div>
@@ -197,7 +193,6 @@ export function AppShell({
               <DelegationStatus status={delegationStatus} />
             </div>
           )}
-          {signedOut ? <div className="mt-auto pt-6"><SidebarDemoCard /></div> : null}
         </div>
       </aside>
 
@@ -212,9 +207,9 @@ export function AppShell({
           >
             <Menu className="h-4 w-4" />
           </button>
-          <div className="flex min-w-0 items-baseline gap-3">
+          {/* Just the page name: the grey eyebrow is not shown in the approved design. */}
+          <div className="flex min-w-0 items-baseline">
             {ownHeading ? <p className="truncate text-lg font-medium tracking-[-0.01em]">{title}</p> : <h1 className="truncate text-lg font-medium tracking-[-0.01em]">{title}</h1>}
-            {eyebrow ? <p className="label-mono hidden truncate md:block">{eyebrow}</p> : null}
           </div>
           <div className="ml-auto flex min-w-0 items-center gap-5">
             {signedOut ? <DemoAccountCta /> : null}
@@ -234,8 +229,8 @@ export function AppShell({
 
 function Brand() {
   return (
-    <Link href="/" className="flex items-center gap-2.5 focus-visible:outline-offset-4 pointer-coarse:min-h-11" aria-label="Pilot home">
-      <Navigation2 className="h-5 w-5 rotate-45 text-foreground" strokeWidth={1.75} aria-hidden="true" />
+    <Link href="/" className="flex items-center gap-1.5 text-primary focus-visible:outline-offset-4 pointer-coarse:min-h-11" aria-label="Pilot home">
+      <Navigation className="h-5 w-5 shrink-0" strokeWidth={2.25} aria-hidden="true" />
       <span className="text-lg font-medium tracking-tight">Pilot</span>
     </Link>
   );
@@ -284,23 +279,6 @@ function DemoAccountCta() {
   );
 }
 
-/** Signed-out state stays explicit on every app page. */
-function SidebarDemoCard() {
-  return (
-    <div role="note" aria-label="Demo mode" className="bracket bracket-accent rounded-xl border border-primary/30 bg-[color-mix(in_srgb,var(--primary)_5%,var(--sidebar))] p-3">
-      <p className="label-mono flex items-center gap-2 text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))]">
-        <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-        Demo mode
-      </p>
-      <p className="mt-2 text-[12px] leading-[1.125rem] text-muted-foreground">
-        Chat, Portfolio and Memory run on sample data until you connect a wallet.
-      </p>
-      <Link href="/onboarding" className="link-dashed mt-3 inline-flex min-h-11 items-center gap-1.5 text-[13px] font-medium text-foreground">
-        Get started <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-      </Link>
-    </div>
-  );
-}
 
 function NetworkBadge({ identity }: { identity: ShellIdentityLabels }) {
   return (

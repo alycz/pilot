@@ -18,7 +18,7 @@ export const quickNodeExplainer = {
   zones: [
     {
       id: "pilot",
-      label: "Workspace",
+      label: "Pilot",
       detail: "Public product UI. It sends typed requests and renders bounded trust metadata, never QuickNode secrets or raw provider payloads.",
     },
     {

@@ -11,7 +11,7 @@ import {
   type LedgerDeviceState,
   type PilotWallet,
 } from "@pilot/wallet";
-import { ArrowLeftRight, ArrowUp, BarChart3, Bot, FlaskConical, Info, Landmark, type LucideIcon, Navigation2, RotateCcw, Scale, ShieldAlert, Square, UserRound, Wallet } from "lucide-react";
+import { ArrowLeftRight, ArrowUp, BarChart3, Bot, FlaskConical, Info, Landmark, type LucideIcon, Navigation2, Scale, ShieldAlert, Square, UserRound, Wallet } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -56,7 +56,6 @@ import {
   type DemoBlock,
   type DemoScenarioId,
 } from "./demo-script";
-import { DemoBanner } from "./chat-notice";
 import {
   configuredWalletMetadata,
   configuredWalletOptions,
@@ -155,7 +154,7 @@ const demoSuggestionIcons: Record<DemoScenarioId, { icon: LucideIcon; tone: stri
 };
 
 const demoOpeningResponse =
-  "This is a simulated demo. Pick a prompt below or type your own and I’ll walk through the same plan → simulate → policy → approve flow Pilot runs on Testnet. Nothing here touches a wallet or the ledger.";
+  "Hi, I’m Pilot. Pick a prompt below or type your own, and I’ll show you how I plan a trade, check it against your limits and bring it to you for approval.";
 
 const openingTurn: ChatTurn = {
   id: "opening",
@@ -1176,28 +1175,6 @@ function ChatViewInner() {
   return (
     <div className="pilot-chat-frame min-h-[calc(100dvh-3.5rem)] min-w-0 lg:min-h-[calc(100dvh-4rem)]">
       <section className="pilot-chat-surface flex min-w-0 flex-col">
-        <div className="pilot-chat-toolbar flex min-h-11 min-w-0 items-center justify-between gap-3 border-b border-border px-4 py-1.5 sm:px-6 lg:px-8">
-          {demoMode && sessionUi.notice ? (
-            <DemoBanner reason={sessionUi.notice} />
-          ) : (
-            <>
-              <p className={`inline-flex items-center gap-2 rounded-md border px-2 py-1 text-xs ${walletReady ? "border-executed/30 bg-executed/10 text-executed" : "border-border text-muted-foreground"}`}>
-                <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${walletReady ? "bg-executed" : "bg-muted-foreground"}`} />
-                {walletReady ? "Harbor is ready" : "Preview · live chat locked"}
-              </p>
-              <p className="label-mono ml-auto hidden truncate lg:block">Simulate · check policy · owner signs</p>
-            </>
-          )}
-          <button
-            type="button"
-            onClick={() => setCardStatesOpen(true)}
-            aria-haspopup="dialog"
-            className="bracket bracket-light inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-white/[0.03] px-2.5 text-xs text-muted-foreground transition hover:bg-white/[0.06] hover:text-foreground pointer-coarse:h-11 pointer-coarse:min-w-11"
-          >
-            <Info className="h-3.5 w-3.5" aria-hidden="true" />
-            <span className="sr-only sm:not-sr-only">Card states</span>
-          </button>
-        </div>
         <div ref={conversationRef} className={`pilot-chat-conversation mx-auto w-full min-w-0 max-w-4xl flex-1 px-4 pt-8 sm:px-6 lg:px-8 ${demoMode ? "pb-56" : "pb-60"}`}>
           <h2 className="sr-only">Conversation</h2>
           <CopilotChatContext
@@ -1210,10 +1187,10 @@ function ChatViewInner() {
             {turns.map((turn) => (
               <article key={turn.id} className="min-w-0 space-y-5">
                 <MessageBubble role="user">{turn.prompt}</MessageBubble>
-                {turn.requestMode ? <div aria-label="Request scope" className="ml-auto max-w-2xl rounded-xl border border-border bg-surface px-3 py-2 text-xs leading-5 text-muted-foreground">
-                  <span className="font-medium text-foreground">{turn.requestMode.selection === "auto" ? `Let agent choose · ${turn.requestMode.label}` : turn.requestMode.label}</span>
-                  <span className="block">{turn.requestMode.review}</span>
-                </div> : null}
+                {turn.requestMode ? <p aria-label="Request scope" title={turn.requestMode.review} className="-mt-3 text-right text-xs text-muted-foreground">
+                  {turn.requestMode.selection === "auto" ? `Let agent choose · ${turn.requestMode.label}` : turn.requestMode.label}
+                  <span className="sr-only">. {turn.requestMode.review}</span>
+                </p> : null}
                 <div className="flex min-w-0 items-start gap-3">
                   <span className="grid h-9 w-9 shrink-0 place-items-center border border-border bg-card text-foreground rounded-md" role="img" aria-label="Pilot"><Navigation2 className="h-[18px] w-[18px] rotate-45" strokeWidth={1.75} aria-hidden="true" /></span>
                   <div className="min-w-0 flex-1">
@@ -1384,17 +1361,16 @@ function ChatViewInner() {
                   <Info className="h-3.5 w-3.5" aria-hidden="true" />
                   <span className="max-sm:sr-only">Card states</span>
                 </button>
+                {walletReady ? (
+                  <p className="inline-flex min-w-0 items-center gap-1.5 truncate text-xs text-muted-foreground">
+                    <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-executed" />
+                    <span>Harbor is ready</span>
+                    <span aria-hidden="true">·</span>
+                    <span className="truncate font-mono">{sessionUi.label}</span>
+                  </p>
+                ) : null}
                 <div className="ml-auto flex shrink-0 items-center gap-1.5">
                   <RequestModeControl value={requestMode} resolution={draftRequestMode} disabled={running} onChange={setRequestMode} />
-                  <button
-                    type="button"
-                    onClick={() => send(lastPrompt, lastRequestMode)}
-                    disabled={running || (!walletReady && !demoMode)}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition hover:bg-foreground/[0.04] hover:text-foreground pointer-coarse:h-11 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
-                  >
-                    <RotateCcw className="h-3 w-3" aria-hidden="true" />
-                    <span className="max-sm:sr-only">Repeat</span>
-                  </button>
                   {running ? (
                     <button type="button" onClick={() => interrupt(true)} className="bracket bracket-light grid h-8 w-8 shrink-0 place-items-center border border-border bg-white/[0.04] text-foreground hover:bg-white/[0.08] pointer-coarse:h-11 pointer-coarse:w-11 rounded-md" aria-label="Stop streaming"><Square className="h-3 w-3 fill-current" /></button>
                   ) : (
@@ -1403,22 +1379,13 @@ function ChatViewInner() {
                 </div>
               </div>
             </form>
-            {demoMode ? null : <p className="label-mono mt-3 text-center">Pilot never holds your owner key.</p>}
           </div>
         </div>
       </section>
 
-      {sidebarSlot ? createPortal(
-        <section aria-label="Session context" className="space-y-3">
-          <div className="overflow-hidden rounded-xl border border-border">
-            <p className="label-mono border-b border-border px-3 py-2.5">Live context</p>
-            <dl className="divide-y divide-border text-xs">
-              <ContextRow label="Network" value={publicConfig === undefined ? "Checking…" : publicConfig?.network ?? "Unavailable"} status={Boolean(publicConfig)} />
-              <ContextRow label="Wallet" value={demoMode ? "Not connected" : sessionUi.label} status={walletReady} />
-              <ContextRow label="Daily budget" value={demoMode ? "Policy" : "Live policy"} />
-            </dl>
-          </div>
-          {!demoMode ? <StrategySidebarBlock onStart={startStrategy} /> : null}
+      {sidebarSlot && !demoMode ? createPortal(
+        <section aria-label="Session context">
+          <StrategySidebarBlock onStart={startStrategy} />
         </section>,
         sidebarSlot,
       ) : null}
@@ -1479,13 +1446,9 @@ function MessageBubble({ role, children }: { role: "user"; children: string }) {
   return (
     <div className="ml-auto flex min-w-0 max-w-[88%] items-start justify-end gap-2 sm:max-w-[78%]">
       <p className="min-w-0 whitespace-pre-wrap border border-border bg-white/[0.05] px-4 py-3 text-sm leading-6 [overflow-wrap:anywhere] rounded-xl">{children}</p>
-      <span className="grid h-9 w-9 shrink-0 place-items-center border border-border text-muted-foreground rounded-md" role="img" aria-label={role === "user" ? "You" : role}><UserRound className="h-[18px] w-[18px]" /></span>
+      <span className="grid h-9 w-9 shrink-0 place-items-center border border-border bg-card text-muted-foreground rounded-md" role="img" aria-label={role === "user" ? "You" : role}><UserRound className="h-[18px] w-[18px]" /></span>
     </div>
   );
-}
-
-function ContextRow({ label, value, status }: { label: string; value: string; status?: boolean }) {
-  return <div className="flex items-center justify-between gap-3 px-3 py-2"><dt className="label-mono text-[10px]">{label}</dt><dd className="flex min-w-0 items-center gap-1.5 truncate text-xs text-foreground">{status ? <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-executed" /> : null}<span className="truncate">{value}</span></dd></div>;
 }
 
 function LedgerBlindApprovalLegend({ request }: { request: ApprovalRequest }) {

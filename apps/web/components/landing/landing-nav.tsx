@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Menu, Navigation2, X } from "lucide-react";
+import { ArrowRight, Menu, Navigation, X } from "lucide-react";
 import Link from "next/link";
 import React, { useEffect, useRef, useState } from "react";
 
@@ -25,9 +25,9 @@ const noSections: readonly string[] = [];
 
 export function LandingBrand() {
   return (
-    <Link href="/" className="flex h-9 shrink-0 items-center gap-2.5 leading-none focus-visible:outline-offset-4 pointer-coarse:h-11" aria-label="Workspace home">
-      <Navigation2 className="h-4 w-4 shrink-0 rotate-45 text-foreground" strokeWidth={1.75} aria-hidden="true" />
-      <span className="block text-[15px] font-medium leading-none tracking-tight">Workspace</span>
+    <Link href="/" className="flex h-9 shrink-0 items-center gap-1.5 leading-none text-primary focus-visible:outline-offset-4 pointer-coarse:h-11" aria-label="Pilot home">
+      <Navigation className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden="true" />
+      <span className="block text-[15px] font-medium leading-none tracking-tight">Pilot</span>
     </Link>
   );
 }
@@ -38,7 +38,7 @@ export function LaunchButton({ className = "" }: { className?: string }) {
       href="/chat"
       className={`bracket bracket-light inline-flex h-9 items-center gap-2 border border-border-strong bg-white/[0.04] px-3.5 text-[13px] pointer-coarse:h-11 text-foreground transition hover:bg-white/[0.08] rounded-md ${className}`}
     >
-      Launch workspace
+      Launch Pilot
       <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
     </Link>
   );

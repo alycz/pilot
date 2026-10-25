@@ -1,13 +1,9 @@
-import type { Metadata } from "next";
+import { permanentRedirect } from "next/navigation";
 
-import { ArchitectureExplainer } from "@/components/harness-explainer";
-
-export const metadata: Metadata = {
-  title: "How the workspace works",
-  description:
-    "An interactive tour of workspace personalization, policy enforcement, XRPL execution, and reviewed learning.",
-};
-
+/**
+ * The "how it works" explainer lives on the landing page as the animated
+ * learning loop. Old links and bookmarks land there.
+ */
 export default function HowItWorksPage() {
-  return <ArchitectureExplainer />;
+  permanentRedirect("/#learning");
 }

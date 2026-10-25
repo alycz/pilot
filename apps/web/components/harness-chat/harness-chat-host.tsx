@@ -233,7 +233,6 @@ export function HarnessChatHost({ children }: { children: ReactNode }) {
         {!presentation.fullPage ? (
           <header className="harness-chat-header">
             <div>
-              <p className="label-mono">Same conversation · every page</p>
               <h2>Workspace chat</h2>
             </div>
             <button

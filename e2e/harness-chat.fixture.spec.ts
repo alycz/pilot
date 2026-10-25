@@ -323,8 +323,7 @@ test("signed-out reduced-motion harness is honest local help with no chat mutati
 
   await page.goto("/portfolio");
   const { panel } = await openHarness(page);
-  await expect(panel).toContainText(/simulated demo/i);
-  await expect(panel).toContainText(/nothing here touches a wallet or the ledger/i);
+  await expect(panel).toContainText(/Hi, I’m Pilot\. Pick a prompt below/);
   const composer = panel.getByLabel("Message Pilot");
   await composer.fill("What can I safely explore here?");
   await panel.getByRole("button", { name: "Send message" }).click();

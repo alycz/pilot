@@ -7,7 +7,6 @@ import { loadBrowserBacktestEvidence } from "../backtests/chat/browser-evidence"
 import { createEvidenceGenerationGuard } from "../backtests/chat/evidence-generation";
 import { BACKTEST_SESSION_INVALIDATED_EVENT } from "../backtests/integration/client/session-lifecycle-guard";
 import { ActionPreparationCard } from "../cards";
-import { rememberedStateForChat, WhatPilotRemembers } from "../copilot-memory";
 import type { PublicPilotConfig, WalletSessionStatus } from "../../lib/harbor-browser";
 
 import { initialCopilotHandoff, type InitialCopilotHandoff } from "./action-handoff";
@@ -15,7 +14,6 @@ import { initialCopilotHandoff, type InitialCopilotHandoff } from "./action-hand
 export function CopilotChatContext({
   pathname,
   publicConfig,
-  walletSession,
   onUseDraft,
 }: {
   pathname: string;
@@ -79,11 +77,9 @@ export function CopilotChatContext({
   }, [pathname]);
 
   if (pathname !== "/chat") return null;
-  const rememberedState = rememberedStateForChat(publicConfig, walletSession);
 
   return (
     <div className="mb-8 space-y-4" aria-label="Reviewable chat context">
-      <WhatPilotRemembers state={rememberedState} />
       {backtestEvidence ? <BacktestEvidenceCard state={backtestEvidence} /> : null}
       {handoff.context ? (
         <ActionPreparationCard

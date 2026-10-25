@@ -1,0 +1,27 @@
+# Wallets [Sign-only, always]
+
+Pilot connects to XRPL wallets through `xrpl-connect` and a single sign-only facade. No wallet ever submits on Pilot's behalf: Pilot relays the exact blob you signed.
+
+| Wallet | Status |
+| --- | --- |
+| **GemWallet** | Default |
+| **Crossmark** | Supported |
+| **Ledger** | Supported; see [Ledger](/integrations/ledger) |
+| **Xaman** | Shown as unavailable: it needs an app API key, and the current adapter cannot sign Pilot's non-broadcast sign-in proof safely |
+| Test signer | Testnet/Devnet only, browser-local key, behind `NEXT_PUBLIC_DEV_SIGNER=1`; hosted mode refuses it |
+
+## Sign-in proof
+
+Connecting signs a non-broadcast challenge (`AccountSet`, `Sequence 0`, `Fee "0"`, `LastLedgerSequence 0`, memo `pilot-wallet-auth-v1` plus a nonce). The server verifies the signature and derived address, then issues a wallet session of up to 60 minutes. It is never submitted.
+
+## What a wallet signs in Pilot
+
+- The sign-in proof
+- Trust lines (`TrustSet`)
+- The delegation grant and revoke (`DelegateSet`)
+- Payments and any over-limit approval
+- Strategy authorizations (wallet action proofs)
+
+## Approvals expire
+
+An approval is for one exact rendered transaction. Refreshing produces a new build that must be reviewed again; Pilot never auto-signs or replays an old attempt.

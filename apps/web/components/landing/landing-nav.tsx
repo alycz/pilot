@@ -7,7 +7,9 @@ import React, { useEffect, useRef, useState } from "react";
 import { integrationLinks } from "@/components/integrations/integration-links";
 import { IntegrationsMenu } from "@/components/integrations/integrations-menu";
 import type { IntegrationSlug } from "@/components/integrations/types";
+import { DOCS_PATH } from "@/lib/docs-origin";
 
+import { DocsLink } from "./docs-link";
 import { useActiveSection } from "./landing-motion";
 
 const anchors = [
@@ -101,6 +103,7 @@ export function LandingNav({ current }: { current?: IntegrationSlug } = {}) {
           </ul>
         </nav>
         <div className="ml-auto flex items-center gap-4">
+          <DocsLink className="hidden lg:inline-flex" />
           <IntegrationsMenu current={current} className="hidden lg:block" />
           <LaunchButton />
           <div ref={mobileRootRef} className="relative lg:hidden">
@@ -121,6 +124,18 @@ export function LandingNav({ current }: { current?: IntegrationSlug } = {}) {
                 aria-label="Sections and integrations (mobile)"
                 className="absolute right-0 top-[calc(100%+0.5rem)] max-h-[min(75vh,36rem)] w-72 overflow-y-auto border border-border-strong bg-popover shadow-xl shadow-black/[0.08] rounded-xl"
               >
+                <ul className="border-b border-border py-1">
+                  <li>
+                    <a
+                      href={DOCS_PATH}
+                      onClick={() => setMobileOpen(false)}
+                      className="block min-h-11 px-4 py-2.5 hover:bg-white/[0.04] rounded-md"
+                    >
+                      <span className="block text-sm text-foreground">Docs</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">MCP, API, harness and integrations</span>
+                    </a>
+                  </li>
+                </ul>
                 <p className="label-mono px-4 pb-2 pt-4">Integrations</p>
                 <ul className="border-b border-border">
                   {integrationLinks.map((item) => (

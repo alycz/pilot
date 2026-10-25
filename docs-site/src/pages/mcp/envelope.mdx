@@ -1,0 +1,73 @@
+# Response envelope & errors
+
+Every operation, over MCP or REST, returns the same envelope.
+
+## Success
+
+```ts
+{
+  ok: true
+  data: unknown              // the operation's result
+  asOf: string               // ISO timestamp
+  asOfBasis: string          // "server-time" for normal operations
+  caveat?: Caveat[]          // see below
+  trust?: {
+    rpc?: {
+      route: "quicknode" | "quicknode-mock" | "fallback"
+      methods_quicknode: number
+      methods_fallback: number
+    }
+    screen?: {
+      provider: "aws-bedrock-guardrails" | "mock" | "off" | "unavailable"
+      fields_checked: number
+      fields_blocked: number
+      max_score?: number
+    }
+  }
+}
+```
+
+### Caveats
+
+| Caveat | Meaning |
+| --- | --- |
+| `no-rows` | The query succeeded and returned nothing. |
+| `unverified-match` | Indicative (quotes, comparisons). Not a fill guarantee. |
+| `devnet-only` | Only meaningful on Devnet (vaults, lending). |
+| `off-ledger` | Comes from an off-ledger provider (indexers, Hyperliquid). |
+| `amendment-pending` | Depends on an XRPL amendment not yet enabled everywhere. |
+| `screened-redacted` | Untrusted text was redacted by the guardrail screen. |
+
+### Trust metadata
+
+`trust.rpc` says which XRPL transport served the call. `trust.screen` says whether untrusted text (memos, token names, `Domain` fields) was screened. The Pilot app turns these into the chips on each card's trust receipt. There are no silent fallbacks: if a fallback node was used, the envelope says so.
+
+## Failure
+
+```ts
+{
+  ok: false
+  error: {
+    service: string          // e.g. "xrpl", "auth", "policy", "docs"
+    kind: "error" | "soft-empty"
+    message: string
+    code?: string
+    hint?: string
+  }
+}
+```
+
+`soft-empty` is used for "not found" results (`actNotFound`, `entryNotFound`, `objectNotFound`, `txnNotFound`), so you can treat them as empty rather than broken.
+
+## Error codes
+
+| Group | Codes |
+| --- | --- |
+| Generic | `OPERATION_FAILED`, `UNKNOWN_OPERATION`, `OP_CALL_LIMIT`, `SENSITIVE_INPUT`, `INVALID_ARGUMENTS`, `OUTPUT_SERIALIZATION_FAILED` |
+| XRPL | `MAINNET_EXECUTION_DISABLED`, `XRPL_ERROR`, `XRPL_INVALID_COMMAND`, `XRPL_INVALID_ENDPOINT`, `XRPL_MALFORMED_RESPONSE`, `XRPL_PROTOCOL_ERROR`, `XRPL_RESPONSE_TOO_LARGE`, `XRPL_TIMEOUT`, `XRPL_TRANSPORT_ERROR`, `XRPL_UNSAFE_COMMAND`, `actNotFound`, `entryNotFound`, `noCurrent`, `noNetwork`, `objectNotFound`, `srcCurMalformed`, `tooBusy`, `txnNotFound` |
+| Docs search | `DOCS_INVALID_QUERY`, `DOCS_INVALID_RESPONSE`, `DOCS_TRANSPORT_ERROR`, `DOCS_UPSTREAM_ERROR` |
+| Execution lifetime | `EXECUTION_CONTRACT_UNSUPPORTED`, `EXECUTION_CONTRACT_MISMATCH`, `EXECUTION_SNAPSHOT_STALE`, `EXECUTION_SNAPSHOT_INVALID`, `TRANSACTION_WINDOW_TOO_SHORT`, `QUOTE_EXPIRED`, `FEE_LOAD_UNSAFE`, `ACCOUNT_SEQUENCE_CHANGED`, `BALANCE_INVARIANT_CHANGED` |
+| Approvals | `APPROVAL_EXPIRED`, `APPROVAL_PREFLIGHT_REQUIRED`, `APPROVAL_ALREADY_PREFLIGHTED`, `APPROVAL_INVALIDATED`, `APPROVAL_TRANSACTION_MISMATCH`, `APPROVAL_RECOVERY_NOT_READY`, `APPROVAL_RECOVERY_STATE_CHANGED`, `APPROVAL_RECOVERY_INCOMPLETE`, `APPROVAL_RECOVERY_CONFLICT` |
+| Relay | `RELAY_ALREADY_ATTEMPTED`, `SUBMISSION_PENDING` |
+| Payments | `PAYER_FROZEN`, plus x402 error codes passed through |
+| Local profiles | `LOCAL_EXTERNAL_MUTATION_DISABLED`, `LOCAL_X402_OPERATION_DISABLED`, `LOCAL_TRADING_OPERATION_DISABLED`, `LOCAL_TRADING_NETWORK_DISABLED`, `LOCAL_TRADING_ONBOARDING_OPERATION_DISABLED`, `LOCAL_TRADING_ONBOARDING_NETWORK_DISABLED` |

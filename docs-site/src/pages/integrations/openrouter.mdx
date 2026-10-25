@@ -1,0 +1,31 @@
+# OpenRouter [Bring your own model]
+
+Pilot does not hard-wire a model vendor. Users sign in with OpenRouter and pick any allowlisted tool-calling model.
+
+## OAuth with PKCE
+
+1. `GET /api/auth/openrouter/start` redirects to `https://openrouter.ai/auth` with an S256 `code_challenge` and a single-use state cookie.
+2. The callback exchanges the code at `https://openrouter.ai/api/v1/auth/keys` and stores a short-lived **encrypted pending credential**.
+3. A fresh same-origin request binds it to your exact wallet session and promotes it to a session lasting at most **60 minutes**.
+
+Because the wallet cookie is `SameSite=Strict`, the cross-site callback cannot use it directly; step 3 closes that gap. *Disconnect OpenRouter locally* clears Pilot's cookies only. Revoke the key itself in your OpenRouter settings.
+
+## Model allowlist
+
+```bash
+MODEL_DEFAULT=nvidia/nemotron-3.5-super-vl:free
+OPENROUTER_ALLOWED_MODELS=<comma list>
+```
+
+The browser cannot choose a provider, base URL or unlisted model.
+
+## Free demo (default off)
+
+A shared demo key can serve logged-out visitors, but only when every safeguard validates:
+
+- `DEMO_MODEL_ENABLED=1` and `DEMO_MODEL_COST_POLICY=free-only`.
+- Exact `:free` model IDs; zero price and tool support re-checked against OpenRouter's catalog on **every** request.
+- Finite global and per-wallet request, token, rate and concurrency limits, reserved atomically **before** the provider call and kept even if usage is missing or the request crashes.
+- Operator attestations that the key has a zero spend limit and no BYOK or paid add-ons.
+
+There is no automatic paid-model fallback.

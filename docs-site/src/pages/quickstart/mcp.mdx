@@ -1,0 +1,110 @@
+# Connect an AI client [Add Pilot as an MCP server]
+
+Pilot's MCP server speaks **Streamable HTTP** at `/mcp` and authenticates with a bearer token.
+
+## Before you start
+
+You need two values:
+
+```bash
+export PILOT_MCP_URL='https://<your-pilot-engine>/mcp'   # or http://127.0.0.1:8791/mcp locally
+export PILOT_API_KEY='<principal>:<token>'
+```
+
+- **URL**: the engine's deployment. No public hosted URL is published yet; use your own deployment or [run it locally](/quickstart/local), which serves a read-only profile at `http://127.0.0.1:8791` with no key required.
+- **Key**: a `principal:token` pair that the operator added to the engine's `HARBOR_API_KEYS` secret. The principal scopes all your state (links, policies, builds, approvals). See [Authentication](/mcp/authentication).
+
+:::warning
+Treat the key like a password. Keep it in an environment variable, not in a project file you commit.
+:::
+
+## Pick your client
+
+:::code-group
+
+```bash [Claude Code]
+claude mcp add --scope user --transport http pilot "$PILOT_MCP_URL" \
+  --header "Authorization: Bearer $PILOT_API_KEY"
+
+# confirm
+claude mcp get pilot
+```
+
+```toml [Codex (config.toml)]
+[mcp_servers.pilot]
+url = "https://<your-pilot-engine>/mcp"
+# names the env var; the token is not written into the file
+bearer_token_env_var = "PILOT_API_KEY"
+```
+
+```json [Cursor (.cursor/mcp.json)]
+{
+  "mcpServers": {
+    "pilot": {
+      "url": "https://<your-pilot-engine>/mcp",
+      "headers": { "Authorization": "Bearer ${env:PILOT_API_KEY}" }
+    }
+  }
+}
+```
+
+```json [Claude Desktop (claude_desktop_config.json)]
+{
+  "mcpServers": {
+    "pilot": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://<your-pilot-engine>/mcp",
+               "--header", "Authorization:${PILOT_AUTH}"],
+      "env": { "PILOT_AUTH": "Bearer <principal>:<token>" }
+    }
+  }
+}
+```
+
+:::
+
+:::note
+The Claude Code and Codex snippets follow `services/harbor/README.md` (which names the server `harbor` and the variable `HARBOR_API_KEY`; any name works). The Cursor and Claude Desktop snippets follow those clients' standard remote-server formats (Claude Desktop through the `mcp-remote` bridge) and have not been run against a Pilot deployment yet.
+:::
+
+## Try it
+
+Ask your client something that needs live ledger data:
+
+> Use Pilot to find the right operation for reading an account's trust lines, then read them for `r...` on testnet.
+
+Behind the scenes the client should:
+
+::::steps
+
+### Call `search`
+
+```json
+{ "query": "validated account balances and trust lines" }
+```
+
+It returns up to 8 matches, each with `id`, `kind`, `family`, `summary`, `signature` and `example`.
+
+### Call `execute`
+
+```js
+const [info, lines] = await Promise.all([
+  harbor.ledger.account.info({ account: "r...", network: "testnet" }),
+  harbor.ledger.account.lines({ account: "r...", network: "testnet" })
+]);
+return { info, lines };
+```
+
+### Read the envelope
+
+Each operation returns `{ ok: true, data, asOf, ... }` or `{ ok: false, error }`. Check `ok`; operation failures do not throw.
+
+::::
+
+## How the server tells models to behave
+
+The server sends these instructions to every client:
+
+> Use search to discover Harbor operations and their exact arguments. Use execute to call one or more operations through the harbor namespace. For transaction flows, build and simulate first, then call tx.execute. If tx.execute returns needs_approval, return the approval to the user and stop. If policy blocks an action, do not retry it.
+
+Next: [MCP tools in depth](/mcp/tools).

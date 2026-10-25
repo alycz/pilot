@@ -1,0 +1,39 @@
+# Glossary
+
+**AP4M** — Mastercard Agent Pay for Machines: authorize once, transact many times. See [Mastercard](/integrations/mastercard).
+
+**Approval** — A prepared, unsigned transaction waiting for the owner's signature. Expires after 10 minutes (v1) or 90 seconds (v2).
+
+**Budget account** — The XRPL account you link for agent trading. Keep main holdings elsewhere.
+
+**Build** — An autofilled, preflighted, simulated unsigned transaction stored under a `build_id`.
+
+**Card** — The chat representation of one intent, driven by the [10-state lifecycle](/harness/lifecycle).
+
+**Code mode** — Exposing a large API to a model through `search` plus a sandboxed `execute` script, instead of one tool per operation.
+
+**Delegate** — A Pilot-held XRPL account that your budget account authorized with `DelegateSet` to send specific transaction types.
+
+**`DelegateSet`** — The XRPL transaction (XLS-75 Permission Delegation) that grants or, with empty permissions, revokes delegation.
+
+**Envelope** — The `{ ok, data | error, asOf, caveat, trust }` shape every operation returns.
+
+**Harbor** — The internal name of Pilot's execution engine service (`services/harbor`), visible in code as the `harbor.*` namespace.
+
+**Intent** — A strict, typed description of one action (swap, limit, deposit, pay...). The only thing the model can propose.
+
+**Mandate** — An owner-signed, bounded authorization for recurring or agentic payments (AP4M) or for a strategy.
+
+**Policy** — Your limits. Evaluated as 11 ordered rules; verdict `execute`, `needs_approval` or `block`.
+
+**Principal** — The identity in a `principal:token` API key. All engine state is scoped to it.
+
+**RLUSD** — Ripple's USD stablecoin. The default allowlisted issuer.
+
+**SourceTag 2610240** — The tag on every transaction Pilot builds, so agent volume is attributable.
+
+**Trust receipt** — The provenance chips on a card: model, screening, signer, RPC, confirmation, watch.
+
+**Vault** — Pilot's Obsidian-compatible Markdown memory.
+
+**x402** — HTTP 402-based pay-per-call payments, settled on XRPL.

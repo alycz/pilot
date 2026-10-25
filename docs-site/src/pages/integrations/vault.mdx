@@ -1,0 +1,34 @@
+# Markdown vault [Obsidian-compatible memory]
+
+Pilot's memory is plain Markdown with wikilinks, so you can open it in Obsidian, diff it in Git or edit it by hand. See [Memory & personalization](/harness/memory) for what gets written.
+
+## Backends
+
+| Backend | Settings | Notes |
+| --- | --- | --- |
+| Filesystem | `VAULT_BACKEND=fs`, `VAULT_PATH=./vault` | Default. |
+| GitHub | `VAULT_BACKEND=github`, `VAULT_GITHUB_TOKEN`, `VAULT_REPO=owner/repo` | Writes to `main` through the Git Data API with non-force ref updates. |
+
+Structured preferences and workflow lessons are stored separately (`PILOT_PERSONALIZATION_BACKEND=local|harbor-d1`), outside the vault and never in the GitHub backend.
+
+## Template
+
+```text
+vault-template/Pilot/
+├── README.md
+├── Profile.md
+├── Policy.md          ← same values as the default policy
+├── Journal/  Trades/  Venues/  Tokens/  Reflections/
+```
+
+## API
+
+`/api/vault/{list, read, write, search, snapshot, sync, validation, lessons, preferences/accept, preferences/structured, ap4m/mandate}`. Saving `Policy.md` syncs to the engine's `policy.set`.
+
+## In the app
+
+The Memory page shows the note graph (*Obsidian-compatible wikilinks*), a note library, a policy editor, structured preferences and workflow lessons, each with accept, correct, reject and forget controls.
+
+:::warning
+Never commit a populated vault. It contains your trade history.
+:::

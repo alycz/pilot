@@ -1,0 +1,90 @@
+# MCP tools: search & execute
+
+The server identifies as `{ name: "harbor", version: "0.1.0" }` and exposes two tools.
+
+## `search`
+
+> Search Harbor operations, venues, and playbooks.
+
+**Input**
+
+```ts
+{ query: string }   // min length 1, no other keys
+```
+
+**Output:** a JSON text block with up to **8** results:
+
+```ts
+{
+  id: string
+  kind: "op" | "venue" | "merchant" | "playbook"
+  name: string
+  family: string
+  summary: string
+  tags: string[]
+  signature: string   // the operation's argument shape
+  example: string     // a ready-to-run harbor.* call
+  score: number
+}
+```
+
+**Ranking.** Full-text search (prefix and fuzzy matching) over name, family, tags and summary, boosted in that order. An **exact operation name** gets a large boost, then an exact family. So `{"query":"ledger.fee"}` always returns `ledger.fee` first.
+
+**What is indexed:** every operation, the [23 venues](/mcp/venues), the AP4M demo merchants (`risk-oracle`, `venue-yield-desk`), and six local playbooks: `handle-approval`, `link-account`, `provide-amm-liquidity`, `revoke`, `swap-safely`, `vault-deposit`. Read a playbook with `harbor.skill.read({ id })`.
+
+## `execute`
+
+> Execute a sandboxed script against Harbor's typed operation namespaces.
+
+**Input**
+
+```ts
+{ code: string }   // the body of an async function; use `return`
+```
+
+**The `harbor` namespace** mirrors operation names: `ledger.account.info` is `harbor.ledger.account.info(args)`. Every call resolves to the [envelope](/mcp/envelope). Calls do not throw on operation failure, so check `.ok`.
+
+```js
+const [fee, reserves] = await Promise.all([
+  harbor.ledger.fee({ network: "testnet" }),
+  harbor.server.reserves({ network: "testnet" })
+]);
+if (!fee.ok) return fee;
+return { fee: fee.data, reserves: reserves.ok ? reserves.data : null };
+```
+
+### Sandbox limits
+
+| Limit | Value |
+| --- | --- |
+| Wall-clock deadline | 10 seconds |
+| Operation calls per script | 30 (`OP_CALL_LIMIT`) |
+| Serialized output | 24 KiB, then truncated with `… [output truncated]` (becomes plain text) |
+| Network | none: `fetch` throws *Outbound network access is disabled* |
+| Memory (QuickJS path) | 64 MiB heap, 512 KiB stack |
+
+The engine runs scripts in a Cloudflare **Dynamic Worker** with no outbound network when a loader binding exists, and falls back to **QuickJS** otherwise. The same guards apply to both.
+
+:::warning[Sensitive-word guard]
+Script source, argument strings and argument keys matching `/seed|secret|private|mnemonic/i` are rejected with `SENSITIVE_INPUT`. This includes innocent names: a variable called `privateNote` fails. Rename it.
+:::
+
+### When `execute` is unavailable
+
+`execute` is only registered when `HARBOR_MCP_EXECUTION_ENABLED` is unset or `"true"`. The free/QuickJS deployment profile sets it to `"false"`: the server is **search-only** and tells the client so in its instructions.
+
+## Patterns
+
+**Return only what you need.** Output is capped at 24 KiB, so map large results:
+
+```js
+const r = await harbor.venues.list({});
+if (!r.ok) return r;
+return r.data.map((v) => v.id);
+```
+
+**Build and simulate before executing.** For any write, call a builder (`tx.swap`, `tx.offer`, ...), inspect `simulate.engine_result` and `preflight`, then `tx.execute`. See [Executing transactions](/mcp/transactions).
+
+**Stop on `needs_approval`.** Return the approval to the user. Do not try to work around it.
+
+**Never retry a block.** A `blocked` result lists every failed rule. Explain them.

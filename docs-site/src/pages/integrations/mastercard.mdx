@@ -1,0 +1,67 @@
+# Mastercard [Agent Pay for Machines on the XRP Ledger]
+
+Mastercard describes **Agent Pay for Machines (AP4M)** as *Discover → Authorize → Execute → Settle*: authorize once, transact many times, guarantee payment now, settle later. Pilot maps each step to an XRPL-native primitive and uses Mastercard's own public artifacts on top.
+
+## The five beats
+
+| Beat | How Pilot does it |
+| --- | --- |
+| **Human** | Verified with **Mastercard Open Finance** (account owner and balance). The browser only sees a masked owner; only hashes go into the vault. |
+| **Intent** | The owner signs once: a **Verifiable Intent** mandate (SD-JWT, the open spec from Mastercard and Google) plus an on-ledger budget lock. |
+| **Agent** | Pilot's paying account holds an `AP4M-Agent` **XRPL Credential**. Merchants accept deposits only from credentialed payers (`DepositPreauth` with `AuthorizeCredentials`), so the ledger itself enforces *Know Your Agent*. |
+| **Merchant** | Demo merchants validate in the order from Mastercard's **Level 3 Agentic Commerce guide**: agent identity (**Web Bot Auth**, RFC 9421 signatures) → intent → payment, where the payment object is an XRPL payment. |
+| **Settle** | Paid per call by x402 `exact` payments or off-ledger payment-channel claims, redeemed in one transaction, with a receipt chain (mandate → intent → L3 → payment → ledger) kept as dispute evidence. |
+
+## Two gates before any payment
+
+`ap4m.purchase` checks the engine's **policy** *and* the **mandate** constraints (active, not expired, payee, SKU, per-payment, daily and total limits, `ap4m_enabled`). Any failure blocks with the rule named.
+
+## Operations
+
+| Family | Operations |
+| --- | --- |
+| Mandates | `mandate.prepare`, `mandate.register`, `mandate.status`, `mandate.revoke` |
+| Credentials | `credential.status`, `credential.payerAccept`, `credential.ids` |
+| Channels | `channel.status`, `channel.list` |
+| Merchants | `merchants.list`, `merchants.get` |
+| Purchase | `ap4m.purchase` |
+| XRPL EVM vouchers | `ap4m.evmPrepareApproval`, `ap4m.evmBindVoucher`, `ap4m.evmRecordSubmission`, `ap4m.evmReconcile`, `ap4m.evmStatus` (mock only) |
+| Mastercard Developers MCP | `mastercard.services`, `mastercard.docs`, `mastercard.page`, `mastercard.search` |
+
+The model gets two tools: `merchants_search` and `ap4m_purchase` (merchant and SKU only). It never receives keys, SD-JWTs, raw merchant content or raw Open Finance data.
+
+## Mastercard Developers MCP
+
+The engine federates Mastercard's public Developers MCP (`https://developer.mcp.mastercard.com`) into its own search, with a 24-hour cache. Results are labelled *external reference data* and treated as untrusted.
+
+## Configuration
+
+```bash
+# Pilot
+MASTERCARD_OF_MODE=mock      # mock | sandbox (sandbox needs partner ID, secret, app key; US IP)
+AP4M_DEMO_ENABLED=false
+
+# Engine
+AP4M_DEMO_ENABLED=false
+AP4M_EVM_EVENT_ENABLED=false     # XRPL EVM voucher flow
+AP4M_EVM_EVENT_MODE=off          # off | mock
+MASTERCARD_MCP_ENABLED=      # unset or "true" enables; "false" disables
+```
+
+Demo merchants (`services/ap4m-merchants`, FastAPI): **Venue Yield Desk** and **Risk Oracle**. Demo page: `/demo/ap4m`.
+
+## Honest labels
+
+Pilot does not call any Mastercard AP4M or Agent Pay API (early access is partner-gated). Stand-ins are always labelled:
+
+- *Mastercard Open Finance · mock* / *· sandbox*
+- *Demo Network — Mastercard's role in production* (credential and VI issuer)
+- *Verifiable Intent v0.1 · verified with Mastercard's reference implementation*
+- *Validation flow from Mastercard's Level 3 Agentic Commerce guide · payment object: XRPL*
+- *ap4m-sandbox · requires Mastercard early-access credentials*
+
+Pilot never claims to be Mastercard certified or compliant, and never shows card forms or card logos.
+
+## Status
+
+Mock-first, with offline, cross-language and UI evidence. Open Finance sandbox and live Testnet checks are event-day gates. Details: `docs/ap4m.md`.

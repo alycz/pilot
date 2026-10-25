@@ -1,0 +1,143 @@
+# All operations [95 in production, 103 including local-only]
+
+Call any of these as `harbor.<name>(args)` inside MCP `execute`, or `POST /api/ops/<name>` over REST. Use MCP `search` with the exact name to get its argument signature and a runnable example.
+
+Legend: **owner** = always needs owner approval · **devnet** = Devnet only · **gated** = disabled unless an environment flag enables it · **local** = local profiles only.
+
+## Ledger
+
+| Operation | Summary |
+| --- | --- |
+| `ledger.account.info` | Account root, flags, optional queue and signer list. |
+| `ledger.account.lines` | Trust lines, with peer filter and pagination. |
+| `ledger.account.objects` | Owned ledger objects. |
+| `ledger.account.tx` | Validated account transactions. |
+| `ledger.fee` | Open-ledger fee and queue metrics. |
+| `server.reserves` | Current base and owner reserve requirements. |
+| `amendments.status` | Network-specific amendment enablement and server support. |
+
+## Markets, DEX & AMM
+
+| Operation | Summary |
+| --- | --- |
+| `dex.book` | One side of an order book. |
+| `dex.depth` | Funded offers aggregated into price levels. |
+| `dex.quote` | Indicative first-pass payment-path quote (`unverified-match`). |
+| `amm.info` | Validated state of an AMM. |
+| `amm.position` | One account's LP-token position. |
+| `amm.pools` | Normalized AMM pools with provider liquidity and activity (off-ledger). |
+| `analytics.marketSnapshot` | One bounded pair snapshot: book, AMM, spread and executable-liquidity estimates. |
+
+## Research
+
+| Operation | Summary |
+| --- | --- |
+| `venues.list` | All catalogued venues. |
+| `venues.get` | One venue. |
+| `venues.compare` | Exact-input pair priced across book, AMM and paths (`unverified-match`). |
+| `tokens.lookup` | Token metadata merged with on-ledger issuer controls. |
+| `tokens.trending` | Provider-ranked tokens (XRPL.to). |
+| `tokens.flagged` | XRPL.to scam blocklist. |
+| `yield.options` | AMM fee inputs, Devnet vaults and off-ledger yield venues compared. |
+| `perps.markets` | Hyperliquid XRP perp market (read-only, off-ledger). |
+| `docs.search` | Official XRPL documentation search. |
+| `skill.read` | A pinned XRPL skill or a local playbook. |
+| `vault.info` | Single Asset Vault state (Devnet / Lending-Devnet). |
+| `vault.positions` | Nonzero vault share positions. |
+| `lending.brokers` | Lending Protocol loan brokers on Lending-Devnet. |
+
+## Transaction builders
+
+Each returns a `TxBuild` with `build_id`, `tx_json`, simulation and preflight.
+
+| Operation | Summary |
+| --- | --- |
+| `tx.swap` | Swap: IOC at book-mid limit, or exact-output fill-or-kill. |
+| `tx.offer` | Place a limit offer. |
+| `tx.offerCancel` | Cancel an offer. |
+| `tx.payment` | Payment. **owner** |
+| `tx.trustSet` | Create or adjust a trust line. |
+| `tx.ammDeposit` | Add AMM liquidity. |
+| `tx.ammWithdraw` | Remove AMM liquidity. |
+| `tx.escrowCreate` | Create an escrow. **owner** |
+| `tx.escrowFinish` | Finish an escrow. |
+| `tx.escrowCancel` | Cancel an escrow. |
+| `tx.checkCreate` | Create a check. **owner** |
+| `tx.checkCash` | Cash a check. |
+| `tx.checkCancel` | Cancel a check. |
+| `tx.vaultDeposit` | Deposit into a single-asset vault. **owner · devnet** |
+| `tx.vaultWithdraw` | Withdraw from a single-asset vault. **owner · devnet** |
+| `tx.simulate` | Autofill, tag, preflight, simulate and store any supported unsigned transaction. |
+
+## Execution
+
+| Operation | Summary |
+| --- | --- |
+| `tx.execute` | Evaluate policy and idempotently execute, or prepare owner approval. |
+| `tx.approvalPreflight` | Atomically preflight a v2 owner approval right before signing. |
+| `tx.approvalReconcile` | Burn an expired v2 approval after an exact non-inclusion proof. |
+| `tx.submit` | Relay a signed Testnet/Devnet transaction, verifying an approval if supplied. |
+| `tx.status` | Validated status of a hash. |
+
+## Delegation, policy & onboarding
+
+| Operation | Summary |
+| --- | --- |
+| `account.link` | Create or reuse a delegate account and prepare the permission grant. |
+| `account.status` | Read on-ledger delegation and refresh the link. |
+| `account.revoke` | Prepare an empty-permission `DelegateSet`; suspend execution until confirmed. |
+| `policy.get` | The principal-scoped policy, or the safe default. |
+| `policy.set` | Validate and upsert policy. |
+| `onboarding.readiness` | Attest whether local Testnet onboarding state is safe to hand off. |
+
+## Strategies **gated**
+
+| Operation | Summary |
+| --- | --- |
+| `strategy.validate` | Validate against the declarative grammar. |
+| `strategy.simulate` | Deterministic paper-only preview. |
+| `strategy.create` | Non-authorizing Testnet draft. |
+| `strategy.list` · `strategy.get` · `strategy.audit` | Read. |
+| `strategy.authorize` | Activate with fresh owner authorization. |
+| `strategy.pause` · `strategy.resume` · `strategy.stop` · `strategy.kill` | Lifecycle. |
+| `strategy.globalKill.get` · `strategy.globalKill.set` | Account-wide kill switch. |
+
+## Agentic commerce **gated**
+
+| Operation | Summary |
+| --- | --- |
+| `merchants.list` · `merchants.get` | Allowlisted AP4M demo merchants. |
+| `mandate.prepare` | Prepare an unsigned Testnet AP4M mandate setup. |
+| `mandate.register` | Verify Verifiable Intent authorization and the validated setup. |
+| `mandate.status` · `mandate.revoke` | Read; revoke and request channel closure. |
+| `credential.status` | `AP4M-Agent` credential status on Testnet. |
+| `credential.payerAccept` | Accept the credential from the engine's own payer. |
+| `credential.ids` | Accepted, unexpired `CredentialIDs` for a payer. |
+| `channel.status` · `channel.list` | Mandate payment channels and highest claims. |
+| `ap4m.purchase` | Buy one allowlisted product under an active mandate. |
+| `ap4m.evmPrepareApproval` · `ap4m.evmBindVoucher` · `ap4m.evmRecordSubmission` · `ap4m.evmReconcile` · `ap4m.evmStatus` | XRPL EVM Testnet voucher flow (mock only). |
+| `x402.pay` | Pay the fixed local Testnet merchant. **local** |
+| `x402.payIssuedFixture` | Issued-currency offline fixture. **local** |
+
+## Mastercard Developers
+
+| Operation | Summary |
+| --- | --- |
+| `mastercard.services` | Public Mastercard Developers services. |
+| `mastercard.docs` | Doc pages for a service. |
+| `mastercard.page` | One doc page. |
+| `mastercard.search` | Search services and doc titles. |
+
+## QuickNode **gated**
+
+| Operation | Summary |
+| --- | --- |
+| `quicknode.status` | Routing, confirmation and watchdog counters. |
+| `quicknode.events` | Recent watchdog events. |
+| `quicknode.webhookEvidence` | One webhook confirmation proof. |
+| `quicknode.kv.reconcile` | Rebuild the KV registry. |
+| `quicknode.unfreeze` | Remove an engine-local freeze. |
+
+## Local-only (not in production)
+
+`capability.prepare`, `capability.activate`, `capability.status`, `capability.prepareRevoke`, `capability.revoke`, `capability.invoke`, `quicknode.test.registerLink`, `quicknode.test.deleteLink`.

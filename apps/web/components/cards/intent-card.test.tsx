@@ -97,6 +97,25 @@ describe("IntentCard AWS trust receipt", () => {
     expect(markup).toContain("account 1");
   });
 
+  it("uses the single-label demo presentation only when explicitly requested", () => {
+    const trustedEvent: CardEvent = {
+      ...event,
+      trust: {
+        screen: { provider: "mock", fields_checked: 3, fields_blocked: 1 },
+        model: { provider: "bedrock-mock", id: "anthropic.claude-sonnet-4-5-v1:0" },
+      },
+    };
+    const markup = renderToStaticMarkup(createElement(IntentCard, {
+      demoPresentation: true,
+      event: trustedEvent,
+    }));
+
+    expect(markup).toContain('aria-label="Demo capability preview"');
+    expect(markup).toContain("Bedrock Guardrails");
+    expect(markup).toContain("Amazon Bedrock");
+    expect(markup).not.toContain("(mock)");
+  });
+
   it("renders no owner chip for malformed client metadata", () => {
     const markup = renderToStaticMarkup(createElement(IntentCard, {
       event,

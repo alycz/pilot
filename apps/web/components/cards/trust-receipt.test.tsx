@@ -98,6 +98,36 @@ describe("TrustReceipt", () => {
     expect(markup).toContain("local stand-in evidence, not a live QuickNode");
   });
 
+  it("collapses signed-out demo provenance into one label with neutral capability names", () => {
+    const markup = renderToStaticMarkup(createElement(TrustReceipt, {
+      presentation: "demo",
+      trust: {
+        screen: { provider: "mock", fields_checked: 3, fields_blocked: 1 },
+        model: { provider: "bedrock-mock", id: "anthropic.claude-sonnet-4-5-v1:0" },
+        signer: { kind: "aws-kms-kek", key_ref: "alias/harbor/kek" },
+        rpc: "quicknode-mock",
+        confirmation: {
+          provider: "quicknode-mock",
+          at: "2026-10-21T12:00:04.200Z",
+          latency_ms: 4_200,
+        },
+        watch: { provider: "quicknode-mock", status: "watching" },
+      },
+    }));
+
+    expect(markup).toContain('aria-label="Demo capability preview"');
+    for (const label of [
+      "Bedrock Guardrails",
+      "Amazon Bedrock",
+      "AWS KMS",
+      "QuickNode RPC",
+      "QuickNode webhook",
+      "QuickNode Streams",
+    ]) expect(markup).toContain(label);
+    expect(markup.match(/>Demo</g)).toHaveLength(1);
+    expect(markup).not.toMatch(/\(mock\)|Screened by|Model ·|Key protected by|RPC ·|Confirmed ·|Watched ·/);
+  });
+
   it("renders fallback and polling states and hides monitoring when off", () => {
     const markup = render({
       rpc: "fallback",

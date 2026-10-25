@@ -2,7 +2,12 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { createAgentCoreIdentityM2mJwtResolver } from "./identity-sdk";
-import type { AgentCoreJwtAlgorithm, AgentCoreJwtPolicy, AgentCoreWorkloadJwtResolver } from "./jwt";
+import type {
+  AgentCoreJwtAlgorithm,
+  AgentCoreJwtPolicy,
+  AgentCoreTokenRevocationChecker,
+  AgentCoreWorkloadJwtResolver,
+} from "./jwt";
 import type { AgentCoreReplayStore } from "./replay";
 import { createAwsSdkDynamoDbAgentCoreReplayStore } from "./replay-dynamodb";
 import {
@@ -138,6 +143,8 @@ export function readAgentCoreRuntimeEnvironment(env: Env = process.env): AgentCo
   }
   const region = parseAgentCoreAwsRegion(env.AGENTCORE_AWS_REGION);
   const audiences = exactList(env, "AGENTCORE_GATEWAY_JWT_AUDIENCES_JSON", 8);
+  const allowedSubjects = exactList(env, "AGENTCORE_GATEWAY_JWT_ALLOWED_SUBJECTS_JSON", 1);
+  const allowedClients = exactList(env, "AGENTCORE_GATEWAY_JWT_ALLOWED_CLIENTS_JSON", 1);
   const requiredScopes = exactList(env, "AGENTCORE_GATEWAY_JWT_REQUIRED_SCOPES_JSON", 16);
   const clientClaim = required(env, "AGENTCORE_GATEWAY_JWT_CLIENT_CLAIM");
   if (clientClaim !== "client_id" && clientClaim !== "azp") {
@@ -149,16 +156,74 @@ export function readAgentCoreRuntimeEnvironment(env: Env = process.env): AgentCo
     2,
     new Set(["RS256", "ES256"]),
   ) as readonly AgentCoreJwtAlgorithm[];
+  const revocationMode = required(env, "AGENTCORE_GATEWAY_JWT_REVOCATION_MODE", 16);
+  let revocation: AgentCoreJwtPolicy["revocation"];
+  if (revocationMode === "expiry_only") {
+    if (env.AGENTCORE_GATEWAY_JWT_REVOCATION_TIMEOUT_MS !== undefined) {
+      throw new Error("AGENTCORE_GATEWAY_JWT_REVOCATION_TIMEOUT_MS is valid only in checker mode");
+    }
+    revocation = { mode: "expiry_only" };
+  } else if (revocationMode === "checker") {
+    required(env, "AGENTCORE_GATEWAY_JWT_REVOCATION_TIMEOUT_MS", 4);
+    revocation = {
+      mode: "checker",
+      timeoutMs: integer(
+        env,
+        "AGENTCORE_GATEWAY_JWT_REVOCATION_TIMEOUT_MS",
+        1_000,
+        50,
+        5_000,
+      ),
+    };
+  } else {
+    throw new Error("AGENTCORE_GATEWAY_JWT_REVOCATION_MODE must be expiry_only or checker");
+  }
   const jwtPolicy: AgentCoreJwtPolicy = {
     issuer: required(env, "AGENTCORE_GATEWAY_JWT_ISSUER", 2_048),
     jwksUrl: required(env, "AGENTCORE_GATEWAY_JWT_JWKS_URL", 2_048),
     audiences,
-    allowedSubjects: exactList(env, "AGENTCORE_GATEWAY_JWT_ALLOWED_SUBJECTS_JSON", 64),
-    allowedClients: exactList(env, "AGENTCORE_GATEWAY_JWT_ALLOWED_CLIENTS_JSON", 16),
+    allowedSubjects,
+    allowedClients,
     requiredScopes,
     clientClaim,
     tenantClaim: identifier(env, "AGENTCORE_GATEWAY_JWT_TENANT_CLAIM", CLAIM),
     algorithms,
+    clockToleranceSeconds: integer(
+      env,
+      "AGENTCORE_GATEWAY_JWT_CLOCK_TOLERANCE_SECONDS",
+      30,
+      0,
+      60,
+    ),
+    maxTokenAgeSeconds: integer(
+      env,
+      "AGENTCORE_GATEWAY_JWT_MAX_TOKEN_AGE_SECONDS",
+      300,
+      30,
+      3_600,
+    ),
+    maxTokenLifetimeSeconds: integer(
+      env,
+      "AGENTCORE_GATEWAY_JWT_MAX_TOKEN_LIFETIME_SECONDS",
+      600,
+      30,
+      3_600,
+    ),
+    cacheTtlMs: integer(
+      env,
+      "AGENTCORE_GATEWAY_JWT_JWKS_CACHE_TTL_MS",
+      300_000,
+      1_000,
+      900_000,
+    ),
+    jwksRefreshCooldownMs: integer(
+      env,
+      "AGENTCORE_GATEWAY_JWT_JWKS_REFRESH_COOLDOWN_MS",
+      10_000,
+      1_000,
+      60_000,
+    ),
+    revocation,
   };
   const replayLeaseMs = integer(env, "AGENTCORE_REPLAY_LEASE_MS", 30_000, 1_000, 120_000);
   const replayRetentionMs = integer(
@@ -201,6 +266,7 @@ export async function startAgentCoreRuntimeFromEnvironment(input: Readonly<{
   jwksFetch?: typeof fetch;
   gatewayFetch?: typeof fetch;
   now?: () => number;
+  jwtRevocationChecker?: AgentCoreTokenRevocationChecker;
   /** Test-only listen override. Deployment always uses 0.0.0.0:8080. */
   listen?: Readonly<{ host: string; port: number }>;
 }>): Promise<AgentCoreRuntimeHttpServer> {
@@ -219,6 +285,9 @@ export async function startAgentCoreRuntimeFromEnvironment(input: Readonly<{
     ...(input.jwksFetch ? { jwksFetch: input.jwksFetch } : {}),
     ...(input.gatewayFetch ? { gatewayFetch: input.gatewayFetch } : {}),
     ...(input.now ? { now: input.now } : {}),
+    ...(input.jwtRevocationChecker
+      ? { jwtRevocationChecker: input.jwtRevocationChecker }
+      : {}),
     ...(input.listen ? input.listen : {}),
   });
 }

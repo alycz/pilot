@@ -10,6 +10,7 @@ import {
   deriveAgentCoreScopeDigest,
 } from "../src/contracts";
 import type { AgentCoreWorkloadJwtResolver } from "../src/jwt";
+import type { AgentCoreTokenRevocationChecker } from "../src/jwt";
 import {
   AgentCoreReplayError,
   createInMemoryAgentCoreReplayStore,
@@ -87,7 +88,8 @@ function authFixture() {
   const header = Buffer.from(JSON.stringify({ alg: "RS256", kid: "key-a", typ: "at+jwt" })).toString("base64url");
   const payload = Buffer.from(JSON.stringify({
     iss: ISSUER, sub: SUBJECT, aud: AUDIENCE, iat: seconds - 5, nbf: seconds - 5,
-    exp: seconds + 120, tenant_id: DEPLOYMENT_TENANT, client_id: CLIENT, scope: SCOPE,
+    exp: seconds + 120, jti: "gateway-token-1", tenant_id: DEPLOYMENT_TENANT,
+    client_id: CLIENT, scope: SCOPE,
   })).toString("base64url");
   const signature = sign("RSA-SHA256", Buffer.from(`${header}.${payload}`, "ascii"), pair.privateKey).toString("base64url");
   const authorization = `Bearer ${header}.${payload}.${signature}`;
@@ -215,6 +217,37 @@ describe("AgentCore production replay boundary", () => {
     expect(JSON.stringify(claim.mock.calls)).not.toContain(request.prompt);
     expect(JSON.stringify(claim.mock.calls)).not.toContain(scope.owner);
     expect(JSON.stringify(claim.mock.calls)).not.toContain(scope.tenantId);
+  });
+
+  it("checks per-token revocation before returning a completed replay", async () => {
+    const backing = createInMemoryAgentCoreReplayStore({
+      nextLeaseId: () => "00000000-0000-4000-8000-000000000009",
+    });
+    const claim = vi.fn(backing.claim);
+    const gateway = gatewayFixture();
+    const auth = authFixture();
+    const revocationChecker = vi.fn<AgentCoreTokenRevocationChecker>(async () => "active");
+    const invoker = createAgentCoreProductionRuntimeInvoker({
+      config: {
+        ...config,
+        jwtPolicy: {
+          ...config.jwtPolicy,
+          revocation: { mode: "checker" as const, timeoutMs: 1_000 },
+        },
+      },
+      workloadJwtResolver: { resolveAuthorization: auth.resolveAuthorization },
+      replayStore: { ...backing, claim },
+      jwksFetch: auth.jwksFetch,
+      gatewayFetch: gateway.fetcher,
+      now: () => NOW,
+      jwtRevocationChecker: revocationChecker,
+    });
+    await expect(invoker.invoke(invocation, context())).resolves.toMatchObject({ requestDigest });
+    revocationChecker.mockResolvedValueOnce("revoked");
+    await expect(invoker.invoke(invocation, context())).rejects.toThrow("authorization");
+    expect(revocationChecker).toHaveBeenCalledTimes(2);
+    expect(gateway.dispatches()).toBe(1);
+    expect(claim).toHaveBeenCalledTimes(1);
   });
 
   it("fences a concurrent duplicate and never redispatches after failure", async () => {

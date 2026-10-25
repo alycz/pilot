@@ -12,7 +12,7 @@
     "createInput": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["agentRuntimeName", "agentRuntimeArtifact", "roleArn", "protocolConfiguration", "networkConfiguration", "environmentVariables", "tags"],
+      "required": ["agentRuntimeName", "agentRuntimeArtifact", "roleArn", "authorizerConfiguration", "protocolConfiguration", "networkConfiguration", "environmentVariables", "tags"],
       "properties": {
         "agentRuntimeName": {
           "type": "string",
@@ -39,6 +39,76 @@
         "roleArn": {
           "type": "string",
           "pattern": "^arn:aws:iam::[0-9]{12}:role/.+$"
+        },
+        "authorizerConfiguration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["customJWTAuthorizer"],
+          "properties": {
+            "customJWTAuthorizer": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["discoveryUrl", "allowedAudience", "allowedClients", "allowedScopes", "customClaims"],
+              "properties": {
+                "discoveryUrl": {
+                  "type": "string",
+                  "maxLength": 2048,
+                  "pattern": "^https://[^/?#]+(?:/[^?#]*)?/\\.well-known/openid-configuration$"
+                },
+                "allowedAudience": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 1,
+                  "uniqueItems": true,
+                  "items": { "type": "string", "minLength": 1, "maxLength": 255, "pattern": "^[A-Za-z0-9_.:/-]+$" }
+                },
+                "allowedClients": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 1,
+                  "uniqueItems": true,
+                  "items": { "type": "string", "minLength": 1, "maxLength": 255, "pattern": "^[A-Za-z0-9_.:/-]+$" }
+                },
+                "allowedScopes": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 1,
+                  "uniqueItems": true,
+                  "items": { "const": "pilot.invoke_agentcore_research" }
+                },
+                "customClaims": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["inboundTokenClaimName", "inboundTokenClaimValueType", "authorizingClaimMatchValue"],
+                    "properties": {
+                      "inboundTokenClaimName": { "type": "string", "minLength": 1, "maxLength": 255, "pattern": "^[A-Za-z0-9_.:-]+$" },
+                      "inboundTokenClaimValueType": { "const": "STRING" },
+                      "authorizingClaimMatchValue": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["claimMatchOperator", "claimMatchValue"],
+                        "properties": {
+                          "claimMatchOperator": { "const": "EQUALS" },
+                          "claimMatchValue": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["matchValueString"],
+                            "properties": {
+                              "matchValueString": { "type": "string", "minLength": 1, "maxLength": 255, "pattern": "^[A-Za-z0-9_.-]+$" }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
         },
         "protocolConfiguration": {
           "type": "object",
@@ -71,6 +141,12 @@
             "AGENTCORE_GATEWAY_JWT_TENANT_CLAIM",
             "AGENTCORE_GATEWAY_JWT_DEPLOYMENT_TENANT_ID",
             "AGENTCORE_GATEWAY_JWT_ALGORITHMS_JSON",
+            "AGENTCORE_GATEWAY_JWT_CLOCK_TOLERANCE_SECONDS",
+            "AGENTCORE_GATEWAY_JWT_MAX_TOKEN_AGE_SECONDS",
+            "AGENTCORE_GATEWAY_JWT_MAX_TOKEN_LIFETIME_SECONDS",
+            "AGENTCORE_GATEWAY_JWT_JWKS_CACHE_TTL_MS",
+            "AGENTCORE_GATEWAY_JWT_JWKS_REFRESH_COOLDOWN_MS",
+            "AGENTCORE_GATEWAY_JWT_REVOCATION_MODE",
             "AGENTCORE_REPLAY_TABLE",
             "AGENTCORE_REPLAY_DEPLOYMENT_ID",
             "AGENTCORE_REPLAY_LEASE_MS",
@@ -96,6 +172,12 @@
             "AGENTCORE_GATEWAY_JWT_TENANT_CLAIM": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,127}$" },
             "AGENTCORE_GATEWAY_JWT_DEPLOYMENT_TENANT_ID": { "type": "string", "pattern": "^[A-Za-z0-9_.:/-]{1,255}$" },
             "AGENTCORE_GATEWAY_JWT_ALGORITHMS_JSON": { "enum": ["[\"RS256\"]", "[\"ES256\"]", "[\"RS256\",\"ES256\"]", "[\"ES256\",\"RS256\"]"] },
+            "AGENTCORE_GATEWAY_JWT_CLOCK_TOLERANCE_SECONDS": { "type": "string", "pattern": "^(?:[0-9]|[1-5][0-9]|60)$" },
+            "AGENTCORE_GATEWAY_JWT_MAX_TOKEN_AGE_SECONDS": { "type": "string", "pattern": "^(?:[3-9][0-9]|[1-9][0-9]{2}|[1-2][0-9]{3}|3[0-5][0-9]{2}|3600)$" },
+            "AGENTCORE_GATEWAY_JWT_MAX_TOKEN_LIFETIME_SECONDS": { "type": "string", "pattern": "^(?:[3-9][0-9]|[1-9][0-9]{2}|[1-2][0-9]{3}|3[0-5][0-9]{2}|3600)$" },
+            "AGENTCORE_GATEWAY_JWT_JWKS_CACHE_TTL_MS": { "type": "string", "pattern": "^[0-9]{4,6}$" },
+            "AGENTCORE_GATEWAY_JWT_JWKS_REFRESH_COOLDOWN_MS": { "type": "string", "pattern": "^[0-9]{4,5}$" },
+            "AGENTCORE_GATEWAY_JWT_REVOCATION_MODE": { "const": "expiry_only" },
             "AGENTCORE_REPLAY_TABLE": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{3,255}$" },
             "AGENTCORE_REPLAY_DEPLOYMENT_ID": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$" },
             "AGENTCORE_REPLAY_LEASE_MS": { "type": "string", "pattern": "^[0-9]{4,6}$" },
@@ -122,8 +204,24 @@
     "postCreateVerification": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["gateway", "jwtVerification"],
+      "required": ["runtimeInboundJwt", "gateway", "jwtVerification"],
       "properties": {
+        "runtimeInboundJwt": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["authMode", "discoveryUrl", "issuer", "audience", "clientId", "subject", "allowedScope", "tenantClaimName", "deploymentTenantId"],
+          "properties": {
+            "authMode": { "const": "CUSTOM_JWT" },
+            "discoveryUrl": { "type": "string", "maxLength": 2048, "pattern": "^https://[^/?#]+(?:/[^?#]*)?/\\.well-known/openid-configuration$" },
+            "issuer": { "type": "string", "maxLength": 2048, "pattern": "^https://[^?#]+$" },
+            "audience": { "type": "string", "minLength": 1, "maxLength": 255, "pattern": "^[A-Za-z0-9_.:/-]+$" },
+            "clientId": { "type": "string", "minLength": 1, "maxLength": 255, "pattern": "^[A-Za-z0-9_.:/-]+$" },
+            "subject": { "type": "string", "minLength": 1, "maxLength": 255, "pattern": "^[A-Za-z0-9_.-]+$" },
+            "allowedScope": { "const": "pilot.invoke_agentcore_research" },
+            "tenantClaimName": { "type": "string", "minLength": 1, "maxLength": 255, "pattern": "^[A-Za-z0-9_.:-]+$" },
+            "deploymentTenantId": { "type": "string", "minLength": 1, "maxLength": 255, "pattern": "^[A-Za-z0-9_.-]+$" }
+          }
+        },
         "gateway": {
           "type": "object",
           "additionalProperties": false,

@@ -1,4 +1,5 @@
 import {
+  createHash,
   generateKeyPairSync,
   sign,
   type JsonWebKey,
@@ -83,6 +84,18 @@ function token(
   return `${header}.${payload}.${signature}`;
 }
 
+function rawToken(
+  key: { privateKey: KeyObject },
+  headerJson: string,
+  payloadJson: string,
+): string {
+  const header = Buffer.from(headerJson).toString("base64url");
+  const payload = Buffer.from(payloadJson).toString("base64url");
+  const signature = sign("RSA-SHA256", Buffer.from(`${header}.${payload}`, "ascii"), key.privateKey)
+    .toString("base64url");
+  return `${header}.${payload}.${signature}`;
+}
+
 function response(keys: readonly JsonWebKey[]): Response {
   return new Response(JSON.stringify({ keys }), {
     status: 200,
@@ -123,6 +136,89 @@ describe("AgentCore workload JWT verification", () => {
         algorithm: "RS256",
       });
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("requires an access-token type and exact audience and scope sets", async () => {
+    const key = rsaKey("key-a");
+    const verifier = createAgentCoreJwtVerifier({
+      issuer: ISSUER,
+      jwksUrl: JWKS,
+      audiences: [AUDIENCE, "pilot-market-resource"],
+      allowedSubjects: [SUBJECT],
+      allowedClients: [CLIENT],
+      requiredScopes: [SCOPE, "market:read"],
+      clientClaim: "client_id",
+      tenantClaim: "tenant_id",
+      algorithms: ["RS256"],
+      clockToleranceSeconds: 0,
+    }, { fetch: async () => response([key.publicJwk]), now: () => NOW });
+
+    await expect(verifier.verifyAuthorization(`Bearer ${token(key, {
+      aud: ["pilot-market-resource", AUDIENCE],
+      scope: "market:read gateway:invoke",
+    })}`, { tenantId: TENANT })).resolves.toBeDefined();
+    await expect(verifier.verifyAuthorization(`Bearer ${token(key, {
+      aud: AUDIENCE,
+      scope: "market:read gateway:invoke",
+    })}`, { tenantId: TENANT })).rejects.toMatchObject({ code: "authorization" });
+    await expect(verifier.verifyAuthorization(`Bearer ${token(key, {
+      aud: [AUDIENCE, "pilot-market-resource"],
+      scope: "market:read gateway:invoke gateway:write",
+    })}`, { tenantId: TENANT })).rejects.toMatchObject({ code: "authorization" });
+    await expect(verifier.verifyAuthorization(
+      `Bearer ${token(key, {
+        aud: [AUDIENCE, "pilot-market-resource"],
+        scope: "market:read gateway:invoke",
+      }, { typ: "JWT" })}`,
+      { tenantId: TENANT },
+    )).rejects.toMatchObject({ code: "authorization" });
+  });
+
+  it("requires one exact subject and client to avoid cross-principal combinations", () => {
+    const policy = {
+      issuer: ISSUER,
+      jwksUrl: JWKS,
+      audiences: [AUDIENCE],
+      allowedSubjects: [SUBJECT],
+      allowedClients: [CLIENT],
+      requiredScopes: [SCOPE],
+      clientClaim: "client_id" as const,
+      tenantClaim: "tenant_id",
+      algorithms: ["RS256" as const],
+    };
+    expect(() => createAgentCoreJwtVerifier({
+      ...policy,
+      allowedSubjects: [SUBJECT, "another-subject"],
+    })).toThrow(AgentCoreJwtError);
+    expect(() => createAgentCoreJwtVerifier({
+      ...policy,
+      allowedClients: [CLIENT, "another-client"],
+    })).toThrow(AgentCoreJwtError);
+  });
+
+  it("rejects duplicate and escaped-duplicate JOSE and claim members", async () => {
+    const key = rsaKey("key-a");
+    const verifier = setup(async () => response([key.publicJwk]));
+    const now = Math.floor(NOW / 1_000);
+    const payload = JSON.stringify({
+      iss: ISSUER, sub: SUBJECT, aud: AUDIENCE, client_id: CLIENT, scope: SCOPE,
+      tenant_id: TENANT, iat: now - 5, nbf: now - 5, exp: now + 120,
+    });
+    const duplicateHeader = rawToken(
+      key,
+      '{"alg":"none","\\u0061lg":"RS256","kid":"key-a","typ":"at+jwt"}',
+      payload,
+    );
+    const duplicateClaim = rawToken(
+      key,
+      '{"alg":"RS256","kid":"key-a","typ":"at+jwt"}',
+      `{"iss":"https://wrong.example/","iss":${JSON.stringify(ISSUER)},"sub":${JSON.stringify(SUBJECT)},"aud":${JSON.stringify(AUDIENCE)},"client_id":${JSON.stringify(CLIENT)},"scope":${JSON.stringify(SCOPE)},"tenant_id":${JSON.stringify(TENANT)},"iat":${now - 5},"nbf":${now - 5},"exp":${now + 120}}`,
+    );
+
+    await expect(verifier.verifyAuthorization(`Bearer ${duplicateHeader}`, { tenantId: TENANT }))
+      .rejects.toMatchObject({ code: "authorization" });
+    await expect(verifier.verifyAuthorization(`Bearer ${duplicateClaim}`, { tenantId: TENANT }))
+      .rejects.toMatchObject({ code: "authorization" });
   });
 
   it("supports explicitly allowed ES256 and rejects malformed ES256 signatures", async () => {
@@ -167,6 +263,121 @@ describe("AgentCore workload JWT verification", () => {
       code: "authorization",
       message: "AgentCore workload authorization is invalid",
     });
+  });
+
+  it("supports explicit expiry-only verification without a jti", async () => {
+    const key = rsaKey("key-a");
+    const verifier = createAgentCoreJwtVerifier({
+      issuer: ISSUER,
+      jwksUrl: JWKS,
+      audiences: [AUDIENCE],
+      allowedSubjects: [SUBJECT],
+      allowedClients: [CLIENT],
+      requiredScopes: [SCOPE],
+      clientClaim: "client_id",
+      tenantClaim: "tenant_id",
+      algorithms: ["RS256"],
+      clockToleranceSeconds: 0,
+      revocation: { mode: "expiry_only" },
+    }, { fetch: async () => response([key.publicJwk]), now: () => NOW });
+
+    await expect(verifier.verifyAuthorization(`Bearer ${token(key)}`, { tenantId: TENANT }))
+      .resolves.toBeDefined();
+  });
+
+  it("fails closed through the per-token revocation checker keyed by jti and digest", async () => {
+    const key = rsaKey("key-a");
+    const compact = token(key, { jti: "token-12345678" });
+    const checker = vi.fn(async (): Promise<"active" | "revoked"> => "active");
+    const verifier = createAgentCoreJwtVerifier({
+      issuer: ISSUER,
+      jwksUrl: JWKS,
+      audiences: [AUDIENCE],
+      allowedSubjects: [SUBJECT],
+      allowedClients: [CLIENT],
+      requiredScopes: [SCOPE],
+      clientClaim: "client_id",
+      tenantClaim: "tenant_id",
+      algorithms: ["RS256"],
+      clockToleranceSeconds: 0,
+      revocation: { mode: "checker", timeoutMs: 100 },
+    }, {
+      fetch: async () => response([key.publicJwk]),
+      now: () => NOW,
+      revocationChecker: checker,
+    });
+
+    await expect(verifier.verifyAuthorization(`Bearer ${compact}`, { tenantId: TENANT }))
+      .resolves.toBeDefined();
+    expect(checker).toHaveBeenCalledWith({
+      issuer: ISSUER,
+      jti: "token-12345678",
+      tokenDigest: createHash("sha256").update(compact, "ascii").digest("hex"),
+      expiresAt: new Date(Math.floor(NOW / 1_000) * 1_000 + 120_000).toISOString(),
+    }, { signal: expect.any(AbortSignal) });
+
+    checker.mockResolvedValueOnce("revoked");
+    await expect(verifier.verifyAuthorization(`Bearer ${compact}`, { tenantId: TENANT }))
+      .rejects.toMatchObject({ code: "authorization" });
+    await expect(verifier.verifyAuthorization(`Bearer ${token(key)}`, { tenantId: TENANT }))
+      .rejects.toMatchObject({ code: "authorization" });
+    expect(checker).toHaveBeenCalledTimes(2);
+    checker.mockRejectedValueOnce(new Error("must-not-leak"));
+    await expect(verifier.verifyAuthorization(`Bearer ${compact}`, { tenantId: TENANT }))
+      .rejects.toMatchObject({
+        code: "authorization",
+        message: "AgentCore workload authorization is invalid",
+      });
+  });
+
+  it("requires revocation policy and checker dependency to agree", () => {
+    const policy = {
+      issuer: ISSUER,
+      jwksUrl: JWKS,
+      audiences: [AUDIENCE],
+      allowedSubjects: [SUBJECT],
+      allowedClients: [CLIENT],
+      requiredScopes: [SCOPE],
+      clientClaim: "client_id" as const,
+      tenantClaim: "tenant_id",
+      algorithms: ["RS256" as const],
+    };
+    expect(() => createAgentCoreJwtVerifier({
+      ...policy,
+      revocation: { mode: "checker" },
+    })).toThrow(AgentCoreJwtError);
+    expect(() => createAgentCoreJwtVerifier({
+      ...policy,
+      revocation: { mode: "expiry_only" },
+    }, {
+      revocationChecker: async () => "active",
+    })).toThrow(AgentCoreJwtError);
+  });
+
+  it("fails closed when the revocation checker exceeds its deadline", async () => {
+    const key = rsaKey("key-a");
+    const verifier = createAgentCoreJwtVerifier({
+      issuer: ISSUER,
+      jwksUrl: JWKS,
+      audiences: [AUDIENCE],
+      allowedSubjects: [SUBJECT],
+      allowedClients: [CLIENT],
+      requiredScopes: [SCOPE],
+      clientClaim: "client_id",
+      tenantClaim: "tenant_id",
+      algorithms: ["RS256"],
+      clockToleranceSeconds: 0,
+      revocation: { mode: "checker", timeoutMs: 50 },
+    }, {
+      fetch: async () => response([key.publicJwk]),
+      now: () => NOW,
+      revocationChecker: async () => await new Promise<"active">(() => undefined),
+    });
+
+    await expect(verifier.verifyAuthorization(
+      `Bearer ${token(key, { jti: "token-timeout" })}`,
+      { tenantId: TENANT },
+    )).rejects.toMatchObject({ code: "authorization" });
   });
 
   it("rejects algorithm/key URL confusion and malformed bearer values", async () => {

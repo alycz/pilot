@@ -18,12 +18,23 @@ The implemented server-side flow is:
    research output cannot spend the same wallet proof in either call order.
 
 `AGENTCORE_MODE=off` is the default. `standin` runs only against an explicit
-loopback origin and labels every result synthetic. `aws` uses the official
-`@aws-sdk/client-bedrock-agentcore` `InvokeAgentRuntimeCommand` using IAM/SigV4
-with SDK retries disabled. It requires an exact Runtime ARN, qualifier, Region,
-Gateway URL, and deployed Gateway-visible tool name. The Runtime request and
-response both bind digests of that Gateway configuration, the server-derived
-scope, and the read request. OAuth Runtime invocation is not implemented.
+loopback origin and labels every result synthetic. `aws` requires an explicit
+Runtime authentication mode; it never falls back between modes. The documented
+workload-token path is `oauth_jwt`: Pilot obtains a fresh access token through
+an injected server-only resolver, verifies its issuer, signature, token type,
+exact audience, subject, client, scope, deployment tenant, lifetime, and the
+configured revocation policy, then invokes the exact regional Runtime HTTPS
+endpoint with `Authorization: Bearer`. AWS explicitly does not support this
+bearer flow through `InvokeAgentRuntimeCommand`. A separate explicit `iam` mode
+retains the official SDK/SigV4 adapter for a separately configured Runtime but
+is not accepted as workload-token readiness evidence. No access token can be
+read from environment configuration.
+
+Both AWS modes require an exact Runtime ARN, qualifier, Region, Gateway URL,
+and deployed Gateway-visible tool name. The Runtime request and response bind
+digests of that Gateway configuration, the server-derived scope, and the read
+request. The HTTPS caller uses a fresh UUID Runtime session and accepts an
+echoed session header only when it matches.
 The current Gateway HTTP adapter is explicitly `CUSTOM_JWT` bearer mode; an
 AWS-IAM Gateway requires a separately implemented SigV4 transport and must not
 be selected during setup for this adapter.
@@ -82,9 +93,15 @@ Required AWS-side resources:
 - one read-only Gateway target whose visible name exactly matches
   `${target_name}___${tool_name}` and whose output matches the strict market
   context contract;
-- an inbound `CUSTOM_JWT` configuration whose issuer/discovery URL and audience
-  let the Gateway validate one short-lived workload JWT, with exact subject and
-  deployment-tenant claim name/value matching the Runtime verifier; and
+- one Runtime inbound `CUSTOM_JWT` authorizer with a reviewed discovery URL,
+  singleton audience/client/scope, and exact subject and deployment-tenant
+  claims. This is the documented path by which AgentCore validates Pilot's
+  short-lived JWT, calls `GetWorkloadAccessTokenForJWT`, and injects the opaque
+  `WorkloadAccessToken` into the container;
+- a separate Gateway inbound `CUSTOM_JWT` configuration whose issuer/discovery
+  URL and audience validate the short-lived resource token obtained by the
+  Runtime, with exact subject and deployment-tenant policy matching the local
+  Runtime verifier; and
 - an AgentCore Identity OAuth2 credential provider that the current Runtime
   uses to exchange its workload token for the short-lived `CUSTOM_JWT` bearer
   token required by the Gateway; and
@@ -112,6 +129,9 @@ Required non-secret configuration:
 
 - `AGENTCORE_AWS_REGION=us-east-2`;
 - `AGENTCORE_RUNTIME_ARN` and `AGENTCORE_RUNTIME_QUALIFIER`;
+- `AGENTCORE_RUNTIME_AUTH_MODE=oauth_jwt` plus the exact inbound issuer, JWKS,
+  audience, subject, client, scope, deployment-tenant, algorithm, token-lifetime,
+  JWKS-cache, and revocation-policy fields shown in the template;
 - the exact `/mcp` `AGENTCORE_GATEWAY_URL`;
 - the exact target-prefixed `AGENTCORE_GATEWAY_TOOL_NAME`; and
 - the fixed auth/protocol settings in the template.
@@ -137,24 +157,30 @@ must inspect the bundle, manifest, and notices before creating a versioned
 deployment zip and must verify that the zip root contains `lambda-entry.mjs`,
 `manifest.json`, and `THIRD_PARTY_NOTICES.txt`.
 
-Use AWS SSO, workload identity, or an approved short-lived assumed role for the
-Node server's normal AWS SDK credential chain. Give the Pilot caller role only
-`bedrock-agentcore:InvokeAgentRuntime` on the exact Runtime/endpoint. Keep the
-Runtime execution role, Gateway execution role, and resource-management role
-separate. Enter target credentials only in the approved AgentCore
-Identity/Secrets workflow under the operator's account.
+The supported JWT Runtime must be invoked only through the reviewed server-side
+OAuth resolver; Builder ID console login is not a Runtime identity provider.
+Keep the Runtime execution role, Gateway execution role, and resource-management
+role separate. An IAM caller role applies only to a separately created
+IAM-authorized Runtime and cannot invoke the JWT Runtime. Enter target
+credentials only in the approved AgentCore Identity/Secrets workflow under the
+operator's account.
 Do not put AWS access keys, JWTs, OAuth client secrets, target API keys, or token
 values in the repository, an env template, chat, logs, model context, tool
 arguments, or receipts.
 
-Important identity gate: the current Pilot caller invokes Runtime with IAM/
-SigV4 only. AWS documents automatic `WorkloadAccessToken` delivery for an
-inbound identity flow, but that delivery has not been demonstrated for this
-exact IAM-only path. The Runtime therefore fails closed when the token is
-absent. Before activation, choose and verify an approved inbound identity path
-(for example, a reviewed JWT-authorized Runtime call), or prove the account's
-supported IAM behavior. Do not add a static token or derive an opaque delegated
-user ID from a browser-supplied wallet field as a shortcut.
+Important identity gate: the JWT/HTTPS caller, strict Runtime authorizer inputs,
+and workload-token-consuming container are implemented, but the account has no
+approved IdP application or deployed Runtime. The caller therefore requires an
+injected server-only token resolver and fails closed when it is absent. Do not
+add a static token, reuse a Gateway resource token as a Runtime token, or derive
+an opaque delegated user ID from a browser-supplied wallet field as a shortcut.
+
+Self-contained JWT revocation is either explicitly `expiry_only`, bounded by the
+reviewed maximum age/lifetime and JWKS cache, or `checker`, which requires a
+provider-backed injected checker and a token `jti`. Checker failure, timeout,
+abort, unknown state, or a revoked result all fail closed before replay lookup.
+Offline checker fixtures prove this composition; no live provider revocation or
+AWS-delivered workload token has been tested.
 
 The configured JWT issuer and same-origin JWKS URL are security boundaries.
 Code rejects literal IPs, localhost, redirects, and cross-origin JWKS, but DNS
@@ -164,8 +190,13 @@ resolution inside the destination account. Local URL validation alone is not
 SSRF or DNS-rebinding proof.
 
 Local verification uses `AGENTCORE_MODE=standin` with the loopback server from
-the integration test and must retain the synthetic provenance label. Live
-acceptance must separately demonstrate Runtime IAM enforcement, Gateway JWT
+the integration test and must retain the synthetic provenance label. The
+`acceptance:identity:offline` harness composes synthetic Identity exchange,
+JWKS/JWT checks, revocation, Gateway MCP, replay, and the Runtime header boundary;
+it emits only redacted synthetic evidence and makes zero AWS calls. Its separate
+live preflight has no live transport and cannot activate a service. Live
+acceptance must separately demonstrate Runtime JWT enforcement, AWS workload-
+token delivery, Gateway JWT
 validation, exact-tool denial, tenant isolation, credential revocation and
 expiry, timeout/throttling behavior, log redaction, and absence of wallet keys,
 signing tools, payment tools, and private context from Runtime/Gateway traffic.
@@ -180,9 +211,10 @@ guarantee deletion or eliminate costs.
 
 Remaining implementation/account work before live deployment:
 
-- select and prove the supported inbound identity path that delivers the
-  per-invocation workload token; the current IAM-only Pilot call is not accepted
-  as proof;
+- approve and configure the actual OAuth/OIDC application, then supply its
+  discovery URL/issuer, JWKS URL, client ID, Runtime audience, exact subject,
+  dedicated scope, deployment-tenant claim/value, token TTL/skew, and revocation
+  semantics to the server-only resolver and inert Runtime inputs;
 - run and inspect the implemented deterministic Lambda bundle, create the
   reviewed versioned zip, deploy the reviewed
   fail-closed Lambda resource, then complete the two-phase target-ID binding;
@@ -197,8 +229,16 @@ Remaining implementation/account work before live deployment:
   not an ordinary-chat feature.
 
 The current Gateway transport supports `CUSTOM_JWT`. Selecting an `AWS_IAM`
-Gateway requires a separate SigV4 Gateway transport. Runtime OAuth invocation
-also remains deliberately unsupported.
+Gateway requires a separate SigV4 Gateway transport. Runtime OAuth/JWT HTTPS
+invocation is implemented; token acquisition remains an injected account-owned
+boundary because no IdP or OAuth grant has been approved or created.
+
+Authoritative AWS references for this boundary are the
+[Runtime OAuth/JWT guide](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-oauth.html),
+[inbound authorizer schema](https://docs.aws.amazon.com/bedrock-agentcore-control/latest/APIReference/API_CustomJWTAuthorizerConfiguration.html),
+[InvokeAgentRuntime API](https://docs.aws.amazon.com/bedrock-agentcore/latest/APIReference/API_InvokeAgentRuntime.html),
+[workload-token flow](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/get-workload-access-token.html),
+and [Region matrix](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/agentcore-regions.html).
 
 ## Adjacent AWS trust services
 

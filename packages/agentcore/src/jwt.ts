@@ -1,4 +1,5 @@
 import {
+  createHash,
   createPublicKey,
   verify as verifySignature,
   type JsonWebKey,
@@ -20,6 +21,20 @@ const AlgorithmSchema = z.enum(["RS256", "ES256"]);
 
 export type AgentCoreJwtAlgorithm = z.infer<typeof AlgorithmSchema>;
 
+export type AgentCoreTokenRevocationPolicy =
+  | Readonly<{ mode: "expiry_only" }>
+  | Readonly<{ mode: "checker"; timeoutMs?: number }>;
+
+export type AgentCoreTokenRevocationChecker = (
+  token: Readonly<{
+    issuer: string;
+    jti: string;
+    tokenDigest: string;
+    expiresAt: string;
+  }>,
+  options: Readonly<{ signal: AbortSignal }>,
+) => Promise<"active" | "revoked">;
+
 export type AgentCoreJwtPolicy = Readonly<{
   issuer: string;
   /** Exact same-origin jwks_uri reviewed from the IdP discovery document. */
@@ -40,6 +55,8 @@ export type AgentCoreJwtPolicy = Readonly<{
   maxJwksBytes?: number;
   maxJwksKeys?: number;
   jwksRefreshCooldownMs?: number;
+  /** Defaults to bounded expiry-only verification for backward compatibility. */
+  revocation?: AgentCoreTokenRevocationPolicy;
 }>;
 
 export type AgentCoreVerifiedJwt = Readonly<{
@@ -96,6 +113,9 @@ type NormalizedPolicy = Readonly<{
   maxJwksBytes: number;
   maxJwksKeys: number;
   jwksRefreshCooldownMs: number;
+  revocation:
+    | Readonly<{ mode: "expiry_only" }>
+    | Readonly<{ mode: "checker"; timeoutMs: number }>;
 }>;
 
 type JsonRecord = Record<string, unknown>;
@@ -133,8 +153,8 @@ function exactHttpsUrl(raw: string): string {
 
 function normalizePolicy(raw: AgentCoreJwtPolicy): NormalizedPolicy {
   const audiencesResult = z.array(IdentifierSchema).min(1).max(8).safeParse(raw.audiences);
-  const subjectsResult = z.array(IdentifierSchema).min(1).max(64).safeParse(raw.allowedSubjects);
-  const clientsResult = z.array(IdentifierSchema).min(1).max(16).safeParse(raw.allowedClients);
+  const subjectsResult = z.array(IdentifierSchema).length(1).safeParse(raw.allowedSubjects);
+  const clientsResult = z.array(IdentifierSchema).length(1).safeParse(raw.allowedClients);
   const scopesResult = z.array(IdentifierSchema).min(1).max(16).safeParse(raw.requiredScopes);
   const algorithmsResult = z.array(AlgorithmSchema).min(1).max(2).safeParse(raw.algorithms);
   const clientClaimResult = z.enum(["client_id", "azp"]).safeParse(raw.clientClaim);
@@ -162,6 +182,10 @@ function normalizePolicy(raw: AgentCoreJwtPolicy): NormalizedPolicy {
   if (new URL(issuer).origin !== new URL(jwksUrl).origin) {
     throw new AgentCoreJwtError("configuration");
   }
+  const revocation = raw.revocation ?? { mode: "expiry_only" };
+  if (revocation.mode !== "expiry_only" && revocation.mode !== "checker") {
+    throw new AgentCoreJwtError("configuration");
+  }
   return {
     issuer,
     jwksUrl,
@@ -181,6 +205,12 @@ function normalizePolicy(raw: AgentCoreJwtPolicy): NormalizedPolicy {
     maxJwksBytes: boundedInteger(raw.maxJwksBytes, 65_536, 1_024, 262_144),
     maxJwksKeys: boundedInteger(raw.maxJwksKeys, 16, 1, 64),
     jwksRefreshCooldownMs: boundedInteger(raw.jwksRefreshCooldownMs, 10_000, 1_000, 60_000),
+    revocation: revocation.mode === "checker"
+      ? Object.freeze({
+          mode: "checker",
+          timeoutMs: boundedInteger(revocation.timeoutMs, 1_000, 50, 5_000),
+        })
+      : Object.freeze({ mode: "expiry_only" }),
   };
 }
 
@@ -197,10 +227,102 @@ function decodeSegment(segment: string, maxBytes: number): Uint8Array {
   return bytes;
 }
 
+function jsonStringEnd(text: string, start: number): number {
+  if (text[start] !== '"') throw new Error("expected string");
+  for (let index = start + 1; index < text.length; index += 1) {
+    const character = text[index]!;
+    if (character === '"') return index + 1;
+    if (character === "\\") {
+      index += 1;
+      if (index >= text.length) throw new Error("unterminated escape");
+    } else if (character.charCodeAt(0) <= 0x1f) {
+      throw new Error("control character");
+    }
+  }
+  throw new Error("unterminated string");
+}
+
+/** Reject ambiguous top-level JOSE/claim objects before JSON.parse collapses them. */
+function rejectDuplicateTopLevelMembers(text: string): void {
+  let index = 0;
+  const whitespace = () => {
+    while (/\s/u.test(text[index] ?? "")) index += 1;
+  };
+  const value = (depth: number): void => {
+    if (depth > 32) throw new Error("JSON nesting is too deep");
+    whitespace();
+    if (text[index] === '"') {
+      index = jsonStringEnd(text, index);
+      return;
+    }
+    if (text[index] === "{") {
+      object(depth + 1, false);
+      return;
+    }
+    if (text[index] === "[") {
+      index += 1;
+      whitespace();
+      if (text[index] === "]") {
+        index += 1;
+        return;
+      }
+      while (true) {
+        value(depth + 1);
+        whitespace();
+        if (text[index] === "]") {
+          index += 1;
+          return;
+        }
+        if (text[index] !== ",") throw new Error("invalid array");
+        index += 1;
+      }
+    }
+    const primitive = /^(?:true|false|null|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?)/u.exec(text.slice(index));
+    if (!primitive) throw new Error("invalid value");
+    index += primitive[0].length;
+  };
+  const object = (depth: number, topLevel: boolean): void => {
+    if (text[index] !== "{") throw new Error("expected object");
+    index += 1;
+    const members = new Set<string>();
+    whitespace();
+    if (text[index] === "}") {
+      index += 1;
+      return;
+    }
+    while (true) {
+      whitespace();
+      const start = index;
+      const end = jsonStringEnd(text, start);
+      const member = JSON.parse(text.slice(start, end)) as unknown;
+      if (typeof member !== "string") throw new Error("invalid member");
+      if (topLevel && members.has(member)) throw new Error("duplicate member");
+      members.add(member);
+      index = end;
+      whitespace();
+      if (text[index] !== ":") throw new Error("missing colon");
+      index += 1;
+      value(depth + 1);
+      whitespace();
+      if (text[index] === "}") {
+        index += 1;
+        return;
+      }
+      if (text[index] !== ",") throw new Error("invalid object");
+      index += 1;
+    }
+  };
+  whitespace();
+  object(0, true);
+  whitespace();
+  if (index !== text.length) throw new Error("trailing JSON");
+}
+
 function parseJsonSegment(segment: string, maxBytes: number): JsonRecord {
   try {
-    const value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true })
-      .decode(decodeSegment(segment, maxBytes)));
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(decodeSegment(segment, maxBytes));
+    rejectDuplicateTopLevelMembers(text);
+    const value: unknown = JSON.parse(text);
     if (!isRecord(value)) throw new Error("not an object");
     return value;
   } catch (error) {
@@ -234,6 +356,10 @@ function scopes(value: unknown): readonly string[] {
     throw new AgentCoreJwtError("authorization");
   }
   return parsed.data;
+}
+
+function sameSet(actual: readonly string[], expected: readonly string[]): boolean {
+  return actual.length === expected.length && expected.every((value) => actual.includes(value));
 }
 
 function publicVerificationKey(
@@ -337,9 +463,19 @@ async function waitWithAbort<T>(promise: Promise<T>, signal: AbortSignal | undef
 
 export function createAgentCoreJwtVerifier(
   rawPolicy: AgentCoreJwtPolicy,
-  dependencies: Readonly<{ fetch?: typeof fetch; now?: () => number }> = {},
+  dependencies: Readonly<{
+    fetch?: typeof fetch;
+    now?: () => number;
+    revocationChecker?: AgentCoreTokenRevocationChecker;
+  }> = {},
 ) {
   const policy = normalizePolicy(rawPolicy);
+  if (
+    (policy.revocation.mode === "checker" && !dependencies.revocationChecker) ||
+    (policy.revocation.mode === "expiry_only" && dependencies.revocationChecker)
+  ) {
+    throw new AgentCoreJwtError("configuration");
+  }
   const fetcher = dependencies.fetch ?? globalThis.fetch;
   const now = dependencies.now ?? Date.now;
   let cache: CachedJwks | undefined;
@@ -426,7 +562,7 @@ export function createAgentCoreJwtVerifier(
         typeof header.alg !== "string" || !AlgorithmSchema.safeParse(header.alg).success ||
         !policy.algorithms.has(header.alg as AgentCoreJwtAlgorithm) ||
         typeof header.kid !== "string" || !IdentifierSchema.safeParse(header.kid).success ||
-        (header.typ !== "at+jwt" && header.typ !== "JWT") ||
+        header.typ !== "at+jwt" ||
         header.crit !== undefined || header.jku !== undefined || header.x5u !== undefined ||
         header.jwk !== undefined
       ) {
@@ -449,7 +585,7 @@ export function createAgentCoreJwtVerifier(
         throw new AgentCoreJwtError("authorization");
       }
       const tokenAudience = audience(claims.aud);
-      if (!policy.audiences.some((allowed) => tokenAudience.includes(allowed))) {
+      if (!sameSet(tokenAudience, policy.audiences)) {
         throw new AgentCoreJwtError("authorization");
       }
       const client = claims[policy.clientClaim];
@@ -457,7 +593,7 @@ export function createAgentCoreJwtVerifier(
         throw new AgentCoreJwtError("authorization");
       }
       const tokenScopes = scopes(claims.scope);
-      if (!policy.requiredScopes.every((required) => tokenScopes.includes(required))) {
+      if (!sameSet(tokenScopes, policy.requiredScopes)) {
         throw new AgentCoreJwtError("authorization");
       }
       if (claims[policy.tenantClaim] !== tenantId) throw new AgentCoreJwtError("authorization");
@@ -474,6 +610,27 @@ export function createAgentCoreJwtVerifier(
         expiresAt - issuedAt > policy.maxTokenLifetimeSeconds
       ) {
         throw new AgentCoreJwtError("authorization");
+      }
+      if (policy.revocation.mode === "checker") {
+        const jti = IdentifierSchema.safeParse(claims.jti);
+        if (!jti.success) throw new AgentCoreJwtError("authorization");
+        const checkerSignal = context.signal
+          ? AbortSignal.any([context.signal, AbortSignal.timeout(policy.revocation.timeoutMs)])
+          : AbortSignal.timeout(policy.revocation.timeoutMs);
+        try {
+          const revocation = await waitWithAbort(
+            Promise.resolve().then(() => dependencies.revocationChecker!({
+              issuer: policy.issuer,
+              jti: jti.data,
+              tokenDigest: createHash("sha256").update(match[1]!, "ascii").digest("hex"),
+              expiresAt: new Date(expiresAt * 1_000).toISOString(),
+            }, { signal: checkerSignal })),
+            checkerSignal,
+          );
+          if (revocation !== "active") throw new AgentCoreJwtError("authorization");
+        } catch {
+          throw new AgentCoreJwtError("authorization");
+        }
       }
       return Object.freeze({
         issuer: policy.issuer,

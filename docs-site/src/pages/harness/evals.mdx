@@ -1,0 +1,37 @@
+# Evals
+
+## MCP golden set
+
+`services/harbor/eval/golden.jsonl` holds **30 cases** (G01–G30) run against a deployed MCP endpoint by `eval/run.mjs`.
+
+| Category | Cases |
+| --- | --- |
+| Reads | 17 |
+| Builds | 4 |
+| Quotes | 3 |
+| Executions | 3 |
+| Approvals | 2 |
+| Revoke | 1 |
+
+- 15 `search` cases check the returned operation names; 15 `execute` cases check the envelope (`ok`, keys, or an expected error such as the unlinked-account revoke guard).
+- 13 cases are **required**: live ledger reads, order-book depth, a simulated build, `tx.execute` producing a real pending owner approval, transaction status and the revoke guard.
+- The run **fails below 27/30** or if any required case fails.
+- It writes build and approval rows but never signs or submits. An optional `--live` mode performs one delegated Testnet `OfferCreate` behind several environment guards.
+
+Example cases:
+
+```json
+{"tool":"search","arguments":{"query":"ledger.fee"}}
+```
+
+```js
+const result = await harbor.venues.list({});
+if (!result.ok) return result;
+return { ...result, data: result.data.map((venue) => venue.id) };
+```
+
+## Offline improvement eval
+
+`eval/offline-improvement/` compares a baseline and a candidate agent behavior on fixtures (`pilot.offline-evaluation-fixture.v1`): quality, evidence coverage, latency, and policy, scope or side-effect violations, plus output-hash determinism.
+
+The evaluator rejects any regression in quality or coverage, or more than 1,000 ms of extra latency. It produces a review report, a promotion manifest left as `pending_human_review` and a rollback manifest left as `prepared_not_applied`. It has no write path: a human promotes changes.

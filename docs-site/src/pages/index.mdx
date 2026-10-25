@@ -1,0 +1,37 @@
+---
+layout: minimal
+title: Pilot Docs
+description: The agentic DeFi terminal for the XRP Ledger.
+---
+
+import { HomePage, Cards, Card } from 'vocs'
+
+<HomePage.Root>
+  <HomePage.Logo />
+  <HomePage.Tagline>The agentic DeFi terminal for the XRP Ledger.</HomePage.Tagline>
+  <HomePage.Description>
+    One MCP server and REST API that maps every XRPL venue, and a trading harness that lets any AI model research and act on the ledger through scoped, revocable permissions. Your owner key never leaves your wallet.
+  </HomePage.Description>
+  <HomePage.Buttons>
+    <HomePage.Button href="/introduction/what-is-pilot" variant="accent">Read the guide</HomePage.Button>
+    <HomePage.Button href="/quickstart/mcp">Connect an AI client</HomePage.Button>
+  </HomePage.Buttons>
+</HomePage.Root>
+
+## Start here
+
+<Cards>
+  <Card icon="lucide:compass" title="What is Pilot?" description="The MCP, the API and the harness, and how they fit together." to="/introduction/what-is-pilot" />
+  <Card icon="lucide:plug" title="Connect Claude, Codex or Cursor" description="Add Pilot as an MCP server in one command." to="/quickstart/mcp" />
+  <Card icon="lucide:terminal" title="Call the REST API" description="Every operation is also `POST /api/ops/{op}`." to="/quickstart/api" />
+  <Card icon="lucide:shield-check" title="Security model" description="Who holds which key, and what the agent can never do." to="/introduction/security" />
+</Cards>
+
+## Go deeper
+
+<Cards>
+  <Card icon="lucide:code" title="MCP tools" description="`search` and a sandboxed `execute` over 95 typed operations." to="/mcp/tools" />
+  <Card icon="lucide:bot" title="Trading harness" description="Typed intents, a policy engine and a 10-state card lifecycle." to="/harness/overview" />
+  <Card icon="lucide:blocks" title="Integrations" description="Ledger, AWS, QuickNode, Mastercard AP4M, x402 and more." to="/integrations" />
+  <Card icon="lucide:book-open" title="Operation reference" description="Every operation, grouped by family." to="/reference/operations" />
+</Cards>

@@ -1,0 +1,70 @@
+# Use the Pilot app [From wallet to your first agent trade]
+
+The Pilot app is the trading harness with a UI. Logged-out visitors can explore a simulated demo (fixture data, recorded device screens, no signing). Real use needs a wallet.
+
+## Onboarding
+
+Basic setup gets you a working research chat. The trading track is optional and adds delegated execution.
+
+::::steps
+
+### Wallet
+
+Connect GemWallet (the default), Crossmark, or a Ledger. Pilot asks you to sign a **non-broadcast** sign-in challenge (an `AccountSet` with `Fee "0"` and memo `pilot-wallet-auth-v1`). It proves you control the account and is never submitted. Your wallet session lasts up to 60 minutes.
+
+### AI model
+
+Sign in with OpenRouter (OAuth with PKCE) and pick a model, or use Amazon Bedrock if your deployment enables it. See [OpenRouter](/integrations/openrouter).
+
+### Done: research is ready
+
+You can now chat, open Markets, Map, Portfolio, Memory and Backtests. Nothing so far can move funds.
+
+### Fund (trading track)
+
+*Prepare the budget account.* Your wallet signs an RLUSD `TrustSet`. On Testnet, the local dev-acquisition path can also buy exactly 75 official Testnet RLUSD with a fill-or-kill order.
+
+### Delegate
+
+*Approve seven narrow permissions.* Your wallet signs a `DelegateSet` granting the engine's delegate account: `OfferCreate`, `OfferCancel`, `TrustSet`, `AMMDeposit`, `AMMWithdraw`, `EscrowFinish`, `CheckCash`. The delegate pays its own fees.
+
+### Verify and mandate (optional)
+
+*Verify a bounded budget* (Mastercard Open Finance, mock by default) and *approve the autonomous mandate* for agentic payments. See [Mastercard](/integrations/mastercard).
+
+### Trading
+
+The final step reads *Your testnet trading setup is active*. You can now ask the agent to act.
+
+::::
+
+## Your first trade
+
+Type in chat:
+
+> Swap 10 XRP to RLUSD with at most 1% slippage.
+
+You will see an **intent card** move through `drafting → planned → simulated → policy_checked`, then either:
+
+- `executing → submitted → validated` if it is under your auto-execute threshold, or
+- `awaiting_approval`, with a button to sign the exact transaction in your wallet.
+
+Each card carries a **trust receipt**: which model proposed it, whether untrusted text was screened, who signed, which RPC route was used and how it was confirmed.
+
+## Pages in the app
+
+| Page | What it is for |
+| --- | --- |
+| **Chat** (`/chat`) | Ask, research, propose intents, approve. |
+| **Markets** (`/markets`) | Live pair data read from public XRPL nodes in your browser; market analytics. |
+| **Map** (`/map`) | The venue catalog as an ecosystem map. |
+| **Portfolio** (`/portfolio`) | Balances, trust lines, delegation status and revoke. |
+| **Memory** (`/memory`) | Your vault: notes, policy editor, preferences and workflow lessons to accept, correct or forget. |
+| **Backtests** (`/research/backtests`) | Research-only daily-bar backtests on XRP/USD. |
+| **Research lab** (`/strategy-research`) | Simulation of strategy behavior over ledger observations. |
+| **Strategy** (`/strategy`) | Draft, authorize, pause and kill declarative strategies. |
+| **Integrations** (`/integrations/*`) | Plain-language explainers for Ledger, AWS, QuickNode and Mastercard. |
+
+## Revoke at any time
+
+Portfolio → **Revoke**. The engine prepares an empty-permission `DelegateSet`; you sign it. Execution stops immediately, and revocation is complete once the ledger validates it.

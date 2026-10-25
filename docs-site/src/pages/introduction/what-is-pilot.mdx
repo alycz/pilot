@@ -1,0 +1,52 @@
+# What is Pilot? [The agentic DeFi terminal for the XRP Ledger]
+
+Pilot is one product with two parts that you can use together or separately:
+
+| Part | What it is | Who uses it |
+| --- | --- | --- |
+| **The Pilot MCP & API** | An MCP server and a matching REST API that expose the XRP Ledger as **95 typed operations**: ledger and market reads, research, transaction builders, policy-checked execution, delegation, and agentic payments. | Any agent (Claude, Codex, Cursor, your own bot) or any app that wants to read from or act on XRPL. |
+| **The Pilot trading harness** | A web app (chat, markets, map, portfolio, memory, backtests, strategy) where a model you choose turns plain-language requests into **typed intents**, which run through a deterministic plan → simulate → policy → execute or approve pipeline. | Traders and teams who want an agent that can act, with guardrails they set. |
+
+The harness is built on the MCP & API. Everything the harness does, another agent can do through the same operations.
+
+## What "MCP" and "API" mean here
+
+**MCP** (Model Context Protocol) is the open standard AI clients use to call external tools. Pilot's MCP server gives a model exactly two tools:
+
+- **`search`** finds the right operation, venue, merchant or playbook for a task, with its exact arguments.
+- **`execute`** runs a short JavaScript snippet in a sandbox with no network access. The snippet calls typed operations such as `harbor.ledger.account.lines(...)` and returns the result. This is often called *code mode*: one tool call can chain up to 30 operations.
+
+**The REST API** exposes the same operations to ordinary code: `POST /api/ops/{operation}` with the operation's arguments as the JSON body. Same auth, same response envelope, same policy.
+
+:::info[Why the code says "harbor"]
+Pilot's execution engine runs as a service named `harbor` (Cloudflare Worker, `services/harbor`). You will see that name in the MCP server identity, the `harbor.*` script namespace and environment variables. It is the engine inside Pilot, not a separate product.
+:::
+
+## What makes it different
+
+- **Agents never hold a key that matters.** The owner key stays in your wallet or on your Ledger. Pilot's engine holds only a narrow, encrypted *delegate* key that can sign the seven transaction types you granted on-ledger, and nothing else.
+- **Built on XRPL's native permission system.** Delegation uses `DelegateSet` (XLS-75 Permission Delegation). Revoking is one owner-signed transaction.
+- **A policy engine decides, not the model.** Every transaction passes 11 ordered rules (network, link, transaction type, issuer allowlist, preflight, simulation, slippage, per-transaction and daily caps). Small, allowed actions auto-execute; anything bigger comes back to you for a sign-only approval of the exact transaction; anything unsafe is blocked and never retried.
+- **Bring your own model.** Sign in with OpenRouter or use Amazon Bedrock. No model vendor is hard-wired.
+- **Memory that you can read.** Validated trades, policy and preferences are written to an Obsidian-compatible Markdown vault. Preferences are proposed, never silently saved.
+- **One map of the ecosystem.** 23 venues are catalogued: 6 XRPL primitives with transaction builders (DEX, AMM, Payments, Escrow, Checks, Single-asset Vault), 3 more primitives catalogued without builders (Lending, Permissioned DEX, x402), and 14 ecosystem venues for discovery.
+
+## Where things run
+
+```text
+ Your AI client ─┐                      ┌─ Pilot web app (Next.js)
+ (Claude, Codex, │   MCP  /mcp          │   chat · markets · portfolio · memory
+  Cursor, bot)   ├──────────────┐  ┌────┤   typed intents · card lifecycle
+ Your app ───────┘  REST /api/ops│  │    └─ owner wallet signs (sign-only)
+                                 ▼  ▼
+                  Pilot execution engine (Cloudflare Worker + D1)
+                  95 operations · policy · delegated signer · relay · watcher
+                                 │
+               XRPL Mainnet (reads) · Testnet / Devnet (execution)
+```
+
+## Next
+
+- [How it works](/introduction/how-it-works): the stack, layer by layer, with three example flows.
+- [Security model](/introduction/security): who holds which key.
+- [Quickstart: connect an AI client](/quickstart/mcp).

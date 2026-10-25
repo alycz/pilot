@@ -1,0 +1,64 @@
+# REST API
+
+## Operations
+
+```http
+POST /api/ops/{operation}
+Authorization: Bearer <principal>:<token>
+Content-Type: application/json
+```
+
+- The body is the operation's arguments as raw JSON (no wrapper). Arguments are validated against a strict schema: unknown keys are rejected.
+- Any method other than `POST` returns `405` with `Allow: POST`.
+- Request and response bodies are each capped at **1 MiB**.
+- Responses carry `Cache-Control: no-store`.
+- There is no idempotency header: idempotency is the `idempotency_key` argument of [`tx.execute`](/mcp/transactions).
+- There are no rate limits on MCP or REST operations themselves. Model-demo and backtest quotas are separate and default off.
+
+## HTTP statuses
+
+| Status | Code | When |
+| --- | --- | --- |
+| 200 | — | The operation ran. **Check `ok`**: operation failures are `200` with `ok: false`. |
+| 200 | `OPERATION_FAILED` | The operation threw. |
+| 400 | `INVALID_JSON` | Bad JSON, bad `Content-Length` or empty body. |
+| 401 | `UNAUTHORIZED` | Missing or wrong bearer. Includes `WWW-Authenticate: Bearer`. |
+| 403 | `DEPLOYMENT_PROFILE_DISABLED` | REST is disabled in this deployment profile (for example free/QuickJS). |
+| 403 | `HOSTED_STATE_PRINCIPAL_SCOPE_DENIED` | The internal hosted-state credential was used for ordinary ops. |
+| 404 | `UNKNOWN_OPERATION` | No such operation. |
+| 405 | — | Not `POST`. |
+| 413 | `REQUEST_TOO_LARGE` | Body over 1 MiB. |
+| 500 | `RESPONSE_TOO_LARGE` | Result over 1 MiB. |
+| 503 | `KMS_CONFIGURATION_INVALID` | KMS mode is misconfigured (checked before routing). |
+| 503 | `AP4M_RUNTIME_CONFIGURATION_INVALID` | AP4M configuration is invalid (on `ap4m.*`). |
+
+## Other routes
+
+| Route | Auth | Purpose |
+| --- | --- | --- |
+| `GET /health` | none | `{"ok":true,"service":"harbor","health":"process","handoff_readiness":"not_evaluated"}` |
+| `ANY /mcp` | bearer | MCP Streamable HTTP. |
+| `GET /.well-known/http-message-signatures-directory` | none | Web Bot Auth key directory used by AP4M merchants ([Mastercard](/integrations/mastercard)). `503 WBA_DIRECTORY_UNAVAILABLE` if unconfigured. |
+| `POST /hooks/quicknode/wallet` | QuickNode HMAC | Wallet webhook confirmations ([QuickNode](/integrations/quicknode)). |
+| `POST /hooks/quicknode/watchdog` | QuickNode HMAC | Streams watchdog deliveries. |
+| `/internal/pilot-state/v1/*` | dedicated bearer | Hosted-state persistence for the Pilot app. Default off. |
+| `/internal/demo-model/v1/*` | bearer | Free-demo model quota. Default off. |
+
+## Example: read, then quote
+
+```bash
+curl -s "$PILOT_URL/api/ops/analytics.marketSnapshot" \
+  -H "Authorization: Bearer $PILOT_API_KEY" -H "Content-Type: application/json" \
+  -d '{
+    "network": "testnet",
+    "pair": {
+      "base": { "currency": "XRP" },
+      "quote": { "currency": "524C555344000000000000000000000000000000",
+                 "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" }
+    },
+    "depth_limit": 50,
+    "sample_base_amounts": ["1", "10", "100"]
+  }'
+```
+
+Returns a source-labelled, validated-ledger pair snapshot: book, AMM, spread and executable-liquidity estimates for each sample size, with explicit units and freshness.

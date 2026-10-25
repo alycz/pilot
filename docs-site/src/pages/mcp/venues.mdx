@@ -1,0 +1,72 @@
+# Venue catalog [23 venues, one map]
+
+The catalog (`services/harbor/catalog/venues/*.yaml`) describes every place an XRPL user can trade, lend, earn or pay. It powers `venues.list`, `venues.get`, `search` and the app's Map.
+
+```js
+await harbor.venues.get({ id: "xrpl-dex-clob" })
+```
+
+## XRPL primitives with builders
+
+These can be executed through Pilot (on Testnet/Devnet).
+
+| Venue | Transactions | Builders |
+| --- | --- | --- |
+| `xrpl-dex-clob`: DEX order book | `OfferCreate`, `OfferCancel` | `tx.swap`, `tx.offer`, `tx.offerCancel` |
+| `xrpl-amm`: AMM pools | `OfferCreate`, `Payment`, `AMMDeposit`, `AMMWithdraw` | `tx.swap`, `tx.ammDeposit`, `tx.ammWithdraw` |
+| `xrpl-payments` | `Payment` | `tx.payment` (owner-signed) |
+| `xrpl-escrow` | `EscrowCreate`, `EscrowFinish`, `EscrowCancel` | `tx.escrowCreate` (owner), `tx.escrowFinish`, `tx.escrowCancel` |
+| `xrpl-checks` | `CheckCreate`, `CheckCash`, `CheckCancel` | `tx.checkCreate` (owner), `tx.checkCash`, `tx.checkCancel` |
+| `xrpl-single-asset-vault` | `VaultDeposit`, `VaultWithdraw` | `tx.vaultDeposit`, `tx.vaultWithdraw` (Devnet, owner) |
+
+## Primitives catalogued without builders
+
+| Venue | Status | Read with |
+| --- | --- | --- |
+| `xrpl-lending` | live on Devnet and Lending-Devnet; voting on Mainnet | `lending.brokers` |
+| `xrpl-permissioned-dex` | live on Mainnet, Testnet, Devnet | — |
+| `xrpl-x402` | off-ledger payment protocol | `x402.pay` ([x402](/integrations/x402)) |
+
+## Ecosystem venues (discovery)
+
+| Venue | Layer | Mainnet status |
+| --- | --- | --- |
+| `doppler-finance` | off-ledger | live |
+| `first-ledger` | XRPL | live |
+| `horizon` | XRPL | live |
+| `hyperliquid-xrp-perps` | off-ledger | live (read via `perps.markets`) |
+| `magnetic-x` | XRPL | live |
+| `marsgate` | EVM | unavailable |
+| `moai-finance` | EVM | live |
+| `orchestra-finance` | XRPL | unavailable |
+| `securd` | off-ledger | unavailable |
+| `soil` | off-ledger | live |
+| `strobe` | EVM | unavailable |
+| `tx-network-sologenic` | XRPL | live |
+| `xpmarket` | XRPL | live |
+| `xrpl-evm` | EVM sidechain | live |
+
+Discovery venues are for research and routing explanations. Pilot never executes on them.
+
+## Compare routes
+
+```js
+await harbor.venues.compare({
+  network: "testnet",
+  account: "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
+  base: { currency: "XRP" },
+  quote: { currency: "524C555344000000000000000000000000000000",
+           issuer: "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" },
+  size: "10000000"
+})
+```
+
+Returns three priced routes (order book, AMM, payment path) with the `unverified-match` caveat.
+
+## Yield
+
+`yield.options` compares AMM fee inputs, Devnet single-asset vaults and catalogued off-ledger yield venues in one call:
+
+```js
+await harbor.yield.options({ amm_limit: 10, vault_network: "devnet", vault_ids: ["9E48...C3BA"] })
+```

@@ -1,0 +1,50 @@
+# Authentication
+
+## Bearer credentials
+
+```http
+Authorization: Bearer <principal>:<token>
+```
+
+The value is split at the first `:`. The engine compares it in constant time against its `HARBOR_API_KEYS` secret, a comma-separated list of `principal:token` pairs.
+
+**The principal is a security boundary.** Every account link, policy, build, approval, execution and event is stored under it. Two principals never see each other's state. Give an organization-wide connector its own principal instead of a personal one.
+
+## Getting a key
+
+There is no self-serve key endpoint. An operator generates a token and adds it to the engine's secret:
+
+```bash
+# generate a token
+openssl rand -hex 32
+
+# add "<principal>:<token>" (comma-separated for several) to the Worker secret
+npx wrangler secret put HARBOR_API_KEYS
+```
+
+Use 32–128 characters of base64url for tokens. The local secret-file validators enforce `^[A-Za-z0-9_-]{32,128}$`.
+
+## Local development
+
+When `HARBOR_LOCAL_DEV=true` and the request host is `localhost`, `127.0.0.1` or `[::1]`, requests without a bearer run as principal `local-dev`. Trading, x402, owner-review and capability profiles always require a bearer.
+
+## Failure
+
+```http
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Bearer
+
+{"ok":false,"error":{"service":"auth","kind":"error","message":"Unauthorized","code":"UNAUTHORIZED"}}
+```
+
+## Separate credentials by design
+
+The Pilot app uses distinct credentials for distinct jobs, and the engine refuses to let them overlap:
+
+| Credential | Used for |
+| --- | --- |
+| `HARBOR_API_KEY` | Ordinary operations from the Pilot server. |
+| `HARBOR_X402_API_KEY` | Only `x402.pay`, against a dedicated engine process. Principal and token must differ from the above. |
+| `PILOT_HOSTED_STATE_API_KEY` | Only `/internal/pilot-state/*`. Denied ordinary ops and MCP. |
+
+All of them are server-only and never reach the browser or the model.

@@ -1,0 +1,46 @@
+# Typed intents
+
+An intent is the only way the model can ask for something to happen. Every intent is a **strict** schema: unknown fields are rejected, amounts are positive decimal strings, and each kind maps to exactly one engine builder.
+
+Every intent has:
+
+```ts
+{ id: string /* ≤ 128 chars, also the idempotency key */, network: "testnet" | "devnet" | ... }
+```
+
+## Kinds
+
+| `kind` | Fields | Builder |
+| --- | --- | --- |
+| `swap` | `sell`, `buy` (`{ currency, issuer? }`), `amount`, `side` (`sell` \| `buy`), `max_slippage_bps` (0–10000) | `tx.swap`, fill-or-kill. XRP amounts are converted to drops (≤ 6 decimals). |
+| `limit` | `sell`, `buy`, `sell_amount`, `buy_amount`, `expires_at?` | `tx.offer` |
+| `cancel` | `offer_sequence` | `tx.offerCancel` |
+| `lp_deposit` | `asset`, `asset2`, `amount`, `amount2?` | `tx.ammDeposit` (single- or two-sided) |
+| `lp_withdraw` | `asset`, `asset2`, `amount`, `amount2?` | `tx.ammWithdraw` |
+| `vault_deposit` | `vault_id`, `amount`, `asset` | `tx.vaultDeposit` (Devnet) |
+| `pay` | `to`, `asset`, `amount`, `memo?` | `tx.payment` (always owner approval) |
+| `fund_budget` | `asset`, `amount` | `tx.payment` from your main account to the budget account |
+| `ap4m_purchase` | `merchant_id`, `sku`, `mandate_id` (Testnet) | `ap4m.purchase` (via the `ap4m_purchase` tool, not `propose_intent`) |
+| `x402_call` | `url`, `max_price_drops` | Rejected: x402 uses its dedicated operation. |
+
+The model-facing tool schema lists the first eight kinds. Non-standard currency codes are hex-encoded to 20 bytes. Every intent except `fund_budget` uses your **budget account** as the source.
+
+## Swap `side` semantics
+
+- `side: "sell"`: `amount` is how much of `sell` you give up.
+- `side: "buy"`: `amount` is exactly how much of `buy` you receive (exact-output).
+
+## Example
+
+```json
+{
+  "kind": "swap",
+  "id": "intent-2026-10-25-0007",
+  "network": "testnet",
+  "sell": { "currency": "XRP" },
+  "buy": { "currency": "RLUSD", "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" },
+  "amount": "100",
+  "side": "sell",
+  "max_slippage_bps": 100
+}
+```

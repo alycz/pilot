@@ -1,0 +1,35 @@
+# Security model [Who holds which key, and what can never happen]
+
+## Keys
+
+| Key | Held by | Can do |
+| --- | --- | --- |
+| **Owner key** | Your wallet (GemWallet, Crossmark) or your Ledger. Never Pilot's server, never the model. | Everything. Signs onboarding, the delegation grant and revoke, payments, and any over-limit approval. Always **sign-only**: Pilot relays the exact blob you signed. |
+| **Delegate key** | Pilot's engine, one per linked account, encrypted at rest with a 32-byte key-encryption key (optionally held in AWS KMS). | Only the transaction types you granted on-ledger with `DelegateSet`, and only inside policy. |
+| **Payer key** | Pilot's engine, separate from delegate keys. | Small, capped x402 and AP4M payments on Testnet. |
+| **Model provider key** | Your OpenRouter session (encrypted cookie bound to your wallet session) or server-side Bedrock credentials. | Calls the model. Never sees ledger keys. |
+
+## What the agent can never do
+
+- **Sign anything.** The model has no signing tool, and its `execute` access inside Pilot is a read-only allowlist.
+- **Touch Mainnet.** Mainnet is read-only, enforced in the builder, the policy engine, the signer and the submit path (`MAINNET_EXECUTION_DISABLED`).
+- **Send a payment by delegation.** `Payment`, `EscrowCreate`, `CheckCreate`, `PaymentChannelCreate`, `PaymentChannelFund`, `NFTokenCreateOffer`, `PaymentBurn` and `PaymentMint` are never delegated. `AccountSet`, `SetRegularKey`, `SignerListSet`, `DelegateSet`, `AccountDelete`, `Batch` and all `Vault*` / `Loan*` types are non-delegable.
+- **Retry a block.** A blocked intent fingerprint is not retried in the same run.
+- **Make more than one mutation per run.**
+- **Change your limits.** Memory and preferences are treated as untrusted context and cannot change permissions, amounts, limits, approvals or signing.
+- **Choose a URL, price or idempotency key for a paid call.** x402 and AP4M tools take only a merchant and SKU.
+
+## Defenses in the engine
+
+- **Ordered policy rules** with a strict verdict. See [Policy & delegation](/mcp/policy).
+- **Idempotency**: every `tx.execute` carries an `idempotency_key`, namespaced per principal and bound to the build. A mismatched retry fails closed.
+- **Atomic daily budget reservation** before any key is unwrapped.
+- **Approval binding**: an approved transaction must match the signed blob field for field. Approvals expire (10 minutes, or 90 seconds under `xrpl_execution_v2`).
+- **Sandbox**: `execute` scripts run with no outbound network, a 10 s deadline, 30 operation calls and 24 KiB of output. Script text and arguments matching `seed`, `secret`, `private` or `mnemonic` are rejected (`SENSITIVE_INPUT`).
+- **Untrusted text screening**: memos, token names and `Domain` fields can be screened by AWS Bedrock Guardrails and redacted before a model sees them ([AWS](/integrations/aws)).
+- **Watcher and kill switches**: a foreign-transaction watcher (runs on a scheduled trigger, designed for every minute), an optional QuickNode Streams watchdog, per-strategy kill and an account-wide global kill.
+- **SourceTag `2610240`** on every transaction the engine builds, with one canonical memo, so agent volume is attributable.
+
+## Fail-closed defaults
+
+Autonomous execution, sponsor adapters, model access, scheduled jobs and external mutations are **off by default** and refuse to start when configuration is missing or malformed. See [What is live](/reference/status).

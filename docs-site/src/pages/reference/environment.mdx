@@ -1,0 +1,54 @@
+# Environment variables
+
+Most are documented in `.env.example` (app), `services/harbor/.env.example` (engine) and `services/ap4m-merchants/.env.example`. A few app variables are read by code but not yet listed there: `HARBOR_X402_URL`, `HARBOR_X402_API_KEY`, `AGENTCORE_MODE` and `MASTERCARD_OF_MODE` (`PILOT_PUBLIC_ORIGIN` is present but commented out). These are the ones you are most likely to touch. Secrets stay server-side and are never committed.
+
+## Engine
+
+| Name | Values | Purpose |
+| --- | --- | --- |
+| `HARBOR_API_KEYS` | secret, `principal:token,...` | Bearer credentials. |
+| `HARBOR_KEK` | secret, Base64 of 32 bytes | Key-encryption key for delegate and payer keys. |
+| `EXEC_NETWORK` | `testnet` \| `devnet` | Execution network. |
+| `MAINNET_EXECUTION` | `false` | Always false. |
+| `HARBOR_SOURCE_TAG` | `2610240` | SourceTag on every built transaction. |
+| `EXECUTOR` | `dynamic` \| `quickjs` | Script sandbox runtime. |
+| `HARBOR_MCP_EXECUTION_ENABLED` | unset \| `true` \| `false` | `false` makes MCP search-only. |
+| `HARBOR_DEPLOYMENT_PROFILE` | e.g. `paid-dynamic` | Other profiles disable REST. |
+| `HARBOR_LOCAL_DEV` | `true` | Local bearer-less principal on loopback. |
+| `HARBOR_PUBLIC_URL` | URL | Where QuickNode posts hooks. |
+| `AUTONOMOUS_STRATEGY_RUNNER` | `false` | Strategy runner switch. |
+| `QN_MODE` | `off` \| `mock` \| `live` | [QuickNode](/integrations/quicknode). |
+| `GUARDRAILS_MODE`, `GUARDRAILS_THRESHOLD` | `off` \| `mock` \| `aws`; `0.8` | [AWS](/integrations/aws). |
+| `KMS_MODE`, `HARBOR_KEK_CIPHERTEXT` | `off` \| `kek` \| `sign` | [AWS](/integrations/aws). |
+| `AP4M_DEMO_ENABLED`, `AP4M_EVM_EVENT_ENABLED`, `AP4M_EVM_EVENT_MODE` | `false`; `false`; `off` \| `mock` | [Mastercard](/integrations/mastercard). |
+| `MASTERCARD_MCP_ENABLED` | unset \| `true` \| `false` | Developers MCP federation. |
+| `BITHOMP_API_KEY` | optional | Indexer fallback. |
+
+## App
+
+| Name | Values | Purpose |
+| --- | --- | --- |
+| `PILOT_DEPLOYMENT_PROFILE` | `local-wallet` \| `local-wallet-isolated-v1` \| `hosted` | Required. Never mix profile artifacts. |
+| `PILOT_PUBLIC_ORIGIN` | exact HTTPS origin | Hosted only. |
+| `HARBOR_MOCK` | `1` \| `0` | In-process mock or a real engine. |
+| `HARBOR_URL`, `HARBOR_API_KEY` | URL; secret | Engine connection (server only). |
+| `HARBOR_X402_URL`, `HARBOR_X402_API_KEY` | URL; secret | x402-only engine (isolated profile). |
+| `PILOT_HOSTED_STATE_API_KEY` | secret | Hosted-state persistence. |
+| `EXEC_NETWORK` | `testnet` \| `devnet` | Must match the engine. |
+| `NEXT_PUBLIC_DEV_SIGNER` | `0` \| `1` | Test-network browser signer. Hosted refuses `1`. |
+| `SESSION_SECRET` | secret, ≥ 32 chars | Sessions and wallet-action proofs. |
+| `P_LIVE_RLUSD_ACQUISITION_STATE_DIR` | absolute path, mode `0700` | Replay markers. Required for chat. |
+| `MODEL_DEFAULT`, `OPENROUTER_ALLOWED_MODELS` | model IDs | [OpenRouter](/integrations/openrouter). |
+| `DEMO_MODEL_ENABLED` and `DEMO_MODEL_*` | default off | Free demo model limits. |
+| `BEDROCK_MODE`, `BEDROCK_MODELS`, `BEDROCK_DAILY_TURN_CAP`, `AWS_BEARER_TOKEN_BEDROCK` | | Bedrock models. |
+| `AGENTCORE_MODE` | `off` \| `standin` \| `aws` | AgentCore research. |
+| `LEDGER_MODE`, `LEDGER_SPECULOS_URL`, `LEDGER_DEFAULT_ACCOUNT_INDEX` | | [Ledger](/integrations/ledger). |
+| `MASTERCARD_OF_MODE` | `mock` \| `sandbox` | Open Finance. |
+| `VAULT_BACKEND`, `VAULT_PATH`, `VAULT_GITHUB_TOKEN`, `VAULT_REPO` | | [Vault](/integrations/vault). |
+| `PILOT_STRUCTURED_PREFERENCES`, `PILOT_PERSONALIZATION_BACKEND`, `PILOT_PERSONALIZATION_STATE_DIR` | | [Memory](/harness/memory). |
+| `BACKTEST_EXTERNAL_READS_ENABLED`, `BACKTEST_QUOTA_*` | default off | [Backtesting](/harness/backtesting). |
+| `PILOT_HERMES_ENABLED` | `0` | [Hermes](/integrations/hermes). |
+
+:::warning
+Any value outside the documented set fails closed at startup. For example, `HARBOR_MOCK` must be exactly `1` or `0`, and a hosted profile with `LEDGER_SPECULOS_URL` set refuses to start.
+:::

@@ -189,11 +189,11 @@ async function assertAndCaptureChat(
   demoPresentation = false,
 ) {
   const receipt = turn.getByLabel(demoPresentation
-    ? "Demo capability preview"
+    ? "Capability preview"
     : "AWS and QuickNode trust receipt");
   await expect(receipt).toBeVisible({ timeout: 15_000 });
   if (demoPresentation) {
-    await expect(receipt.getByText("Demo", { exact: true })).toHaveCount(1);
+    await expect(receipt.getByText("Demo", { exact: true })).toHaveCount(0);
     await expect(receipt.getByText("QuickNode RPC", { exact: true })).toBeVisible();
     await expect(receipt.getByText("QuickNode webhook", { exact: true })).toBeVisible();
     await expect(receipt.getByText("QuickNode Streams", { exact: true })).toBeVisible();

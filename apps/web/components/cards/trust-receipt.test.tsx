@@ -98,7 +98,7 @@ describe("TrustReceipt", () => {
     expect(markup).toContain("local stand-in evidence, not a live QuickNode");
   });
 
-  it("collapses signed-out demo provenance into one label with neutral capability names", () => {
+  it("uses neutral capability names for the signed-out presentation", () => {
     const markup = renderToStaticMarkup(createElement(TrustReceipt, {
       presentation: "demo",
       trust: {
@@ -115,7 +115,7 @@ describe("TrustReceipt", () => {
       },
     }));
 
-    expect(markup).toContain('aria-label="Demo capability preview"');
+    expect(markup).toContain('aria-label="Capability preview"');
     for (const label of [
       "Bedrock Guardrails",
       "Amazon Bedrock",
@@ -124,7 +124,7 @@ describe("TrustReceipt", () => {
       "QuickNode webhook",
       "QuickNode Streams",
     ]) expect(markup).toContain(label);
-    expect(markup.match(/>Demo</g)).toHaveLength(1);
+    expect(markup).not.toMatch(/>Demo</);
     expect(markup).not.toMatch(/\(mock\)|Screened by|Model ·|Key protected by|RPC ·|Confirmed ·|Watched ·/);
   });
 

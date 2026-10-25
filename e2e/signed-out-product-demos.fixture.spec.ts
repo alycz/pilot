@@ -37,7 +37,8 @@ test("signed-out Backtests and Research lab are useful deterministic local demos
   const boundary = await installDemoBoundary(page, lane.baseURL);
 
   await page.goto("/research/backtests");
-  await expect(page.getByText("Demo · simulated sample results")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sample", exact: true })).toBeVisible();
+  await expect(page.getByText("Demo · simulated sample results")).toHaveCount(0);
   await expect(page.getByText(/not historical, live, or executable/i)).toBeVisible();
   await expect(page.getByText("Sample strategy return", { exact: true })).toBeVisible();
   await page.getByLabel("Starting XRP").fill("-1");
@@ -60,7 +61,7 @@ test("signed-out Backtests and Research lab are useful deterministic local demos
   await expect(page.getByText(/Parameters changed/i)).toBeVisible();
   await page.getByRole("button", { name: "Run simulated research" }).click();
   await expect(page.getByText(/Simulated run 2/i)).toBeVisible();
-  await page.getByRole("button", { name: "Reset demo" }).click();
+  await page.getByRole("button", { name: "Reset", exact: true }).click();
   await expect(page.getByText(/Simulated run 1/i)).toBeVisible();
   await page.reload();
   await expect(page.getByText(/Simulated run 1/i)).toBeVisible();
@@ -76,7 +77,7 @@ test("signed-out Agreements completes release and cancel locally, then discards 
 
   await page.goto("/agreements");
   await expect(page.getByRole("heading", { name: "Sample escrow-backed work agreement" })).toBeVisible();
-  await expect(page.getByText(/no provider or XRPL request is made/i)).toBeVisible();
+  await expect(page.getByText(/no provider or XRPL request is made/i)).toHaveCount(0);
   await page.getByRole("button", { name: /Simulate owner approval.*create/i }).click();
   await page.getByRole("button", { name: "Mark sample delivery reviewed" }).click();
   await page.getByRole("button", { name: "Review simulated release" }).click();

@@ -164,9 +164,9 @@ test("keeps the logged-out demo local without fabricating AWS trust evidence", a
 
   await submitPrompt(page);
   const turn = submittedTurn(page);
-  const demoReceipt = turn.getByLabel("Demo capability preview");
+  const demoReceipt = turn.getByLabel("Capability preview");
   await expect(demoReceipt).toBeVisible({ timeout: 30_000 });
-  await expect(demoReceipt.getByText("Demo", { exact: true })).toHaveCount(1);
+  await expect(demoReceipt.getByText("Demo", { exact: true })).toHaveCount(0);
   await expect(turn.getByText(/\(mock\)/)).toHaveCount(0);
   await expect(turn.getByText("Simulated · no wallet or ledger transaction", { exact: true })).toHaveCount(0);
   await expect(turn.getByLabel("AWS trust receipt")).toHaveCount(0);

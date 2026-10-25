@@ -185,7 +185,7 @@ export function StrategySignedOutDemo({
               </span>
               <span className="mr-1 font-mono text-[11px] tabular-nums text-muted-foreground">{state.cursor + 1} / {DEMO_MARKET_EVENTS.length}</span>
               <button type="button" onClick={reset} className="bracket bracket-light inline-flex h-10 items-center gap-2 border border-border px-3.5 text-[13px] transition hover:bg-white/[0.05] motion-reduce:transition-none pointer-coarse:h-11 rounded-md">
-                <RotateCcw className="size-3.5" aria-hidden="true" />Reset demo
+                <RotateCcw className="size-3.5" aria-hidden="true" />Reset
               </button>
             </div>
           </header>

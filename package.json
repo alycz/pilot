@@ -12,6 +12,7 @@
     "dev:isolated": "node scripts/dev-pilot-isolated-v1.mjs",
     "dev:isolated:x402": "node scripts/dev-pilot-isolated-x402-v1.mjs",
     "ledger:sim": "ELF=tools/ledger-sim/fixtures/xrp-2.8.2-nanox-api27.elf tools/ledger-sim/run-speculos.sh",
+    "ledger:companion": "tsx tools/ledger-companion/server.ts",
     "ledger:conformance": "tsx tools/ledger-sim/conformance.mjs",
     "test:ledger-sim": "TEST_LEDGER_SPECULOS=1 vitest run packages/wallet/test/ledger-speculos.test.ts",
     "typecheck": "pnpm -r --if-present typecheck && pnpm typecheck:scripts && pnpm typecheck:e2e",

@@ -102,6 +102,7 @@ describe("Ledger wallet facade", () => {
     expect(seen).toContainEqual({ interaction: "sign-transaction", busy: true });
     expect(wallet.ledgerTransport).toBe("virtual");
     expect(wallet.custody).toBe("software");
+    await expect(wallet.ledgerAppVersion?.()).resolves.toBe("2.8.2");
   });
 
   it("verifies the same address on the device", async () => {

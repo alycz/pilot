@@ -45,6 +45,8 @@ export interface PilotWallet {
   readonly custody?: "hardware" | "software";
   /** Present only for Ledger facades so callers can label custody truthfully. */
   readonly ledgerTransport?: "webhid" | "virtual";
+  /** Connected Ledger XRP app version, for strict local companion gating. */
+  ledgerAppVersion?(): Promise<string>;
   verifyAddressOnDevice?(): Promise<void>;
   onDeviceState?(listener: (state: LedgerDeviceState) => void): () => void;
   /** Record independently verified owner revocation before destructive cleanup. */

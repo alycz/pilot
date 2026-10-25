@@ -14,6 +14,7 @@ import { AP4M_EVM_EVENT_PROFILE } from './event-config';
 export type PreparedVoucherRedemptionExpectation = Readonly<{
 	from: Address;
 	maxGasLimit: bigint;
+	maxGasPrice: bigint;
 	channelId: Hex;
 	cumulativeAmount: string;
 	signature: Hex;
@@ -94,11 +95,14 @@ export function validatePreparedVoucherRedemption(
 		!Hex32Schema.safeParse(expected.channelId).success ||
 		!EcdsaSignatureSchema.safeParse(expected.signature).success ||
 		expected.maxGasLimit < 1n ||
+		expected.maxGasPrice < 1n ||
 		transaction.chainId !== AP4M_EVM_EVENT_PROFILE.chainId ||
 		address(transaction.from, 'transaction sender') !== expectedFrom ||
 		address(transaction.to, 'transaction target') !== expectedTo ||
 		canonicalUint(transaction.value, 'transaction value') !== 0n ||
-		canonicalUint(transaction.gasLimit, 'transaction gas limit') > expected.maxGasLimit
+		canonicalUint(transaction.gasLimit, 'transaction gas limit') > expected.maxGasLimit ||
+		transaction.feeModel !== 'legacy' ||
+		canonicalUint(transaction.gasPrice, 'transaction gas price') > expected.maxGasPrice
 	) {
 		throw new Ap4mEvmValidationError(
 			'Prepared AP4M transaction does not match the authorized operation',
@@ -106,7 +110,10 @@ export function validatePreparedVoucherRedemption(
 		);
 	}
 	const decoded = decodeVoucherRedemptionCall(transaction.data as Hex);
-	const expectedArgs = [expected.channelId, cumulativeAmount, expected.signature];
+	const expectedArgs = [{
+		channelId: expected.channelId,
+		cumulativeAmount,
+	}, expected.signature];
 	if (!equal(decoded.args, expectedArgs)) {
 		throw new Ap4mEvmValidationError(
 			'Prepared AP4M transaction arguments do not match the authorized operation',

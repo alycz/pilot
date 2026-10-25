@@ -25,10 +25,12 @@ function transaction(overrides: Record<string, unknown> = {}) {
 		data: encodeFunctionData({
 			abi: AP4M_PAYMENT_LEDGER_ABI,
 			functionName: 'redeemVoucher',
-			args: [CHANNEL, 20n, SIGNATURE],
+			args: [{ channelId: CHANNEL, cumulativeAmount: 20n }, SIGNATURE],
 		}),
 		value: '0',
 		gasLimit: '250000',
+		feeModel: 'legacy',
+		gasPrice: '1000000000',
 		...overrides,
 	};
 }
@@ -37,6 +39,7 @@ function expectation(overrides: Record<string, unknown> = {}) {
 	return {
 		from: AGENT,
 		maxGasLimit: 300_000n,
+		maxGasPrice: 10_000_000_000n,
 		channelId: CHANNEL,
 		cumulativeAmount: '20',
 		signature: SIGNATURE,
@@ -68,15 +71,16 @@ describe('AP4M EVM protocol validation', () => {
 
 	it('decodes and matches every prepared-call binding', () => {
 		expect(validatePreparedVoucherRedemption(transaction(), expectation()).args)
-			.toEqual([CHANNEL, 20n, SIGNATURE]);
+			.toEqual([{ channelId: CHANNEL, cumulativeAmount: 20n }, SIGNATURE]);
 		for (const altered of [
 			transaction({ chainId: 1 }), transaction({ from: FUNDING }), transaction({ to: PAYOUT }),
 			transaction({ value: '1' }), transaction({ gasLimit: '300001' }), transaction({ data: '0x' }),
 			transaction({ gasLimit: '0' }),
+			transaction({ feeModel: 'eip1559' }), transaction({ gasPrice: '10000000001' }),
 			transaction({ data: encodeFunctionData({
 				abi: AP4M_PAYMENT_LEDGER_ABI,
 				functionName: 'redeemVoucher',
-				args: [CHANNEL, 21n, SIGNATURE],
+				args: [{ channelId: CHANNEL, cumulativeAmount: 21n }, SIGNATURE],
 			}) }),
 		]) {
 			expect(() => validatePreparedVoucherRedemption(altered, expectation()))

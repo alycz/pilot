@@ -6,7 +6,7 @@ const FIXTURE_MODEL = "openai/gpt-oss-20b:free";
 
 export async function installFixtureChatPrerequisites(
   page: Page,
-  options: { personalization?: boolean; ledger?: boolean } = {},
+  options: { personalization?: boolean; ledger?: boolean; authenticated?: boolean } = {},
 ): Promise<void> {
   await page.route("**/api/config/public", async (route) => {
     await route.fulfill({
@@ -31,7 +31,13 @@ export async function installFixtureChatPrerequisites(
     });
   });
   await page.route("**/api/auth/wallet/session", async (route) => {
-    await route.fulfill({ json: { authenticated: false } });
+    await route.fulfill({ json: options.authenticated === false
+      ? { authenticated: false }
+      : {
+          authenticated: true,
+          account: "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
+          network: "testnet",
+        } });
   });
   await page.route("**/api/auth/openrouter/session", async (route) => {
     if (route.request().method() !== "GET") {

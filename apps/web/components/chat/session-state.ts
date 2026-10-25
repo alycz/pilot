@@ -14,6 +14,13 @@ export function chatWalletActionProofRequired(
   return config?.walletActionProofRequired === true;
 }
 
+export function chatUsesIllustrativeDemo(
+  session: WalletSessionStatus | null | undefined,
+  sessionUi: ChatSessionUi,
+): boolean {
+  return session?.authenticated !== true || (!sessionUi.ready && sessionUi.notice !== null);
+}
+
 export function chatSessionUi(
   config: PublicPilotConfig | null | undefined,
   session: WalletSessionStatus | null | undefined,

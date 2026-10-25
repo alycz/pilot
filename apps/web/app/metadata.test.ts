@@ -5,8 +5,10 @@ import { describe, expect, it } from "vitest";
 describe("site metadata", () => {
   it("uses the approved home-page tab title", () => {
     const page = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
+    const layout = readFileSync(new URL("./layout.tsx", import.meta.url), "utf8");
 
     expect(page).toContain('title: { absolute: "Agentic DeFi Terminal for XRPL" }');
+    expect(layout).toContain('default: "Agentic DeFi Terminal for XRPL"');
     expect(page).not.toContain("XRPL agent infrastructure and trading workspace");
   });
 

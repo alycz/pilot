@@ -17,6 +17,20 @@ import {
 } from "./demo-script";
 
 describe("demo prompt router", () => {
+  it("keeps the complete original suggestion catalogue", () => {
+    expect(DEMO_SUGGESTIONS.map(({ prompt }) => prompt)).toEqual([
+      "Review the recorded Ledger approval",
+      "Swap 80 RLUSD for XRP, max 1% slippage",
+      "Swap 1,000 XRP to RLUSD at the best rate",
+      "Keep me at 50% XRP and rebalance if it drifts 5%",
+      "Compare AMM vs order book for 1,000 XRP",
+      "Deposit 100 XRP into the vault",
+      "Why would FREEMONEY be blocked?",
+      "What are my spending limits?",
+      "Show my portfolio",
+    ]);
+  });
+
   it("routes every suggestion to its intended scenario", () => {
     for (const suggestion of DEMO_SUGGESTIONS) {
       expect(classifyDemoPrompt(suggestion.prompt)).toBe(suggestion.scenario);

@@ -87,7 +87,7 @@ test("golden 04 lists every policy and pre-flight failure and submits nothing", 
   });
 
   await page.goto(pilotRoutes.chat);
-  await expect(page.getByText("Harbor is ready", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Message Pilot")).toBeEnabled();
   await page.getByLabel("Message Pilot").fill(prompt);
   await page.getByRole("button", { name: "Send message" }).click();
 

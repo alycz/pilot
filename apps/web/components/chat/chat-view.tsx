@@ -11,7 +11,7 @@ import {
   type LedgerDeviceState,
   type PilotWallet,
 } from "@pilot/wallet";
-import { ArrowLeftRight, ArrowUp, BarChart3, Bot, FlaskConical, Info, Landmark, type LucideIcon, Navigation2, RotateCcw, Scale, ShieldAlert, Square, UserRound, Wallet } from "lucide-react";
+import { ArrowLeftRight, ArrowUp, BarChart3, Bot, FlaskConical, Info, Landmark, type LucideIcon, Navigation2, Scale, ShieldAlert, Square, UserRound, Wallet } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -62,7 +62,7 @@ import {
   type ConfiguredWalletMetadata,
 } from "./configured-wallet";
 import { PreferenceCard, preferenceProposalRenderKey } from "./preference-card";
-import { chatSessionUi, chatWalletActionProofRequired } from "./session-state";
+import { chatSessionUi, chatUsesIllustrativeDemo, chatWalletActionProofRequired } from "./session-state";
 import { GuardrailBanner } from "./guardrail-banner";
 import { executeFreshLedgerBuild } from "./ledger-approval";
 import { QuickNodeFreezeBanner } from "./quicknode-freeze-banner";
@@ -324,7 +324,7 @@ function ChatViewInner() {
   }, [x402Scope]);
   // Visitors without a usable wallet session get a fully local, scripted demo.
   // The live path below is unchanged and only runs when `walletReady`.
-  const demoMode = !walletReady && sessionUi.notice !== null;
+  const demoMode = chatUsesIllustrativeDemo(walletSession, sessionUi);
   const draftRequestMode = useMemo(
     () => resolveRequestMode(requestMode, draft),
     [draft, requestMode],
@@ -1352,25 +1352,10 @@ function ChatViewInner() {
                   <Info className="h-3.5 w-3.5" aria-hidden="true" />
                   <span className="max-sm:sr-only">Card states</span>
                 </button>
-                {walletReady ? (
-                  <p className="inline-flex min-w-0 items-center gap-1.5 truncate text-xs text-muted-foreground">
-                    <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-executed" />
-                    <span>Harbor is ready</span>
-                    <span aria-hidden="true">·</span>
-                    <span className="truncate font-mono">{sessionUi.label}</span>
+                {walletSession?.authenticated === true ? (
+                  <p className="min-w-0 truncate font-mono text-xs text-muted-foreground">
+                    {walletSession.account.slice(0, 6)}…{walletSession.account.slice(-5)}
                   </p>
-                ) : null}
-                {!demoMode && pendingX402 ? (
-                  <button
-                    type="button"
-                    disabled={running || !walletReady}
-                    onClick={() => void submit(X402_RECOVERY_PROMPT, { x402: true, expectedOperationId: pendingX402.operation_id, requestMode: "one_time" })}
-                    aria-label={`Resume pending x402 recovery. ${pendingX402.phase === "paid_journal_pending" ? "Payment is validated and durable journal recovery is pending." : pendingX402.phase === "recovering" ? "Settlement recovery is pending." : "A recovery identity is reserved."}`}
-                    className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-approval/30 bg-approval/8 px-2.5 text-xs font-medium text-approval transition hover:bg-approval/15 disabled:cursor-not-allowed disabled:opacity-45 pointer-coarse:h-11"
-                  >
-                    <RotateCcw className="size-3.5" aria-hidden="true" />
-                    <span className="hidden sm:inline">Resume recovery</span>
-                  </button>
                 ) : null}
                 <div className="ml-auto flex shrink-0 items-center gap-1.5">
                   <RequestModeControl value={requestMode} resolution={draftRequestMode} disabled={running} onChange={setRequestMode} />

@@ -28,7 +28,7 @@ test("golden 02 answers yield research with freshness and caveats but no action 
   });
 
   await page.goto(pilotRoutes.chat);
-  await expect(page.getByText("Harbor is ready", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Message Pilot")).toBeEnabled();
   await page.getByLabel("Message Pilot").fill(prompt);
   await page.getByRole("button", { name: "Send message" }).click();
 

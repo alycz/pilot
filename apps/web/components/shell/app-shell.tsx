@@ -75,13 +75,13 @@ type NavKey = "chat" | "markets" | "backtests" | "strategy-research" | "map" | "
 const navigation = [
   { key: "chat", label: "Chat", href: "/chat", icon: MessageCircle },
   { key: "markets", label: "Markets", href: "/markets", icon: CandlestickChart },
-  { key: "backtests", label: "Backtests", href: "/research/backtests", icon: CandlestickChart },
-  { key: "strategy-research", label: "Research lab", href: "/strategy-research", icon: BookOpenText },
   { key: "map", label: "Map", href: "/map", icon: Map },
   { key: "portfolio", label: "Portfolio", href: "/portfolio", icon: CircleDollarSign },
+  { key: "memory", label: "Memory", href: "/memory", icon: Sparkles },
+  { key: "backtests", label: "Backtests", href: "/research/backtests", icon: CandlestickChart },
+  { key: "strategy-research", label: "Research lab", href: "/strategy-research", icon: BookOpenText },
   { key: "strategy", label: "Strategy", href: "/strategy", icon: Bot },
   { key: "agreements", label: "Agreements", href: "/agreements", icon: Handshake },
-  { key: "memory", label: "Memory", href: "/memory", icon: Sparkles },
 ] as const;
 
 export function AppShell({

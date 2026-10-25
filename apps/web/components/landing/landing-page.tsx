@@ -12,6 +12,7 @@ import {
   Map as MapIcon,
   MessageCircle,
   MessageSquare,
+  Navigation,
   Navigation2,
   RotateCcw,
   Search,
@@ -264,15 +265,17 @@ function Hero() {
     <section aria-labelledby="hero-title" className="relative overflow-hidden border-b border-border">
       <div className="relative mx-auto max-w-6xl px-4 pb-16 pt-16 sm:px-6 sm:pb-24 sm:pt-24 lg:px-8">
         <div className="mx-auto max-w-5xl text-center">
-          <p className="inline-flex items-center gap-2 border border-border-strong bg-card px-2 py-1 text-[13px] text-foreground/80 rounded-xl">
-            <span aria-hidden="true" className="h-1.5 w-1.5 bg-primary" />
-            Pilot · Security-first · Self-improving
+          <p className="inline-flex items-center gap-2 text-primary" aria-label="Pilot">
+            <Navigation className="h-7 w-7 shrink-0" strokeWidth={2.25} aria-hidden="true" />
+            <span aria-hidden="true" className="text-[1.75rem] font-medium leading-none tracking-tight">Pilot</span>
           </p>
-          <h1 id="hero-title" className="mx-auto mt-7 max-w-5xl text-balance text-[2.125rem] font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-[2.75rem] lg:text-[3.25rem] font-display">
-            The security-first, self-improving AI harness for trading agents on XRPL.
+          <h1 id="hero-title" className="mx-auto mt-6 max-w-5xl text-balance text-[2.125rem] font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-[2.75rem] lg:text-[3.25rem] font-display">
+            The Agentic DeFi Terminal for XRPL
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-[15px] leading-7 text-muted-foreground sm:text-base">
-            Pilot runs your AI agent inside limits you set and permissions you can revoke at any time. It learns from every result, and its memory follows you across all chats and models.
+            A unified agentic harness for multi-venue discovery and execution.
+            <br className="hidden sm:block" />{" "}
+            Pilot is model-agnostic and its memory learns your trading style.
           </p>
           <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
             <Link

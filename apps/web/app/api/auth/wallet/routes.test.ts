@@ -478,6 +478,63 @@ describe("wallet auth route deployment boundary", () => {
     });
   });
 
+  it("rejects an identical hosted signed challenge replay after time advances", async () => {
+    const issuedAt = 1_800_000_000_000;
+    const clock = vi.spyOn(Date, "now").mockReturnValue(issuedAt);
+    try {
+      configure("hosted", "0");
+      const consumed = new Set<string>();
+      const hostedConsume = vi.fn<typeof fetch>(async (_input, init) => {
+        const payload = JSON.parse(String(init?.body)) as {
+          scopeId: string;
+          nonceDigest: string;
+        };
+        const key = `${payload.scopeId}:${payload.nonceDigest}`;
+        const fresh = !consumed.has(key);
+        consumed.add(key);
+        return new Response(JSON.stringify({ consumed: fresh }), {
+          headers: { "content-type": "application/json" },
+        });
+      });
+      vi.stubGlobal("fetch", hostedConsume);
+      const wallet = Wallet.generate();
+      const origin = "https://pilot.example";
+      const internalOrigin = "http://next-internal:3000";
+      const challenge = await issueChallenge(challengeRequest(
+        `${internalOrigin}/api/auth/wallet/challenge`,
+        wallet,
+        { origin },
+      ));
+      const challengeCookie = challenge.cookies.get(WALLET_CHALLENGE_COOKIE)?.value;
+      const challengeBody = await challenge.json() as { tx_json: Record<string, unknown> };
+      const txBlob = wallet.sign(challengeBody.tx_json as never).tx_blob;
+      const post = () => createSession(request(`${internalOrigin}/api/auth/wallet/session`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin },
+        body: JSON.stringify({ tx_blob: txBlob }),
+        cookies: { [WALLET_CHALLENGE_COOKIE]: challengeCookie! },
+      }));
+
+      clock.mockReturnValue(issuedAt + 1_000);
+      await expect(post()).resolves.toMatchObject({ status: 200 });
+      clock.mockReturnValue(issuedAt + 2 * 60_000);
+      const replay = await post();
+
+      expect(replay.status).toBe(401);
+      await expect(replay.json()).resolves.toEqual({
+        error: "The wallet authorization proof was already used.",
+      });
+      expect(hostedConsume).toHaveBeenCalledTimes(2);
+      const payloads = hostedConsume.mock.calls.map(([, init]) =>
+        JSON.parse(String(init?.body)) as Record<string, unknown>);
+      expect(payloads[1]?.scopeId).toBe(payloads[0]?.scopeId);
+      expect(payloads[1]?.nonceDigest).toBe(payloads[0]?.nonceDigest);
+      expect(payloads[0]?.expiresAtMs).toBe(issuedAt + 5 * 60_000);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it("fails hosted wallet authorization closed before issuing a session when replay state is absent", async () => {
     configure("hosted", "0");
     const wallet = Wallet.generate();

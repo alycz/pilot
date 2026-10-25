@@ -389,7 +389,7 @@ test("logged-out chat remains a local scripted exploration with no model or ledg
 }) => {
   requireLane(lane, "fixture");
   const unexpected: string[] = [];
-  await installFixtureChatPrerequisites(page);
+  await installFixtureChatPrerequisites(page, { authenticated: false });
   await page.route("**/api/config/public", async (route) => {
     await route.fulfill({
       json: {

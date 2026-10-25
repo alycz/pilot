@@ -40,6 +40,9 @@ export const WALLET_SESSION_COOKIE_OPTIONS = {
   maxAge: 60 * 60,
 };
 
+const WALLET_CHALLENGE_TTL_MS = WALLET_CHALLENGE_COOKIE_OPTIONS.maxAge * 1_000;
+const WALLET_SESSION_TTL_MS = WALLET_SESSION_COOKIE_OPTIONS.maxAge * 1_000;
+
 export type WalletSessionNetwork = "testnet" | "devnet";
 
 export type WalletSession = {
@@ -305,7 +308,7 @@ export function issueWalletChallenge(
     version: VERSION,
     account,
     network,
-    expiresAt: now + WALLET_CHALLENGE_COOKIE_OPTIONS.maxAge * 1_000,
+    expiresAt: now + WALLET_CHALLENGE_TTL_MS,
     nonce: options.nonce ?? randomBytes(32).toString("base64url"),
     ...(expectedWalletArtifactProfile(options.environment) ? {
       deployment_profile: PILOT_ISOLATED_DEPLOYMENT_PROFILE,
@@ -378,12 +381,17 @@ export function verifyWalletChallengeForConsumption(
     throw new Error("The wallet authorization signature is invalid.");
   }
 
+  // Anchor the session lifetime to the signed challenge's issuance time. The
+  // same challenge must derive the same durable replay scope even when an
+  // identical signed proof is submitted again later.
+  const sessionExpiresAt = challenge.expiresAt - WALLET_CHALLENGE_TTL_MS +
+    WALLET_SESSION_TTL_MS;
   return {
     session: {
       version: VERSION,
       account: challenge.account,
       network: challenge.network,
-      expiresAt: (options.now ?? Date.now()) + WALLET_SESSION_COOKIE_OPTIONS.maxAge * 1_000,
+      expiresAt: sessionExpiresAt,
       ...(challenge.deployment_profile ? {
         deployment_profile: challenge.deployment_profile,
       } : {}),

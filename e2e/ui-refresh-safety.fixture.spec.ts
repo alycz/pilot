@@ -67,7 +67,7 @@ test("chat URL state only opens reviewable UI and consumes a prepared draft", as
   expect(authorityRequests).toEqual([]);
 });
 
-test("workspace cleanup removes bulky promos while preserving bounded x402 recovery", async ({ page }) => {
+test("workspace cleanup removes status controls without mutating durable x402 recovery", async ({ page }) => {
   const mockOwner = "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59";
   const operationId = "x402-cleanup-recovery-001";
   let submittedOperation: unknown;
@@ -99,7 +99,11 @@ test("workspace cleanup removes bulky promos while preserving bounded x402 recov
     walletActionProofConfigured: false,
     mockMode: true,
   } }));
-  await page.route("**/api/auth/wallet/session", (route) => route.fulfill({ json: { authenticated: false } }));
+  await page.route("**/api/auth/wallet/session", (route) => route.fulfill({ json: {
+    authenticated: true,
+    account: mockOwner,
+    network: "testnet",
+  } }));
   await page.route("**/api/auth/openrouter/session", (route) => route.fulfill({ json: { mode: "none", connected: false } }));
   await page.route("**/api/chat", async (route) => {
     submittedOperation = (await route.request().postDataJSON() as Record<string, unknown>).operation_id;
@@ -113,16 +117,14 @@ test("workspace cleanup removes bulky promos while preserving bounded x402 recov
   await expect(page.getByRole("button", { name: "Premium comparison · x402" })).toHaveCount(0);
   await expect(page.getByText("x402 settlement recovery is pending.")).toHaveCount(0);
 
-  const recovery = page.getByRole("button", { name: /Resume pending x402 recovery/ });
-  await expect(recovery).toBeVisible();
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(recovery).toBeVisible();
-  const recoveryBox = await recovery.boundingBox();
-  expect(recoveryBox).not.toBeNull();
-  expect((recoveryBox?.x ?? 0) + (recoveryBox?.width ?? 0)).toBeLessThanOrEqual(390);
-  await recovery.click();
-  await expect(page.getByText("Recovery reused the existing fixture operation identity.")).toBeVisible();
-  expect(submittedOperation).toBe(operationId);
+  await expect(page.getByRole("button", { name: /Resume pending x402 recovery/ })).toHaveCount(0);
+  await expect(page.getByText("Harbor is ready", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Mock session", { exact: true })).toHaveCount(0);
+  expect(await page.evaluate(({ owner, operation }) => {
+    const key = `pilot:x402:pending:v1:testnet:${owner}:compare`;
+    return JSON.parse(localStorage.getItem(key) ?? "null")?.operation_id === operation;
+  }, { owner: mockOwner, operation: operationId })).toBe(true);
+  expect(submittedOperation).toBeUndefined();
 });
 
 test("map uses compact truthful status without the catalog banner controls", async ({ page }) => {
@@ -244,4 +246,52 @@ test("signed-out approval is visibly simulated and never crosses an authority bo
   await expect(page.getByRole("dialog", { name: "Review what your wallet would show" })).toHaveCount(0);
   await expect(approval).toBeVisible();
   expect(forbidden).toEqual([]);
+});
+
+test("hosted mock mode keeps signed-out chat on the complete local illustrative demo", async ({ page }) => {
+  const chatPosts: string[] = [];
+  await page.route("**/api/config/public", (route) => route.fulfill({ json: {
+    network: "testnet",
+    stableAsset: { currency: "RLUSD", issuer: "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV" },
+    devSignerEnabled: false,
+    walletActionProofRequired: false,
+    walletActionProofConfigured: false,
+    mockMode: true,
+  } }));
+  await page.route("**/api/auth/wallet/session", (route) => route.fulfill({ json: { authenticated: false } }));
+  await page.route("**/api/auth/openrouter/session", (route) => route.fulfill({ json: { mode: "none", connected: false } }));
+  page.on("request", (request) => {
+    if (request.method() === "POST" && new URL(request.url()).pathname === "/api/chat") {
+      chatPosts.push(request.url());
+    }
+  });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto(pilotRoutes.chat);
+
+  await expect(page.getByText(/Hi, I’m Pilot\. Pick a prompt below/)).toBeVisible();
+  for (const prompt of [
+    "Review the recorded Ledger approval",
+    "Swap 80 RLUSD for XRP, max 1% slippage",
+    "Swap 1,000 XRP to RLUSD at the best rate",
+    "Keep me at 50% XRP and rebalance if it drifts 5%",
+    "Compare AMM vs order book for 1,000 XRP",
+    "Deposit 100 XRP into the vault",
+    "Why would FREEMONEY be blocked?",
+    "What are my spending limits?",
+    "Show my portfolio",
+  ]) {
+    await expect(page.getByRole("button", { name: prompt, exact: true })).toBeVisible();
+  }
+
+  const composer = page.getByLabel("Message Pilot");
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await composer.fill("Swap 80 RLUSD for XRP, max 1% slippage");
+    await page.getByRole("button", { name: "Send message" }).click();
+    await expect(page.locator('[data-card-state="validated"]')).toHaveCount(attempt + 1);
+  }
+  await expect(page.getByText(/model connection is not available/i)).toHaveCount(0);
+  await expect(page.getByText("Harbor is ready", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Mock session", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Resume recovery", { exact: true })).toHaveCount(0);
+  expect(chatPosts).toEqual([]);
 });

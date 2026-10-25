@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { chatSessionUi, chatWalletActionProofRequired } from "./session-state";
+import {
+  chatSessionUi,
+  chatUsesIllustrativeDemo,
+  chatWalletActionProofRequired,
+} from "./session-state";
 
 const account = "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59";
 const liveConfig = {
@@ -20,6 +24,18 @@ const hostedLiveConfig = {
 };
 
 describe("chat wallet session UI", () => {
+  it("keeps every signed-out session in the provider-independent illustrative demo", () => {
+    const signedOut = { authenticated: false } as const;
+    const mockUi = chatSessionUi({ ...hostedLiveConfig, mockMode: true }, signedOut);
+    expect(mockUi.ready).toBe(true);
+    expect(chatUsesIllustrativeDemo(signedOut, mockUi)).toBe(true);
+    expect(chatUsesIllustrativeDemo(undefined, chatSessionUi(undefined, undefined))).toBe(true);
+    expect(chatUsesIllustrativeDemo(
+      { authenticated: true, account, network: "testnet" },
+      chatSessionUi(hostedLiveConfig, { authenticated: true, account, network: "testnet" }),
+    )).toBe(false);
+  });
+
   it("requires proofs for local external wallets independently of the dev signer flag", () => {
     expect(chatWalletActionProofRequired({
       ...liveConfig,

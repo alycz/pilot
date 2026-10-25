@@ -35,7 +35,7 @@ export const maxDuration = 300;
 
 export const metadata: Metadata = {
   title: {
-    default: "Pilot",
+    default: "Agentic DeFi Terminal for XRPL",
     template: "%s | Pilot",
   },
   description: "A keyless XRPL copilot for planning, approvals, and execution.",

@@ -57,7 +57,7 @@ test("logged-out chat approval uses the recorded device without signing", async 
   evidence,
 }) => {
   requireLane(lane, "fixture");
-  await installFixtureChatPrerequisites(page);
+  await installFixtureChatPrerequisites(page, { authenticated: false });
   await page.unroute("**/api/config/public");
   await page.route("**/api/config/public", (route) => route.fulfill({ json: {
     network: "testnet",

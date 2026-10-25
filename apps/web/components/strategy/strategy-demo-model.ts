@@ -1,6 +1,21 @@
 export type DemoOutcome = "hold" | "rebalance" | "blocked";
 export type DemoSide = "buy_xrp" | "sell_xrp";
 
+export type DemoLifecyclePhase = "draft" | "review" | "running" | "paused" | "stopped";
+export type DemoLifecycleAction = "review" | "edit" | "approve" | "pause" | "resume" | "stop" | "complete" | "reset";
+
+export type DemoLifecycleEvent = {
+  id: string;
+  phase: DemoLifecyclePhase;
+  label: string;
+  detail: string;
+};
+
+export type DemoLifecycleState = {
+  phase: DemoLifecyclePhase;
+  events: DemoLifecycleEvent[];
+};
+
 export type DemoPolicy = {
   targetXrpPercent: number;
   driftPercent: number;
@@ -67,6 +82,64 @@ export const INITIAL_DEMO_PORTFOLIO: DemoPortfolio = {
   testRlusd: 50,
   dailyUsed: 0,
 };
+
+const lifecycleEvent = (
+  id: string,
+  phase: DemoLifecyclePhase,
+  label: string,
+  detail: string,
+): DemoLifecycleEvent => ({ id, phase, label, detail });
+
+export function createDemoLifecycleState(): DemoLifecycleState {
+  return {
+    phase: "draft",
+    events: [lifecycleEvent(
+      "draft-1",
+      "draft",
+      "Sample draft ready",
+      "Editable fixture limits only. Nothing has been approved or started.",
+    )],
+  };
+}
+
+/**
+ * Deterministic, local-only lifecycle for the signed-out walkthrough. Invalid
+ * transitions are inert so repeated clicks cannot skip review or revive a
+ * stopped sample. No value from this state is accepted by the real controller.
+ */
+export function transitionDemoLifecycle(
+  current: DemoLifecycleState,
+  action: DemoLifecycleAction,
+): DemoLifecycleState {
+  if (action === "reset") return createDemoLifecycleState();
+
+  const next = (() => {
+    if (action === "review" && current.phase === "draft") {
+      return lifecycleEvent("review-2", "review", "Review opened", "The sample mandate and every risk limit are visible before approval.");
+    }
+    if (action === "edit" && current.phase === "review") {
+      return lifecycleEvent("edit-3", "draft", "Returned to draft", "No approval was recorded. The sample remains editable.");
+    }
+    if (action === "approve" && current.phase === "review") {
+      return lifecycleEvent("approve-3", "running", "Approved and started (simulated)", "A local button click started fixture playback. No wallet proof, scheduler, order, or transaction exists.");
+    }
+    if (action === "pause" && current.phase === "running") {
+      return lifecycleEvent("pause-4", "paused", "Paused by you", "Fixture playback is paused. No background runner continues.");
+    }
+    if (action === "resume" && current.phase === "paused") {
+      return lifecycleEvent("resume-5", "running", "Resumed by you", "Fixture playback may continue from the next deterministic event.");
+    }
+    if (action === "stop" && (current.phase === "running" || current.phase === "paused")) {
+      return lifecycleEvent("stop-6", "stopped", "Stopped by you", "The sample is terminal until reset. Nothing remains scheduled.");
+    }
+    if (action === "complete" && current.phase === "running") {
+      return lifecycleEvent("complete-6", "stopped", "Sample events complete", "The deterministic fixture ended and stopped. Nothing remains scheduled.");
+    }
+    return undefined;
+  })();
+
+  return next ? { phase: next.phase, events: [...current.events, next] } : current;
+}
 
 export const DEMO_MARKET_EVENTS: DemoMarketEvent[] = [
   {

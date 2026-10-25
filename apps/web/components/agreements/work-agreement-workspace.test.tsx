@@ -8,6 +8,7 @@ import {
   assertWorkAgreementOperationContext,
   bindWorkAgreementApproval,
   canRecoverWorkAgreement,
+  shouldRenderWorkAgreementDemo,
   workAgreementMatchesSession,
 } from "./work-agreement-workspace";
 import type {
@@ -114,6 +115,14 @@ describe("durable work-agreement workspace", () => {
     expect(workAgreementMatchesSession(record, { ...SESSION, account: COUNTERPARTY })).toBe(false);
     expect(workAgreementMatchesSession(record, { ...SESSION, network: "devnet" })).toBe(false);
     expect(workAgreementMatchesSession(record, { authenticated: false })).toBe(false);
+  });
+
+  it("shows the local demo until an authenticated session is confirmed", () => {
+    expect(shouldRenderWorkAgreementDemo(undefined)).toBe(false);
+    expect(shouldRenderWorkAgreementDemo(null)).toBe(true);
+    expect(shouldRenderWorkAgreementDemo({ authenticated: false })).toBe(true);
+    expect(shouldRenderWorkAgreementDemo(SESSION)).toBe(false);
+    expect(shouldRenderWorkAgreementDemo({ ...SESSION, network: "devnet" })).toBe(false);
   });
 
   it("rejects repeated clicks while the first async operation is active", async () => {

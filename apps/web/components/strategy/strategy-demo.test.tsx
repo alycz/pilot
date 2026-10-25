@@ -1,16 +1,18 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { SignedOutStrategyDemo } from "./strategy-demo";
 import {
   createDemoState,
+  createDemoLifecycleState,
   DEFAULT_DEMO_POLICY,
   DEMO_MARKET_EVENTS,
   evaluateDemoEvent,
   INITIAL_DEMO_PORTFOLIO,
   isDemoComplete,
   stepDemoState,
+  transitionDemoLifecycle,
 } from "./strategy-demo-model";
 
 describe("signed-out strategy demo model", () => {
@@ -79,6 +81,32 @@ describe("signed-out strategy demo model", () => {
     expect(state.history[0].lowerBoundPercent).toBe(58);
     expect(state.history[0].upperBoundPercent).toBe(62);
   });
+
+  it("requires review before simulated approval and keeps pause, resume, stop, and reset deterministic", () => {
+    const draft = createDemoLifecycleState();
+    expect(transitionDemoLifecycle(draft, "approve")).toBe(draft);
+
+    const review = transitionDemoLifecycle(draft, "review");
+    const running = transitionDemoLifecycle(review, "approve");
+    const paused = transitionDemoLifecycle(running, "pause");
+    const resumed = transitionDemoLifecycle(paused, "resume");
+    const stopped = transitionDemoLifecycle(resumed, "stop");
+
+    expect([review.phase, running.phase, paused.phase, resumed.phase, stopped.phase]).toEqual([
+      "review", "running", "paused", "running", "stopped",
+    ]);
+    expect(stopped.events.map((event) => event.label)).toEqual([
+      "Sample draft ready",
+      "Review opened",
+      "Approved and started (simulated)",
+      "Paused by you",
+      "Resumed by you",
+      "Stopped by you",
+    ]);
+    expect(transitionDemoLifecycle(stopped, "resume")).toBe(stopped);
+    expect(transitionDemoLifecycle(stopped, "reset")).toEqual(createDemoLifecycleState());
+    expect(createDemoLifecycleState()).toEqual(createDemoLifecycleState());
+  });
 });
 
 describe("signed-out strategy demo surface", () => {
@@ -92,6 +120,11 @@ describe("signed-out strategy demo surface", () => {
       "Price trigger",
       "Rebalance",
       "Checked before every trade",
+      "User-approved sample lifecycle",
+      "Review simulated mandate",
+      "Maximum per simulated trade",
+      "Maximum simulated daily value",
+      "Simulated event timeline",
       "this simulation never grants trading authority",
       "Connect account for Testnet setup",
     ]) expect(markup).toContain(text);
@@ -101,18 +134,31 @@ describe("signed-out strategy demo surface", () => {
   it("renders native, named controls and a responsive timeline without hidden network affordances", () => {
     const markup = renderToStaticMarkup(createElement(SignedOutStrategyDemo));
     for (const control of [
-      ">Play<",
-      ">Next event<",
-      ">Reset<",
+      ">Review simulated mandate<",
+      ">Reset demo<",
       'aria-label="Target XRP share"',
       'aria-label="Allowed drift either way"',
+      'aria-label="Maximum per simulated trade"',
+      'aria-label="Maximum simulated daily value"',
       'aria-valuetext="50%"',
       'aria-labelledby="event-timeline-title"',
       "Event timeline",
     ]) expect(markup).toContain(control);
     expect(markup).toContain("motion-reduce:transition-none");
     expect(markup).toContain('data-upcoming="true"');
-    expect(markup).not.toContain("opacity-55");
     expect(markup).not.toMatch(/fetch\(|localStorage|sessionStorage|WebSocket/);
+  });
+
+  it("does not call fetch, wallet, signing, provider, or scheduler APIs while rendering signed out", () => {
+    const fetcher = vi.fn();
+    const previousFetch = globalThis.fetch;
+    globalThis.fetch = fetcher as typeof fetch;
+    try {
+      const markup = renderToStaticMarkup(createElement(SignedOutStrategyDemo));
+      expect(markup).toContain("Demo only");
+      expect(fetcher).not.toHaveBeenCalled();
+    } finally {
+      globalThis.fetch = previousFetch;
+    }
   });
 });

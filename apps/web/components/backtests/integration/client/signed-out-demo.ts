@@ -1,9 +1,10 @@
 import type { BacktestsViewModel, SavedRunComparison } from "../../ui/view-model";
+import { sha256CanonicalJson } from "../../../../lib/sha256-sync";
 
 import type { BacktestRunRequest } from "./contracts";
 
 const SAMPLE_PRICES = [0.48, 0.52, 0.57, 0.5, 0.44, 0.55, 0.62, 0.58, 0.66, 0.71, 0.64, 0.76] as const;
-const SAMPLE_DATASET_HASH = "d".repeat(64);
+const SAMPLE_DATASET_HASH = sha256CanonicalJson(SAMPLE_PRICES);
 
 export type DemoBacktestRun = Readonly<{
   runId: string;
@@ -21,19 +22,6 @@ type MutableTrade = {
   endingCash: string;
   status: string;
 };
-
-function digest(value: unknown): string {
-  const input = JSON.stringify(value);
-  let left = 0x811c9dc5;
-  let right = 0x9e3779b9;
-  for (let index = 0; index < input.length; index += 1) {
-    const code = input.charCodeAt(index);
-    left = Math.imul(left ^ code, 0x01000193) >>> 0;
-    right = Math.imul(right ^ (code + index), 0x85ebca6b) >>> 0;
-  }
-  const block = `${left.toString(16).padStart(8, "0")}${right.toString(16).padStart(8, "0")}`;
-  return block.repeat(4);
-}
 
 function percentFromBps(value: number): string {
   const prefix = value > 0 ? "+" : value < 0 ? "−" : "";
@@ -122,7 +110,7 @@ export function createSignedOutDemoRun(request: BacktestRunRequest, ordinal = 1)
   const ending = equity.at(-1)!;
   const strategyReturnBps = ((ending.strategyEquity / startingEquity) - 1) * 10_000;
   const benchmarkReturnBps = ((ending.benchmarkEquity / startingEquity) - 1) * 10_000;
-  const fingerprint = digest({ request, fixture: "pilot.synthetic.xrp-usd.v1" });
+  const fingerprint = sha256CanonicalJson({ request, fixture: "pilot.synthetic.xrp-usd.v1" });
   const runId = `demo_${fingerprint.slice(0, 12)}_${ordinal}`;
   const label = `Sample ${ordinal} · ${Math.round(request.targetBaseBps / 100)}% target / ±${(request.bandBps / 100).toFixed(1)}% band`;
   const model: BacktestsViewModel = {
@@ -176,4 +164,3 @@ export function createSignedOutDemoRun(request: BacktestRunRequest, ordinal = 1)
   };
   return { runId, label, request, model };
 }
-

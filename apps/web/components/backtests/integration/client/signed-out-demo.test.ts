@@ -1,4 +1,8 @@
+import { createHash } from "node:crypto";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { canonicalJson } from "../../../../lib/sha256-sync";
 
 import { INITIAL_DRAFT, requestFromDraft } from "./backtests-client";
 import { createSignedOutDemoRun, withDemoComparisons } from "./signed-out-demo";
@@ -24,6 +28,13 @@ describe("signed-out backtest demo", () => {
     expect(first.model.equity).toHaveLength(12);
     expect(first.model.metrics).toHaveLength(6);
     expect(first.model.trades.length).toBeGreaterThan(0);
+    const prices = [0.48, 0.52, 0.57, 0.5, 0.44, 0.55, 0.62, 0.58, 0.66, 0.71, 0.64, 0.76];
+    expect(first.model.reproducibility.rawHash).toBe(
+      createHash("sha256").update(canonicalJson(prices), "utf8").digest("hex"),
+    );
+    expect(first.model.reproducibility.parameterFingerprint).toBe(
+      createHash("sha256").update(canonicalJson({ request, fixture: "pilot.synthetic.xrp-usd.v1" }), "utf8").digest("hex"),
+    );
     expect(fetcher).not.toHaveBeenCalled();
     expect(JSON.stringify(first)).not.toMatch(/wallet.?address|signed.?blob|approval.?id|transaction.?hash/i);
   });

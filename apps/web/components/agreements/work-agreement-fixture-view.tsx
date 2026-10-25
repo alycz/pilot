@@ -190,9 +190,9 @@ export function WorkAgreementFixtureViewComponent() {
         ) : null}
 
         {terminal ? (
-          <section className={`rounded-xl border p-4 text-sm leading-6 ${view.status === "released" ? "border-executed/35 bg-executed/10" : "border-blocked/35 bg-blocked/10"}`} role="status">
-            <strong>Demo complete · {view.status}.</strong> The fixture recorded a simulated resolution only.
-            It is not an XRPL receipt, signature, settlement, or proof of delivery.
+          <section className={`rounded-xl border p-4 text-sm leading-6 ${view.status === "released" ? "border-executed/35 bg-executed/10" : "border-blocked/35 bg-blocked/10"}`}>
+            <p role="status"><strong>Demo complete · {view.status}.</strong> The fixture recorded a simulated resolution only.
+            It is not an XRPL receipt, signature, settlement, or proof of delivery.</p>
             <button className="ml-2 underline decoration-border underline-offset-4" onClick={reset} type="button">Run again</button>
           </section>
         ) : null}

@@ -197,6 +197,11 @@ export function MapExplorer() {
   const selectedSummary = venues.find((venue) => venue.id === selectedVenueId);
   const filtersActive = query.trim().length > 0 || category !== "all" || layer !== "all";
   const controlsDisabled = catalog.kind !== "ready";
+  const statusError = runtime.kind === "configuration-error"
+    ? runtime.detail
+    : catalog.kind === "error"
+      ? catalog.message
+      : null;
 
   function resetFilters() {
     setQuery("");
@@ -244,32 +249,6 @@ export function MapExplorer() {
         </div>
       </header>
 
-      {/* The demo fallback needs no status bar: the map simply shows the demo catalog. */}
-      {runtime.kind === "demo-fallback" && catalog.kind !== "error" ? null : (
-      <section aria-label="Map data status" className={`border-b px-4 py-3 text-sm sm:px-6 lg:px-8 ${runtime.kind === "configuration-error" || catalog.kind === "error" ? "border-destructive/35 bg-destructive/10" : "border-border"}`}>
-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-foreground">{runtime.modeLabel}</p>
-            <p className="mt-1 break-words text-[13px] leading-5 text-muted-foreground">
-              {runtime.owner ? `${shortAccount(runtime.owner)} · ` : ""}{runtime.detail}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={refreshContext} className={secondaryButton}>
-              <RefreshCw aria-hidden="true" className="size-3.5" />
-              Refresh context
-            </button>
-            {runtime.canLoadCatalog ? (
-              <button type="button" onClick={() => setCatalogRefresh((value) => value + 1)} className={secondaryButton}>
-                <Database aria-hidden="true" className="size-3.5" />
-                Refresh catalog
-              </button>
-            ) : null}
-          </div>
-        </div>
-      </section>
-      )}
-
       <section aria-labelledby="map-controls-heading" className="min-w-0 border-b border-border">
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-4 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-baseline gap-3">
@@ -280,6 +259,23 @@ export function MapExplorer() {
             <p className="label-mono">Availability focus: {labelToken(network)}</p>
           </div>
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+            <span
+              role={statusError ? "alert" : "status"}
+              aria-label={statusError ?? `${runtime.modeLabel}. ${runtime.owner ? `${shortAccount(runtime.owner)}. ` : ""}${runtime.detail}`}
+              className={`inline-flex min-h-7 items-center border px-2 py-1 text-[12px] rounded-md ${statusError ? "border-destructive/35 bg-destructive/10 text-destructive" : "border-border bg-surface text-muted-foreground"}`}
+            >
+              {statusError ?? runtime.modeLabel}
+            </span>
+            {statusError ? (
+              <button
+                type="button"
+                onClick={runtime.kind === "configuration-error" ? refreshContext : () => setCatalogRefresh((value) => value + 1)}
+                className={secondaryButton}
+              >
+                <RefreshCw aria-hidden="true" className="size-3.5" />
+                Retry
+              </button>
+            ) : null}
             <span className="inline-flex items-center gap-1.5 border border-border px-2 py-1 text-[13px] text-muted-foreground rounded-xl">
               <Database aria-hidden="true" className="size-3.5" />
               {snapshot ? snapshotLabel(snapshot.asOf) : catalog.kind === "loading" ? "Loading catalog" : "No catalog snapshot"}

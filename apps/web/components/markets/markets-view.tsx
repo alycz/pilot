@@ -140,6 +140,11 @@ function assetLabel(asset: unknown, pairs: readonly CatalogPair[]): string {
   return value.currency.slice(0, 6);
 }
 
+function marketReadKey(pair: CatalogPair): string {
+  const assetKey = (entry: CatalogAsset) => `${entry.asset.currency}:${entry.asset.issuer ?? "native"}`;
+  return `${pair.network}|${assetKey(pair.base)}>${assetKey(pair.quote)}`;
+}
+
 /** Market page address for a row key (`network:pair:route`). */
 export function marketHref(key: string): string {
   const [network, pair, route] = key.split(":");
@@ -160,6 +165,21 @@ function marketReadError(cause: unknown): string {
     return "Public XRP Ledger nodes are temporarily rate-limited. Pilot will retry automatically.";
   }
   return cause instanceof Error ? cause.message : "The public XRP Ledger nodes could not return this market.";
+}
+
+function lastRealDataLabel(updatedAt: number, now = Date.now()): string {
+  const seconds = Math.max(0, Math.floor((now - updatedAt) / 1_000));
+  const age = seconds < 60
+    ? `${seconds} second${seconds === 1 ? "" : "s"} ago`
+    : `${Math.floor(seconds / 60)} minute${Math.floor(seconds / 60) === 1 ? "" : "s"} ago`;
+  const utc = new Date(updatedAt).toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    timeZone: "UTC",
+  });
+  return `Updated ${age} (${utc} UTC)`;
 }
 
 /**
@@ -251,12 +271,13 @@ export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
 
   const fetchPair = useCallback(
     async (pair: CatalogPair, full: boolean, force = false) => {
-      if (inFlight.current.has(pair.id)) return;
-      const retryAt = pairStatesRef.current[pair.id]?.retryAt ?? 0;
+      const key = marketReadKey(pair);
+      if (inFlight.current.has(key)) return;
+      const retryAt = pairStatesRef.current[key]?.retryAt ?? 0;
       if (!force && retryAt > Date.now()) return;
-      inFlight.current.add(pair.id);
-      lastFetch.current.set(pair.id, Date.now());
-      setPairStates((current) => (current[pair.id] ? current : { ...current, [pair.id]: { status: "loading", snapshot: null } }));
+      inFlight.current.add(key);
+      lastFetch.current.set(key, Date.now());
+      setPairStates((current) => (current[key] ? current : { ...current, [key]: { status: "loading", snapshot: null } }));
       const limit = full ? FULL_DEPTH : LIGHT_DEPTH;
       const base = ledgerAsset(pair.base.asset);
       const quote = ledgerAsset(pair.quote.asset);
@@ -271,9 +292,10 @@ export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
           const retryMs = ledgerRetryAfterMs(bookFailure);
           setPairStates((current) => ({
             ...current,
-            [pair.id]: {
-              status: "error",
-              snapshot: null,
+            [key]: {
+              ...(current[key] ?? {}),
+              status: current[key]?.snapshot ? "ready" : "error",
+              snapshot: current[key]?.snapshot ?? null,
               error: marketReadError(bookFailure),
               ...(retryMs ? { retryAt: Date.now() + retryMs } : {}),
             },
@@ -292,7 +314,7 @@ export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
         });
         setPairStates((current) => ({
           ...current,
-          [pair.id]: {
+          [key]: {
             status: "ready",
             snapshot,
             updatedAt: Date.now(),
@@ -300,7 +322,7 @@ export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
           },
         }));
       } finally {
-        inFlight.current.delete(pair.id);
+        inFlight.current.delete(key);
       }
     },
     [read],
@@ -346,7 +368,7 @@ export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
       });
     }
     const selected = selectedPairRef.current;
-    const last = lastFetch.current.get(selected.id) ?? 0;
+    const last = lastFetch.current.get(marketReadKey(selected)) ?? 0;
     if (Date.now() - last >= SELECTED_MIN_INTERVAL_MS) void fetchPair(selected, true);
     // Detail pages render only the selected market; do not spend public-node
     // quota refreshing catalog rows that are not on screen.
@@ -355,7 +377,7 @@ export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
     for (const pair of pairsRef.current) {
       if (pair.id === selected.id) continue;
       // Pairs that never loaded (e.g. after a failed first connection) refresh right away.
-      if (everyN || !pairStatesRef.current[pair.id]?.snapshot) void fetchPair(pair, false);
+      if (everyN || !pairStatesRef.current[marketReadKey(pair)]?.snapshot) void fetchPair(pair, false);
     }
   };
 
@@ -445,7 +467,14 @@ export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
     const snapshots = demoMarketSnapshots();
     const updatedAt = Date.parse(FIXTURE_AS_OF);
     setDemo(true);
-    setPairStates(Object.fromEntries(Object.entries(snapshots).map(([id, snapshot]) => [id, { status: "ready" as const, snapshot, updatedAt }])));
+    setPairStates(
+      Object.fromEntries(
+        MARKET_CATALOG[DEMO_MARKET_NETWORK].map((pair) => [
+          marketReadKey(pair),
+          { status: "ready" as const, snapshot: snapshots[pair.id] ?? null, updatedAt },
+        ]),
+      ),
+    );
     setSelectedKey((current) => {
       const pairId = current.slice(0, current.lastIndexOf(":"));
       const route = current.slice(current.lastIndexOf(":") + 1);
@@ -464,7 +493,7 @@ export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
   }, [connection.status, demo]);
 
   // ---------- derived view data ----------
-  const selectedState = pairStates[selectedPair.id];
+  const selectedState = pairStates[marketReadKey(selectedPair)];
   const snapshot = selectedState?.snapshot ?? null;
   const bids: DepthLevel[] = snapshot?.bids ?? [];
   const asks: DepthLevel[] = snapshot?.asks ?? [];
@@ -473,6 +502,7 @@ export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
   const ammDelta = deviationBps(amm?.price ?? null, book.mid);
   const size = selectedPair.sizes[Math.min(sizeIndex, selectedPair.sizes.length - 1)]!;
   const routes = snapshot ? quoteRoutes({ size, bids, amm, mid: book.mid, ammUnavailableReason: selectedState?.ammError }) : null;
+  const staleSelected = Boolean(snapshot && selectedState?.error);
   const offline = !demo && !snapshot && (connection.status === "failed" || connection.status === "reconnecting");
   const loadingSelected = !snapshot && !offline && (selectedState?.status ?? "loading") === "loading";
   const base = selectedPair.base.symbol;
@@ -480,7 +510,7 @@ export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
 
   const quotedRows = ledgerMarketRows(
     pairs.map((pair) => {
-      const state = pairStates[pair.id];
+      const state = pairStates[marketReadKey(pair)];
       return {
         pair,
         snapshot: state?.snapshot ?? null,
@@ -501,11 +531,13 @@ export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
     if (marketParam(row.key)) router.push(marketHref(row.key));
   };
 
-  const live = !demo && connection.status === "open";
+  const live = !demo && connection.status === "open" && !staleSelected;
   const liveCount = quotedRows.filter((row) => row.state === "ready").length;
   const failed = !demo && connection.status === "failed";
   const freshness = demo
     ? "demo"
+    : staleSelected
+      ? "stale"
     : snapshot && connection.status === "open" && liveCount === quotedRows.length
       ? "live"
       : snapshot && connection.status === "open"
@@ -527,6 +559,8 @@ export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
   });
   const statusChip = demo
     ? { label: "Demo snapshot", tone: tone.info }
+    : staleSelected
+      ? { label: "Last real data", tone: tone.approval }
     : connection.status === "open"
         ? { label: "Live", tone: tone.executed }
         : connection.status === "failed"
@@ -538,6 +572,8 @@ export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
             : { label: "Connecting", tone: tone.neutral };
   const announcement = demo
     ? "Showing a bundled illustrative demo fixture, not current ledger data."
+    : staleSelected
+      ? `Live market reads are unavailable. Showing last real data from ${selectedState?.updatedAt ? lastRealDataLabel(selectedState.updatedAt) : "an earlier successful read"}.`
     : connection.status === "open"
         ? `Connected to the XRP Ledger ${NETWORK_LABELS[network]}. Prices update every ledger.`
         : connection.status === "failed"
@@ -548,7 +584,7 @@ export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
 
   const xrpUsd = (() => {
     const rlusdPair = MARKET_CATALOG[demo ? DEMO_MARKET_NETWORK : network].find((pair) => pair.base.symbol === "XRP" && pair.quote.symbol === "RLUSD");
-    return rlusdPair ? pairStates[rlusdPair.id]?.snapshot?.book.mid ?? null : null;
+    return rlusdPair ? pairStates[marketReadKey(rlusdPair)]?.snapshot?.book.mid ?? null : null;
   })();
 
   if (openKey) {
@@ -641,6 +677,19 @@ export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
         </div>
       ) : (
       <div className={`${bandInner} space-y-6 py-6 sm:py-8`}>
+        {staleSelected ? (
+          <div role="status" className="flex flex-wrap items-start gap-3 rounded-xl border border-approval/40 bg-approval/10 px-4 py-3 text-xs leading-5">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-approval" aria-hidden="true" />
+            <div>
+              <p className="font-medium text-foreground">Showing the last real {selectedPair.label} ledger data.</p>
+              <p className="text-muted-foreground">
+                {selectedState?.updatedAt ? lastRealDataLabel(selectedState.updatedAt) : "Earlier successful read"}.
+                {" "}{selectedState?.error} Automatic reads are backing off and will recover on their own.
+                This snapshot is display-only and must not authorize a trade.
+              </p>
+            </div>
+          </div>
+        ) : null}
         {/* Best execution + AMM pool */}
         <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(18rem,1fr)]">
           <Panel
@@ -805,7 +854,7 @@ export function MarketsView({ marketKey }: { marketKey?: string } = {}) {
           <Inspector calls={calls} demo={demo} />
           {demo ? null : (
             <p className="label-mono border-t border-border px-4 py-3">
-              Selected market refreshes every validated ledger (≥{SELECTED_MIN_INTERVAL_MS / 1000}s apart); other markets every {OTHERS_EVERY_N_LEDGERS} ledgers; reads stop while this tab is hidden
+              Selected market refreshes every validated ledger (≥{SELECTED_MIN_INTERVAL_MS / 1000}s apart); reads stop while this tab is hidden
             </p>
           )}
         </Panel>

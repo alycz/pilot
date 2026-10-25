@@ -20,6 +20,8 @@ import { hasVisibleTrustReceipt, TrustReceipt } from "./trust-receipt";
 import { xrplTestnetTransactionUrl } from "../../lib/xrpl-explorer";
 
 export type IntentCardProps = StateCardProps & {
+  /** Presentation-only marker for the provider-independent signed-out demo. */
+  demoPresentation?: boolean;
   /** Bounded, client-known evidence set only after the Ledger facade signs. */
   ownerSigner?: LedgerOwnerSigner | null;
   /** True only for API events from a non-mock runtime, never demo/fixture/paper data. */
@@ -34,7 +36,7 @@ export function testnetTransactionExplorerUrl(
   return xrplTestnetTransactionUrl(event.hash);
 }
 
-export function IntentCard({ ownerSigner, realLedgerReceipt = false, ...props }: IntentCardProps) {
+export function IntentCard({ demoPresentation = false, ownerSigner, realLedgerReceipt = false, ...props }: IntentCardProps) {
   const components: Record<CardEvent["state"], (properties: StateCardProps) => React.JSX.Element> = {
     drafting: DraftingCard,
     planned: PlannedCard,
@@ -61,7 +63,7 @@ export function IntentCard({ ownerSigner, realLedgerReceipt = false, ...props }:
         <a href={explorerUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex min-h-11 items-center text-primary underline underline-offset-4">Open validated transaction in XRPL Testnet Explorer</a>
       </section> : null}
       <div className="flex min-w-0 flex-wrap items-start gap-2">
-        {hasTrust ? <TrustReceipt trust={props.event.trust} /> : null}
+        {hasTrust ? <TrustReceipt presentation={demoPresentation ? "demo" : "default"} trust={props.event.trust} /> : null}
         {hasOwnerSigner ? <OwnerSignerChip signer={ownerSigner} /> : null}
       </div>
     </div>

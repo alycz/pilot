@@ -8,6 +8,7 @@ import {
   readBoundedResponseBytes,
   type HarborOpName,
 } from "@pilot/harbor-client";
+import type { NearPrincipalAuthorization } from "@pilot/contracts/near";
 import { z } from "zod";
 
 import {
@@ -23,6 +24,8 @@ const MAX_JSON_DEPTH = 32;
 const MAX_JSON_NODES = 10_000;
 const OP_PATTERN = /^[a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9]*)+$/;
 const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+const NEAR_EXECUTABLE_QUOTE_REVIEW_OP =
+  "near.intents.executable-quote.review" as const;
 
 class HarborRequestTooLargeError extends Error {}
 
@@ -239,6 +242,9 @@ export interface HarborProxyDependencies {
     body: ArrayBuffer,
     status: number,
   ) => Record<string, string>;
+  readNearPrincipalAuthorization: (
+    request: Request,
+  ) => NearPrincipalAuthorization | null;
   env: HarborProxyEnvironment;
   fetch: typeof globalThis.fetch;
   timeoutMs: number;
@@ -384,6 +390,26 @@ function requiresWalletBinding(op: HarborProxyOpName): boolean {
     op === "policy.get" || op === "tx.status";
 }
 
+function hasNearExecutableQuoteReviewAuthorization(
+  request: Request,
+  op: HarborProxyOpName,
+  args: Record<string, unknown>,
+  readAuthorization: HarborProxyDependencies["readNearPrincipalAuthorization"],
+): boolean {
+  if (op !== NEAR_EXECUTABLE_QUOTE_REVIEW_OP) return true;
+
+  try {
+    const authorization = readAuthorization(request);
+    return authorization !== null &&
+      authorization.network === "near:mainnet" &&
+      authorization.operations.includes(NEAR_EXECUTABLE_QUOTE_REVIEW_OP) &&
+      authorization.account_id === args.recipient;
+  } catch {
+    // Missing or invalid cookie-sealing configuration must fail closed.
+    return false;
+  }
+}
+
 function isBlockedMainnetMutation(
   op: HarborProxyOpName,
   args: Record<string, unknown>,
@@ -513,6 +539,7 @@ export function createHarborProxyHandler(
   const dependencies: HarborProxyDependencies = {
     authorizeOperation: () => false,
     operationResponseHeaders: () => ({}),
+    readNearPrincipalAuthorization: () => null,
     env: process.env,
     fetch: (...args) => globalThis.fetch(...args),
     timeoutMs: DEFAULT_TIMEOUT_MS,
@@ -527,7 +554,10 @@ export function createHarborProxyHandler(
       return errorResponse(400, "HARBOR_PROXY_INVALID_OP", "The Harbor operation is invalid.");
     }
 
-    if (typeof op !== "string" || op.length > 128 || !OP_PATTERN.test(op)) {
+    if (
+      typeof op !== "string" || op.length > 128 ||
+      (!OP_PATTERN.test(op) && op !== NEAR_EXECUTABLE_QUOTE_REVIEW_OP)
+    ) {
       return errorResponse(400, "HARBOR_PROXY_INVALID_OP", "The Harbor operation is invalid.");
     }
 
@@ -646,6 +676,18 @@ export function createHarborProxyHandler(
     }
 
     const validatedArgs = parsedArgs.data as Record<string, unknown>;
+    if (!hasNearExecutableQuoteReviewAuthorization(
+      request,
+      op,
+      validatedArgs,
+      dependencies.readNearPrincipalAuthorization,
+    )) {
+      return errorResponse(
+        401,
+        "HARBOR_PROXY_UNAUTHORIZED",
+        "Principal-bound NEAR authorization is required for this Harbor operation.",
+      );
+    }
     if (
       requiresWalletBinding(op) &&
       !dependencies.authorizeOperation(request, op, validatedArgs)

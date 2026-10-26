@@ -14,6 +14,19 @@ as a claim that every catalogued venue is executable.
   hash. A dry quote has no deposit address and is never executable approval.
 - Status reads carry the provider deposit address and memo together, verify the
   nested quote signature, and preserve provider-reported settlement states.
+- `near.intents.executable-quote.review` is a default-off, local-only adapter
+  for one exact route: canonical USDC on Arbitrum One to wNEAR on NEAR mainnet.
+  It dynamically attests both token records, requests `dry: false`, verifies
+  the provider signature and full request echo, rejects memo routing, and binds
+  the exact amount, minimum output, recipient, refund address, deposit address,
+  correlation ID, quote hash, provider refund-start deadline, and a separate
+  five-minute local review freshness window. It returns manual owner-funding
+  instructions only; no wallet transaction is built, signed, funded, or sent.
+- The same-origin web proxy requires an active sealed NEAR principal
+  authorization whose mainnet account is the exact quote recipient and whose
+  scopes include both approval review and executable-quote review. This is a
+  server-issued principal binding, not a fresh wallet-control proof or economic
+  approval. Independent Pilot and Harbor flags remain off by default.
 - Shared contracts distinguish provider signature verification from Pilot's
   principal-bound approval digest. The latter commits to exact asset IDs,
   atomic amounts, recipient, refund address, deposit metadata, policy,
@@ -32,14 +45,21 @@ as a claim that every catalogued venue is executable.
   reservation, compare-and-swap revisions, durable reconciliation evidence,
   and crash/restart fixtures. Unknown outcomes continue counting against the
   budget and can never authorize automatic resubmission. The local file
-  adapter is explicitly not a hosted or multi-replica database.
+  adapter is explicitly not a hosted or multi-replica database. Its v2 local
+  lifecycle also binds owner-reported Arbitrum funding, origin verification,
+  provider observations, and independent NEAR destination evidence. Provider
+  `SUCCESS`, `REFUNDED`, or `FAILED` alone is nonterminal.
 - Harbor now also contains a review-only D1 persistence adapter and byte-identical
   canonical/Free-QuickJS `0018_near_attempt_store.sql` migrations. Hosted
   counters are scoped by tenant, principal, network, and asset; atomic amounts
   remain canonical decimal text and are updated with exact Worker `BigInt` plus
   D1 value/revision CAS triggers. Wallet changes cannot create a fresh budget
   bucket. The migrations are hash-pinned but have not been applied, and no
-  route currently instantiates the adapter.
+  route currently instantiates the adapter. Because that v1 hosted schema lacks
+  the immutable destination and refund fields required for independent receipt
+  verification, provider terminal statuses now remain `unknown`, retain their
+  reservation, and cannot commit or release hosted budget. A future reviewed
+  schema is required before hosted terminal reconciliation can be enabled.
 - A provider-neutral NEAR wallet facade and review card exist with signing and
   execution disabled by default. They contain no submit or broadcast method.
 - Same-origin NEP-413 routes bind an exact sealed server principal
@@ -57,10 +77,12 @@ as a claim that every catalogued venue is executable.
   proof clears its challenge and returns a wallet-control confirmation, but does
   not mint a reusable NEAR login cookie or enable execution.
 - `/demo/near-intents`, linked from the existing Integrations menu, provides an
-  explicitly configured live read-only path for token inventory and verified
-  dry quotes plus a visibly separate fixture-only approval/status walkthrough.
-  Provider errors never fall back to fixtures, and neither path can enable
-  execution.
+  explicitly configured live read path for token inventory, verified dry
+  quotes, the fixed principal-bound executable review, and exact bound status,
+  plus a visibly separate fixture-only lifecycle walkthrough. Provider errors
+  never fall back to fixtures. Funding remains visibly blocked while wNEAR
+  recipient storage is unverified, and the UI exposes no wallet, approval,
+  reservation, signing, transfer, or broadcast action.
 - `@pilot/near-chain-signatures` pins `chainsig.js` 1.1.16 for a narrow NEAR
   Testnet -> XRP Testnet native-payment preparation/finalization boundary. It
   exposes no broadcast or generic signing method and remains off until an owner
@@ -84,6 +106,11 @@ as a claim that every catalogued venue is executable.
   quote, funded settlement, mainnet deposit, signed intent, limit order,
   wallet signature, or transaction submission was performed while
   implementing this slice.
+- The executable-review route was exercised only with deterministic fixtures.
+  Its owner-funding instructions are not accepted until a fresh live quote,
+  fresh economic approval, durable reservation, recipient wNEAR storage check,
+  and owner-run wallet acceptance all pass. Pilot budgets cannot stop an owner
+  from transferring outside Pilot.
 - `SUCCESS` is provider-reported unless destination evidence is independently
   verified. Unknown or missing status never proves non-execution and never
   authorizes an automatic replacement payment.

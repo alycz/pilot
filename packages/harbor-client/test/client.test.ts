@@ -95,6 +95,7 @@ const requiredOps = [
   "near.intents.tokens",
   "near.intents.quote",
   "near.intents.status",
+  "near.intents.executable-quote.review",
   "ledger.account.info",
   "ledger.account.lines",
   "ledger.account.objects",
@@ -224,6 +225,14 @@ const fixtureArgs = {
   "near.intents.status": {
     deposit_address: "fixture-deposit-address",
     deposit_memo: "fixture-deposit-memo",
+  },
+  "near.intents.executable-quote.review": {
+    route: "arbitrum-usdc-to-near-wnear-v1",
+    amount_atomic: "1000000",
+    slippage_bps: 100,
+    recipient: "owner.near",
+    refund_to: "0x1111111111111111111111111111111111111111",
+    refund_deadline: "2027-01-01T00:00:00.000Z",
   },
   "ledger.account.info": { account: ACCOUNT, network: "testnet" },
   "ledger.account.lines": { account: ACCOUNT, network: "testnet", limit: 20 },
@@ -1478,6 +1487,7 @@ describe(`Harbor REST contract (${useLiveHarbor ? "live" : "mock"})`, () => {
     "tx.approvalReconcile",
     "tx.submit",
     "x402.payIssuedFixture",
+    "near.intents.executable-quote.review",
   ]);
   const intentionallyUnsupportedMockOps = new Set<HarborOpName>([
     "tx.approvalPreflight",
@@ -1493,6 +1503,12 @@ describe(`Harbor REST contract (${useLiveHarbor ? "live" : "mock"})`, () => {
   it.each(requiredOps)(
     "calls %s with valid args and validates its client contract",
     async (name) => {
+      if (!useLiveHarbor && name === "near.intents.executable-quote.review") {
+        await expect(op(name, fixtureArgs[name])).rejects.toThrow(
+          "Missing Harbor mock fixture for near.intents.executable-quote.review",
+        );
+        return;
+      }
       const result = await op(name, fixtureArgs[name]);
       const envelope = EnvelopeSchema(z.unknown()).parse(result);
       expectNoSecretFields(envelope);

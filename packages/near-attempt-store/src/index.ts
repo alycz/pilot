@@ -3,7 +3,12 @@ import { mkdir, open, readFile, rename, stat, unlink } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 
 import {
+  NEAR_ARBITRUM_USDC_ASSET_ID,
+  NEAR_WRAPPED_NEAR_ASSET_ID,
   NearApprovalBindingSchema,
+  NearArbitrumUsdcOriginReceiptEvidenceSchema,
+  NearArbitrumUsdcOwnerFundingEvidenceSchema,
+  NearArbitrumUsdcToWnearSettlementEvidenceSchema,
   NearBudgetReservationSchema,
   NearBudgetReservationTransitionSchema,
   NearExecutionAttemptSchema,
@@ -15,6 +20,9 @@ import {
   canonicalNearApprovalJson,
   computeNearApprovalDigest,
   type NearApprovalBinding,
+  type NearArbitrumUsdcOriginReceiptEvidence,
+  type NearArbitrumUsdcOwnerFundingEvidence,
+  type NearArbitrumUsdcToWnearSettlementEvidence,
   type NearBudgetReservation,
   type NearExecutionAttempt,
   type NearExecutionReplayDecision,
@@ -23,7 +31,7 @@ import {
   type NearReconciliationEvidence,
 } from "@pilot/contracts/near";
 
-export const NEAR_ATTEMPT_STORE_SCHEMA_VERSION = 1 as const;
+export const NEAR_ATTEMPT_STORE_SCHEMA_VERSION = 2 as const;
 
 export type NearAttemptArtifactKind =
   | "provider_verified_executable_quote"
@@ -51,8 +59,24 @@ export type NearEvidenceEvent = Readonly<{
   evidence: NearReconciliationEvidence;
 }>;
 
+export type NearLocalOwnerFundingEvidence = NearArbitrumUsdcOwnerFundingEvidence |
+  NearArbitrumUsdcOriginReceiptEvidence | NearArbitrumUsdcToWnearSettlementEvidence;
+
+export type NearOwnerFundingEvent = Readonly<{
+  transition_id: string;
+  evidence: NearLocalOwnerFundingEvidence;
+}>;
+
+export type NearOwnerFundingLifecycle = Readonly<{
+  version: "pilot-near-local-owner-funding-lifecycle-v1";
+  status: "outcome_unknown" | "origin_chain_verified" | "provider_observed" |
+    "destination_chain_verified" | "refunded" | "failed";
+  binding: NearArbitrumUsdcOwnerFundingEvidence;
+  events: readonly NearOwnerFundingEvent[];
+}>;
+
 export type NearAttemptEntry = Readonly<{
-  version: "pilot-near-attempt-entry-v1";
+  version: "pilot-near-attempt-entry-v2";
   entry_revision: number;
   artifact_kind: "provider_verified_executable_quote";
   request_fingerprint: string;
@@ -63,6 +87,7 @@ export type NearAttemptEntry = Readonly<{
   attempt: NearExecutionAttempt;
   reservation: NearBudgetReservation;
   evidence_log: readonly NearEvidenceEvent[];
+  owner_funding: NearOwnerFundingLifecycle | null;
 }>;
 
 export type NearAttemptSnapshot = Readonly<{
@@ -89,6 +114,20 @@ export type NearEvidenceTransitionResult = Readonly<{
   entry: NearAttemptEntry;
 }>;
 
+export type NearOwnerFundingTransitionInput = Readonly<{
+  principal_id: string;
+  account_id: string;
+  idempotency_key: string;
+  transition_id: string;
+  expected_entry_revision: number;
+  evidence: unknown;
+}>;
+
+export type NearOwnerFundingTransitionResult = Readonly<{
+  replay: boolean;
+  entry: NearAttemptEntry;
+}>;
+
 export type NearBudgetSummary = Readonly<{
   principal_id: string;
   asset_id: string;
@@ -108,6 +147,7 @@ export type NearAttemptStoreErrorCode =
   | "BUDGET_EXCEEDED"
   | "ATTEMPT_NOT_FOUND"
   | "INVALID_TRANSITION"
+  | "FUNDING_MISMATCH"
   | "PERSISTENCE_CORRUPT";
 
 export class NearAttemptStoreError extends Error {
@@ -258,12 +298,217 @@ export async function computeNearAttemptRequestDigest(
   return requestFingerprint(await normalizePayload(input));
 }
 
+function parseOwnerFundingEvidence(raw: unknown): NearLocalOwnerFundingEvidence {
+  const owner = NearArbitrumUsdcOwnerFundingEvidenceSchema.safeParse(raw);
+  if (owner.success) {
+    return {
+      ...owner.data,
+      transaction_hash: owner.data.transaction_hash.toLowerCase(),
+      source_address: owner.data.source_address.toLowerCase(),
+      deposit_address: owner.data.deposit_address.toLowerCase(),
+    };
+  }
+  const origin = NearArbitrumUsdcOriginReceiptEvidenceSchema.safeParse(raw);
+  if (origin.success) {
+    return {
+      ...origin.data,
+      funding_transaction_hash: origin.data.funding_transaction_hash.toLowerCase(),
+      source_address: origin.data.source_address.toLowerCase(),
+      deposit_address: origin.data.deposit_address.toLowerCase(),
+      block_hash: origin.data.block_hash.toLowerCase(),
+      ...(origin.data.outcome === "refund-confirmed" ? {
+        refund_transaction_hash: origin.data.refund_transaction_hash.toLowerCase(),
+        refund_to: origin.data.refund_to.toLowerCase(),
+      } : {}),
+    };
+  }
+  const settlement = NearArbitrumUsdcToWnearSettlementEvidenceSchema.safeParse(raw);
+  if (settlement.success) {
+    return {
+      ...settlement.data,
+      deposit_address: settlement.data.deposit_address.toLowerCase(),
+    };
+  }
+  fail("INVALID_INPUT", "Owner funding evidence provenance is unsupported");
+}
+
+function fundingEvidenceTime(evidence: NearLocalOwnerFundingEvidence): string {
+  return "provenance" in evidence
+    ? evidence.provenance === "owner-reported" ? evidence.reported_at : evidence.verified_at
+    : evidence.evidence_level === "independent-destination-receipt"
+      ? evidence.independent_destination_receipt.verified_at
+      : evidence.provider_checked_at;
+}
+
+function fundingBindingMatches(
+  entry: Pick<NearAttemptEntry, "approval">,
+  binding: NearArbitrumUsdcOwnerFundingEvidence,
+  evidence: NearLocalOwnerFundingEvidence,
+): boolean {
+  if ("provenance" in evidence) {
+    if (evidence.provenance === "owner-reported") {
+      return canonicalJson(binding) === canonicalJson(evidence);
+    }
+    return binding.transaction_hash === evidence.funding_transaction_hash &&
+      binding.source_address === evidence.source_address &&
+      binding.deposit_address === evidence.deposit_address &&
+      binding.amount_in === evidence.amount_in &&
+      (evidence.outcome !== "refund-confirmed" || (
+        evidence.refund_to === binding.source_address &&
+        evidence.refunded_amount === binding.amount_in
+      ));
+  }
+  return binding.deposit_address === evidence.deposit_address &&
+    entry.approval.quote_hash === evidence.quote_hash &&
+    entry.approval.quote_id === evidence.correlation_id &&
+    (evidence.evidence_level !== "independent-destination-receipt" || (
+      evidence.independent_destination_receipt.recipient === entry.approval.recipient &&
+      evidence.independent_destination_receipt.asset_id === entry.approval.destination_asset &&
+      BigInt(evidence.independent_destination_receipt.amount_received) >=
+        BigInt(entry.approval.min_amount_out)
+    ));
+}
+
+function reconciliationFromFunding(
+  entry: Pick<NearAttemptEntry, "attempt" | "approval">,
+  evidence: NearLocalOwnerFundingEvidence,
+): NearReconciliationEvidence | undefined {
+  const providerStatus = !("provenance" in evidence) &&
+      evidence.evidence_level === "independent-destination-receipt"
+    ? "SUCCESS"
+    : "provenance" in evidence && evidence.provenance === "origin-chain-verified" &&
+        evidence.outcome === "refund-confirmed"
+      ? "REFUNDED"
+      : "provenance" in evidence && evidence.provenance === "origin-chain-verified" &&
+          evidence.outcome === "funding-failed"
+        ? "FAILED" : undefined;
+  if (!providerStatus) return undefined;
+  return NearReconciliationEvidenceSchema.parse({
+    version: "pilot-near-reconciliation-v1",
+    outcome: "terminal",
+    attempt_id: entry.attempt.attempt_id,
+    principal_id: entry.attempt.principal_id,
+    account_id: entry.attempt.account_id,
+    network: entry.attempt.network,
+    checked_at: fundingEvidenceTime(evidence),
+    deposit_address: entry.approval.deposit_address,
+    ...(entry.approval.deposit_memo === undefined ? {} : { deposit_memo: entry.approval.deposit_memo }),
+    provider_status: providerStatus,
+    evidence_digest: sha256(evidence),
+    safe_to_resubmit: false,
+  });
+}
+
+function unknownReconciliationFromOwnerFunding(
+  entry: Pick<NearAttemptEntry, "attempt" | "approval">,
+  evidence: NearArbitrumUsdcOwnerFundingEvidence,
+): NearReconciliationEvidence {
+  return NearReconciliationEvidenceSchema.parse({
+    version: "pilot-near-reconciliation-v1",
+    outcome: "unknown",
+    attempt_id: entry.attempt.attempt_id,
+    principal_id: entry.attempt.principal_id,
+    account_id: entry.attempt.account_id,
+    network: entry.attempt.network,
+    checked_at: evidence.reported_at,
+    deposit_address: entry.approval.deposit_address,
+    reason: "transport_error",
+    safe_to_resubmit: false,
+  });
+}
+
+function validateOwnerFundingLifecycle(
+  entry: Pick<NearAttemptEntry, "attempt" | "approval" | "authorization" | "evidence_log">,
+  raw: unknown,
+): asserts raw is NearOwnerFundingLifecycle {
+  if (!object(raw) || !exactKeys(raw, ["version", "status", "binding", "events"]) ||
+      raw.version !== "pilot-near-local-owner-funding-lifecycle-v1" || !Array.isArray(raw.events) ||
+      raw.events.length < 1 || entry.evidence_log.length !== 1) {
+    fail("PERSISTENCE_CORRUPT", "Owner funding lifecycle shape is invalid");
+  }
+  const parsedBinding = NearArbitrumUsdcOwnerFundingEvidenceSchema.safeParse(raw.binding);
+  if (!parsedBinding.success) fail("PERSISTENCE_CORRUPT", "Owner funding binding is invalid");
+  const binding: NearArbitrumUsdcOwnerFundingEvidence = {
+    ...parsedBinding.data,
+    transaction_hash: parsedBinding.data.transaction_hash.toLowerCase(),
+    source_address: parsedBinding.data.source_address.toLowerCase(),
+    deposit_address: parsedBinding.data.deposit_address.toLowerCase(),
+  };
+  const initialUnknown = unknownReconciliationFromOwnerFunding(entry as NearAttemptEntry, binding);
+  if (canonicalJson(binding) !== canonicalJson(raw.binding) ||
+      entry.approval.origin_asset !== NEAR_ARBITRUM_USDC_ASSET_ID ||
+      entry.approval.amount_in !== binding.amount_in ||
+      entry.approval.deposit_address.toLowerCase() !== binding.deposit_address ||
+      entry.approval.refund_to.toLowerCase() !== binding.source_address ||
+      entry.approval.deposit_memo !== undefined ||
+      canonicalJson(entry.evidence_log[0]?.evidence) !== canonicalJson(initialUnknown)) {
+    fail("PERSISTENCE_CORRUPT", "Owner funding does not match the exact approved route");
+  }
+  const transitionIds = new Set<string>();
+  let priorTime = Date.parse(entry.attempt.created_at);
+  let originFunded = false;
+  let providerSuccess = false;
+  let terminal = false;
+  let derivedStatus: NearOwnerFundingLifecycle["status"] = "outcome_unknown";
+  for (const [index, candidate] of raw.events.entries()) {
+    if (!object(candidate) || !exactKeys(candidate, ["transition_id", "evidence"]) ||
+        typeof candidate.transition_id !== "string" || !SAFE_ID.test(candidate.transition_id) ||
+        transitionIds.has(candidate.transition_id)) {
+      fail("PERSISTENCE_CORRUPT", "Owner funding event identity is invalid");
+    }
+    const evidence = parseOwnerFundingEvidence(candidate.evidence);
+    const isOwner = "provenance" in evidence && evidence.provenance === "owner-reported";
+    if (canonicalJson(evidence) !== canonicalJson(candidate.evidence) ||
+        !fundingBindingMatches(entry as NearAttemptEntry, binding, evidence) || terminal ||
+        (index === 0 && !isOwner) || (index > 0 && isOwner)) {
+      fail("PERSISTENCE_CORRUPT", "Owner funding event sequence is invalid");
+    }
+    const eventTime = Date.parse(fundingEvidenceTime(evidence));
+    if (eventTime < priorTime) fail("PERSISTENCE_CORRUPT", "Owner funding evidence time moved backwards");
+    priorTime = eventTime;
+    transitionIds.add(candidate.transition_id);
+    if ("provenance" in evidence && evidence.provenance === "origin-chain-verified") {
+      if (evidence.outcome === "funding-confirmed") {
+        if (originFunded) fail("PERSISTENCE_CORRUPT", "Origin funding was verified more than once");
+        originFunded = true;
+        derivedStatus = "origin_chain_verified";
+      } else {
+        derivedStatus = evidence.outcome === "refund-confirmed" ? "refunded" : "failed";
+        terminal = true;
+      }
+    } else if (!("provenance" in evidence) && evidence.evidence_level === "provider-reported-only") {
+      if (evidence.provider_status === "SUCCESS") providerSuccess = true;
+      derivedStatus = "provider_observed";
+    } else if (!("provenance" in evidence) &&
+        evidence.evidence_level === "independent-destination-receipt") {
+      if (!originFunded || !providerSuccess ||
+          evidence.independent_destination_receipt.recipient !== entry.approval.recipient) {
+        fail("PERSISTENCE_CORRUPT", "Destination receipt lacks matching origin and provider evidence");
+      }
+      derivedStatus = "destination_chain_verified";
+      terminal = true;
+    }
+  }
+  if (raw.status !== derivedStatus) fail("PERSISTENCE_CORRUPT", "Owner funding status is invalid");
+  const lastEvidence = parseOwnerFundingEvidence((raw.events.at(-1) as NearOwnerFundingEvent).evidence);
+  const terminalReconciliation = reconciliationFromFunding(entry as NearAttemptEntry, lastEvidence);
+  if (terminalReconciliation === undefined) {
+    if (entry.attempt.state !== "unknown" ||
+        canonicalJson(entry.attempt.reconciliation) !== canonicalJson(initialUnknown)) {
+      fail("PERSISTENCE_CORRUPT", "Unresolved owner funding must remain nonterminal");
+    }
+  } else if (canonicalJson(entry.attempt.reconciliation) !== canonicalJson(terminalReconciliation)) {
+    fail("PERSISTENCE_CORRUPT", "Terminal owner funding does not match attempt reconciliation");
+  }
+}
+
 function validateEntry(value: unknown): asserts value is NearAttemptEntry {
   if (!object(value) || !exactKeys(value, [
     "version", "entry_revision", "artifact_kind", "request_fingerprint", "authorization",
     "idempotency", "approval", "budget_limit_atomic", "attempt", "reservation", "evidence_log",
+    "owner_funding",
   ])) fail("PERSISTENCE_CORRUPT", "NEAR attempt entry shape is invalid");
-  if (value.version !== "pilot-near-attempt-entry-v1" ||
+  if (value.version !== "pilot-near-attempt-entry-v2" ||
       !Number.isSafeInteger(value.entry_revision) || Number(value.entry_revision) < 1 ||
       value.artifact_kind !== "provider_verified_executable_quote" ||
       typeof value.request_fingerprint !== "string" || !DIGEST.test(value.request_fingerprint) ||
@@ -276,6 +521,14 @@ function validateEntry(value: unknown): asserts value is NearAttemptEntry {
   const reservation = NearBudgetReservationSchema.safeParse(value.reservation);
   if (!authorization.success || !idempotency.success || !approval.success || !attempt.success || !reservation.success) {
     fail("PERSISTENCE_CORRUPT", "NEAR attempt entry violates shared contracts");
+  }
+  if (value.owner_funding !== null) {
+    validateOwnerFundingLifecycle({
+      attempt: attempt.data,
+      approval: approval.data,
+      authorization: authorization.data,
+      evidence_log: value.evidence_log as readonly NearEvidenceEvent[],
+    }, value.owner_funding);
   }
   const identity = [
     authorization.data.principal_id, authorization.data.account_id, authorization.data.network,
@@ -355,12 +608,16 @@ function validateEntry(value: unknown): asserts value is NearAttemptEntry {
     }
     transitionIds.add(event.transition_id);
   }
-  if (value.entry_revision !== value.evidence_log.length + 1) {
+  const ownerFundingEvents = value.owner_funding?.events.length ?? 0;
+  const recordedTransitions = value.owner_funding === null
+    ? value.evidence_log.length : ownerFundingEvents;
+  if (value.entry_revision !== recordedTransitions + 1) {
     fail("PERSISTENCE_CORRUPT", "NEAR entry revision does not match evidence history");
   }
-  const latestEvidence = value.evidence_log.at(-1)?.evidence;
-  if ((attempt.data.reconciliation === undefined) !== (latestEvidence === undefined) ||
-      (latestEvidence !== undefined && canonicalJson(latestEvidence) !== canonicalJson(attempt.data.reconciliation))) {
+  const latestEvidence = value.owner_funding === null ? value.evidence_log.at(-1)?.evidence : undefined;
+  if (value.owner_funding === null && (
+    (attempt.data.reconciliation === undefined) !== (latestEvidence === undefined) ||
+      (latestEvidence !== undefined && canonicalJson(latestEvidence) !== canonicalJson(attempt.data.reconciliation)))) {
     fail("PERSISTENCE_CORRUPT", "NEAR attempt does not match its latest reconciliation evidence");
   }
 }
@@ -583,7 +840,7 @@ export class NearAttemptStore {
         updated_at: idempotency.created_at,
       });
       const entry: NearAttemptEntry = {
-        version: "pilot-near-attempt-entry-v1",
+        version: "pilot-near-attempt-entry-v2",
         entry_revision: 1,
         artifact_kind: "provider_verified_executable_quote",
         request_fingerprint: fingerprint,
@@ -594,6 +851,7 @@ export class NearAttemptStore {
         attempt,
         reservation,
         evidence_log: [],
+        owner_funding: null,
       };
       const next: NearAttemptSnapshot = {
         schema_version: NEAR_ATTEMPT_STORE_SCHEMA_VERSION,
@@ -601,6 +859,134 @@ export class NearAttemptStore {
         entries: [...snapshot.entries, entry],
       };
       return { commit: true, next, value: { replay: false, entry: clone(entry) } };
+    });
+  }
+
+  async recordOwnerFundingEvidence(
+    input: NearOwnerFundingTransitionInput,
+  ): Promise<NearOwnerFundingTransitionResult> {
+    safeId(input.principal_id, "principal_id");
+    safeId(input.idempotency_key, "idempotency_key");
+    safeId(input.transition_id, "transition_id");
+    if (!Number.isSafeInteger(input.expected_entry_revision) || input.expected_entry_revision < 1) {
+      fail("INVALID_INPUT", "Expected entry revision is invalid");
+    }
+    return this.persistence.transact<NearOwnerFundingTransitionResult>((snapshot) => {
+      const entry = findEntry(snapshot, input.principal_id, input.idempotency_key);
+      if (!entry) fail("ATTEMPT_NOT_FOUND", "NEAR attempt was not found");
+      if (entry.authorization.account_id !== input.account_id) {
+        fail("AUTHORIZATION_INVALID", "Owner funding belongs to another authorized wallet");
+      }
+      const evidence = parseOwnerFundingEvidence(input.evidence);
+      const event: NearOwnerFundingEvent = { transition_id: input.transition_id, evidence };
+      const previous = entry.owner_funding?.events.find((candidate) =>
+        candidate.transition_id === input.transition_id);
+      if (previous) {
+        if (canonicalJson(previous) !== canonicalJson(event)) {
+          fail("IDEMPOTENCY_CONFLICT", "Funding transition ID was reused for different evidence");
+        }
+        return { commit: false, value: { replay: true, entry: clone(entry) } };
+      }
+      if (entry.entry_revision !== input.expected_entry_revision) {
+        fail("VERSION_CONFLICT", "Attempt changed before funding evidence was recorded");
+      }
+      if (entry.owner_funding === null) {
+        if (!("provenance" in evidence) || evidence.provenance !== "owner-reported" ||
+            entry.attempt.state !== "approved" || entry.evidence_log.length !== 0 ||
+            entry.approval.origin_asset !== NEAR_ARBITRUM_USDC_ASSET_ID ||
+            entry.approval.destination_asset !== NEAR_WRAPPED_NEAR_ASSET_ID ||
+            entry.approval.deposit_memo !== undefined ||
+            entry.approval.amount_in !== evidence.amount_in ||
+            entry.approval.deposit_address.toLowerCase() !== evidence.deposit_address ||
+            entry.approval.refund_to.toLowerCase() !== evidence.source_address ||
+            Date.parse(evidence.reported_at) < Date.parse(entry.attempt.created_at) ||
+            Date.parse(evidence.reported_at) >= Date.parse(entry.approval.approval_expires_at) ||
+            Date.parse(evidence.reported_at) >= Date.parse(entry.approval.provider_deadline_at)) {
+          fail("FUNDING_MISMATCH", "Owner funding does not match an active exact executable route");
+        }
+        const ownerFunding: NearOwnerFundingLifecycle = {
+          version: "pilot-near-local-owner-funding-lifecycle-v1",
+          status: "outcome_unknown",
+          binding: evidence,
+          events: [event],
+        };
+        const reconciliation = unknownReconciliationFromOwnerFunding(entry, evidence);
+        const replacement: NearAttemptEntry = {
+          ...entry,
+          entry_revision: entry.entry_revision + 1,
+          attempt: replaceAttempt(entry.attempt, reconciliation),
+          reservation: replaceReservation(entry.reservation, reconciliation),
+          evidence_log: [{
+            transition_id: input.transition_id,
+            evidence: reconciliation,
+          }],
+          owner_funding: ownerFunding,
+        };
+        return {
+          commit: true,
+          next: replaceEntry(snapshot, replacement),
+          value: { replay: false, entry: clone(replacement) },
+        };
+      }
+      if (!fundingBindingMatches(entry, entry.owner_funding.binding, evidence)) {
+        fail("FUNDING_MISMATCH", "Funding evidence changed the exact transaction or quote binding");
+      }
+      if (Date.parse(fundingEvidenceTime(evidence)) <
+          Date.parse(fundingEvidenceTime(entry.owner_funding.events.at(-1)!.evidence))) {
+        fail("INVALID_INPUT", "Funding evidence cannot move lifecycle time backwards");
+      }
+      if (["destination_chain_verified", "refunded", "failed"].includes(entry.owner_funding.status)) {
+        fail("INVALID_TRANSITION", "Terminal owner funding cannot accept more evidence");
+      }
+      const events = [...entry.owner_funding.events, event];
+      let status: NearOwnerFundingLifecycle["status"];
+      if ("provenance" in evidence) {
+        if (evidence.provenance === "owner-reported") {
+          fail("INVALID_TRANSITION", "Owner funding can be reported only once");
+        }
+        if (evidence.outcome === "funding-confirmed") {
+          if (events.slice(0, -1).some((candidate) =>
+            "provenance" in candidate.evidence && candidate.evidence.provenance === "origin-chain-verified" &&
+            candidate.evidence.outcome === "funding-confirmed")) {
+            fail("INVALID_TRANSITION", "Origin funding was already independently verified");
+          }
+          status = "origin_chain_verified";
+        } else {
+          status = evidence.outcome === "refund-confirmed" ? "refunded" : "failed";
+        }
+      } else if (evidence.evidence_level === "provider-reported-only") {
+        // Even provider SUCCESS/REFUNDED/FAILED is observation, not independent finality.
+        status = "provider_observed";
+      } else {
+        const originVerified = events.slice(0, -1).some((candidate) =>
+          "provenance" in candidate.evidence && candidate.evidence.provenance === "origin-chain-verified" &&
+          candidate.evidence.outcome === "funding-confirmed");
+        const providerSuccess = events.slice(0, -1).some((candidate) =>
+          !("provenance" in candidate.evidence) &&
+          candidate.evidence.evidence_level === "provider-reported-only" &&
+          candidate.evidence.provider_status === "SUCCESS");
+        if (!originVerified || !providerSuccess || evidence.provider_status !== "SUCCESS") {
+          fail("INVALID_TRANSITION", "Destination settlement requires origin verification and prior provider SUCCESS");
+        }
+        status = "destination_chain_verified";
+      }
+      const reconciliation = reconciliationFromFunding(entry, evidence);
+      const replacement: NearAttemptEntry = {
+        ...entry,
+        entry_revision: entry.entry_revision + 1,
+        attempt: reconciliation ? replaceAttempt(entry.attempt, reconciliation) : entry.attempt,
+        reservation: reconciliation ? replaceReservation(entry.reservation, reconciliation) : entry.reservation,
+        owner_funding: {
+          ...entry.owner_funding,
+          status,
+          events,
+        },
+      };
+      return {
+        commit: true,
+        next: replaceEntry(snapshot, replacement),
+        value: { replay: false, entry: clone(replacement) },
+      };
     });
   }
 
@@ -625,6 +1011,9 @@ export class NearAttemptStore {
     return this.persistence.transact<NearEvidenceTransitionResult>((snapshot) => {
       const entry = findEntry(snapshot, input.principal_id, input.idempotency_key);
       if (!entry) fail("ATTEMPT_NOT_FOUND", "NEAR attempt was not found");
+      if (entry.owner_funding !== null) {
+        fail("INVALID_TRANSITION", "Owner-funded attempts require provenance-aware funding reconciliation");
+      }
       const evidence = validateEvidence(entry, input.evidence);
       if (mode === "unknown" && evidence.outcome !== "unknown") fail("INVALID_TRANSITION", "Initial unknown outcome requires unknown evidence");
       const event: NearEvidenceEvent = { transition_id: input.transition_id, evidence };
@@ -654,7 +1043,11 @@ export class NearAttemptStore {
     safeId(idempotencyKey, "idempotency_key");
     const entry = findEntry(await this.persistence.read(), principalId, idempotencyKey);
     if (!entry) fail("ATTEMPT_NOT_FOUND", "NEAR attempt was not found");
-    const decision = entry.attempt.state === "unknown"
+    const decision = entry.owner_funding !== null && ![
+      "destination_chain_verified", "refunded", "failed",
+    ].includes(entry.owner_funding.status)
+      ? { action: "blocked_unknown", safe_to_resubmit: false, attempt: entry.attempt }
+      : entry.attempt.state === "unknown"
       ? { action: "blocked_unknown", safe_to_resubmit: false, attempt: entry.attempt }
       : entry.attempt.state === "pending"
         ? { action: "poll_existing", attempt: entry.attempt }

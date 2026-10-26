@@ -142,6 +142,81 @@ describe("NEAR Intents 1Click client", () => {
     expect(result.quoteResponse.quote.depositMemo).toBe("12345");
   });
 
+  it("binds status to the expected quote correlation and canonical hash", async () => {
+    const executableQuote = quoteResponse({
+      depositAddress: "deposit.near",
+      deadline: "2027-01-01T00:00:00.000Z",
+      timeWhenInactive: "2026-12-31T23:00:00.000Z",
+    });
+    executableQuote.quoteRequest = { ...request, dry: false };
+    const quoteClient = createOneClickClient({
+      allowExecutableQuotes: true,
+      fetch: async () => jsonResponse(executableQuote),
+      verifyQuoteSignature: () => true,
+    });
+    const { quoteHash } = await quoteClient.quote(executableQuote.quoteRequest);
+    const statusBody = {
+      correlationId: "quote-correlation",
+      quoteResponse: executableQuote,
+      status: "PROCESSING",
+      updatedAt: "2026-10-26T00:01:00.000Z",
+      swapDetails: {
+        intentHashes: [],
+        nearTxHashes: [],
+        originChainTxHashes: [],
+        destinationChainTxHashes: [],
+      },
+    };
+    const statusClient = createOneClickClient({
+      fetch: async () => jsonResponse(statusBody),
+      verifyQuoteSignature: () => true,
+    });
+
+    await expect(statusClient.status({
+      depositAddress: "deposit.near",
+      expectedCorrelationId: "quote-correlation",
+      expectedQuoteHash: quoteHash,
+    })).resolves.toMatchObject({ status: "PROCESSING" });
+    await expect(statusClient.status({
+      depositAddress: "deposit.near",
+      expectedCorrelationId: "another-correlation",
+      expectedQuoteHash: quoteHash,
+    })).rejects.toMatchObject({ code: "REQUEST_MISMATCH" });
+    await expect(statusClient.status({
+      depositAddress: "deposit.near",
+      expectedCorrelationId: "quote-correlation",
+      expectedQuoteHash: "1".repeat(44),
+    })).rejects.toMatchObject({ code: "REQUEST_MISMATCH" });
+  });
+
+  it("rejects unknown provider status values as non-success", async () => {
+    const executableQuote = quoteResponse({
+      depositAddress: "deposit.near",
+      deadline: "2027-01-01T00:00:00.000Z",
+      timeWhenInactive: "2026-12-31T23:00:00.000Z",
+    });
+    executableQuote.quoteRequest = { ...request, dry: false };
+    const client = createOneClickClient({
+      fetch: async () => jsonResponse({
+        correlationId: "quote-correlation",
+        quoteResponse: executableQuote,
+        status: "UNKNOWN_PROVIDER_STATE",
+        updatedAt: "2026-10-26T00:01:00.000Z",
+        swapDetails: {
+          intentHashes: [],
+          nearTxHashes: [],
+          originChainTxHashes: [],
+          destinationChainTxHashes: [],
+        },
+      }),
+      verifyQuoteSignature: () => true,
+    });
+
+    await expect(client.status({ depositAddress: "deposit.near" })).rejects.toMatchObject({
+      code: "INVALID_RESPONSE",
+    });
+  });
+
   it("bounds token responses before parsing them", async () => {
     const client = createOneClickClient({
       maxResponseBytes: 16,

@@ -84,6 +84,9 @@ export const UNTRUSTED_FIELD_RULES: Readonly<
   "near.intents.quote": [
     { kind: "provider", path: ["quote", "correlationId"] },
   ],
+  "near.intents.executable-quote.review": [
+    { kind: "provider", path: ["owner_review", "quote_correlation_id"] },
+  ],
   "near.intents.status": [
     { kind: "provider", path: ["status", "correlationId"] },
     { kind: "provider", path: ["status", "quoteResponse", "correlationId"] },
@@ -207,6 +210,7 @@ export const OP_SCREENING_CLASSIFICATION: Readonly<
   // and numbers, while the small set of provider-authored display fields is
   // explicitly screened above before model use.
   "near.intents.quote": "untrusted",
+  "near.intents.executable-quote.review": "untrusted",
   "near.intents.status": "untrusted",
   "near.intents.tokens": "untrusted",
   "onboarding.readiness": "structured",

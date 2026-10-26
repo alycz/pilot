@@ -282,7 +282,7 @@ describe("D1 hosted NEAR attempt reservation", () => {
 });
 
 describe("D1 hosted NEAR attempt reconciliation", () => {
-  it("preserves unknown and pending budget, then releases only on terminal refund evidence", async () => {
+  it("preserves unknown and pending budget after a provider-reported refund", async () => {
     const coordinator = new Coordinator();
     const store = attemptStore(coordinator);
     await store.reserve(reservation());
@@ -307,11 +307,39 @@ describe("D1 hosted NEAR attempt reconciliation", () => {
       checkedAt: "2026-11-01T00:03:00.000Z",
       providerStatus: "REFUNDED",
     }));
-    expect(refunded.attempt).toEqual(expect.objectContaining({ state: "refunded", reservationState: "released" }));
-    expect(await store.budgetConsumed(ASSET)).toBe("0");
+    expect(refunded.attempt).toEqual(expect.objectContaining({
+      state: "unknown",
+      reservationState: "outcome_unknown",
+    }));
+    expect(refunded.attempt.providerStatus).toBeUndefined();
+    expect(await store.budgetConsumed(ASSET)).toBe(ONE_NEAR_ATOMIC);
     await expect(store.reserve(distinctReservation(2)))
-      .resolves.toEqual(expect.objectContaining({ replay: false }));
+      .rejects.toMatchObject({ code: "BUDGET_EXCEEDED" });
   });
+
+  it.each(["SUCCESS", "REFUNDED", "FAILED"] as const)(
+    "keeps provider %s nonterminal even when accompanied by an arbitrary digest",
+    async (providerStatus) => {
+      const coordinator = new Coordinator();
+      const store = attemptStore(coordinator);
+      await store.reserve(reservation());
+      await store.reconcile("idempotency-1", evidence("unknown"));
+      const observed = await store.reconcile("idempotency-1", evidence("terminal", {
+        transitionId: `provider-${providerStatus.toLowerCase()}`,
+        expectedEntryRevision: 2,
+        checkedAt: "2026-11-01T00:02:00.000Z",
+        providerStatus,
+        evidenceDigest: "F".repeat(64),
+      }));
+      expect(observed.attempt).toEqual(expect.objectContaining({
+        state: "unknown",
+        reservationState: "outcome_unknown",
+        entryRevision: 3,
+      }));
+      expect(observed.attempt.providerStatus).toBeUndefined();
+      expect(await store.budgetConsumed(ASSET)).toBe(ONE_NEAR_ATOMIC);
+    },
+  );
 
   it("uses entry revision CAS so only one separate Worker can resolve an unknown attempt", async () => {
     const coordinator = new Coordinator();
@@ -339,9 +367,12 @@ describe("D1 hosted NEAR attempt reconciliation", () => {
     expect(results.filter((result) => result.status === "rejected"))
       .toEqual([expect.objectContaining({ reason: expect.objectContaining({ code: "VERSION_CONFLICT" }) })]);
     const winner = results.find((result) => result.status === "fulfilled");
-    const state = winner?.status === "fulfilled" ? winner.value.attempt.state : undefined;
-    expect(["settled", "refunded"]).toContain(state);
-    expect(await baseline.budgetConsumed(ASSET)).toBe(state === "settled" ? ONE_NEAR_ATOMIC : "0");
+    const attempt = winner?.status === "fulfilled" ? winner.value.attempt : undefined;
+    expect(attempt).toEqual(expect.objectContaining({
+      state: "unknown",
+      reservationState: "outcome_unknown",
+    }));
+    expect(await baseline.budgetConsumed(ASSET)).toBe(ONE_NEAR_ATOMIC);
   });
 
   it("replays exact transition evidence and rejects a changed reuse", async () => {

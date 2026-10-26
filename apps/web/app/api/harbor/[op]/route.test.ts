@@ -1,8 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_POLICY } from "@pilot/contracts";
+import type { NearPrincipalAuthorization } from "@pilot/contracts/near";
 import { Wallet, type Payment } from "xrpl";
 import { sealWalletSession, WALLET_SESSION_COOKIE } from "../../../../lib/wallet-session";
 import { authorizeBrowserHarborOperation } from "../../../../lib/wallet-authorization";
+import {
+  NEAR_PRINCIPAL_AUTHORIZATION_COOKIE,
+  readNearPrincipalAuthorization,
+  sealNearPrincipalAuthorization,
+} from "../../../../lib/near-wallet-proof";
 
 import {
   createHarborProxyHandler as createProductionHarborProxyHandler,
@@ -62,6 +68,16 @@ const ISOLATED_X402_ENVIRONMENT: HarborProxyEnvironment = {
 const ACCOUNT = "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59";
 const X402_PAY_TO = "rnSXTVWEhMKhECNUEENzUi9QuMFoFpKghr";
 const SESSION_SECRET = "route-test-session-secret-with-at-least-thirty-two-characters";
+const NEAR_NOW = Date.parse("2098-01-01T00:00:00.000Z");
+const NEAR_ACCOUNT = "owner.near";
+const NEAR_EXECUTABLE_QUOTE_REVIEW_ARGS = {
+  route: "arbitrum-usdc-to-near-wnear-v1",
+  amount_atomic: "1000000",
+  slippage_bps: 100,
+  recipient: NEAR_ACCOUNT,
+  refund_to: "0x1111111111111111111111111111111111111111",
+  refund_deadline: "2098-01-01T00:30:00.000Z",
+} as const;
 const HASH = "A".repeat(64);
 const RLUSD_ISSUER = "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV";
 const RLUSD_CURRENCY = "524C555344000000000000000000000000000000";
@@ -149,6 +165,48 @@ function workAgreementRequest(op: string, body: string, headers?: HeadersInit): 
     origin: "http://127.0.0.1:3003",
     url: `http://127.0.0.1:3003/api/harbor/${op}`,
     headers,
+  });
+}
+
+function nearReviewAuthorization(
+  input: Partial<NearPrincipalAuthorization> = {},
+): NearPrincipalAuthorization {
+  return {
+    version: "pilot-near-principal-authorization-v1",
+    authorization_id: "authorization-principal-owner",
+    principal_id: "principal-owner",
+    account_id: NEAR_ACCOUNT,
+    network: "near:mainnet",
+    operations: [
+      "near.intents.approval.review",
+      "near.intents.executable-quote.review",
+    ],
+    issued_at: "2097-12-31T23:59:00.000Z",
+    expires_at: "2098-01-01T01:00:00.000Z",
+    ...input,
+  };
+}
+
+function nearReviewRequest(
+  authorization?: NearPrincipalAuthorization,
+  options: { origin?: string; cookie?: string } = {},
+): Request {
+  const cookie = options.cookie ?? (authorization
+    ? `${NEAR_PRINCIPAL_AUTHORIZATION_COOKIE}=${encodeURIComponent(
+      sealNearPrincipalAuthorization(authorization, { SESSION_SECRET }),
+    )}`
+    : undefined);
+  return request(JSON.stringify(NEAR_EXECUTABLE_QUOTE_REVIEW_ARGS), {
+    origin: options.origin,
+    url: "https://pilot.example/api/harbor/near.intents.executable-quote.review",
+    headers: cookie ? { cookie } : undefined,
+  });
+}
+
+function nearAuthorizationReader(request: Request): NearPrincipalAuthorization | null {
+  return readNearPrincipalAuthorization(request, {
+    environment: { SESSION_SECRET },
+    now: NEAR_NOW,
   });
 }
 
@@ -265,6 +323,171 @@ describe("POST /api/harbor/[op]", () => {
     expect(response.status).toBe(401);
     expect((await response.json()).error.code).toBe("HARBOR_PROXY_UNAUTHORIZED");
     expect(upstreamFetch).not.toHaveBeenCalled();
+  });
+
+  describe("near.intents.executable-quote.review authorization", () => {
+    it("forwards an exact recipient-bound, explicitly scoped sealed authorization", async () => {
+      const upstreamFetch = vi.fn(async () => Response.json({ ok: true }));
+      const handler = createProductionHarborProxyHandler({
+        authorizeOperation: () => false,
+        env: {
+          ...ENVIRONMENT,
+          EXEC_NETWORK: "mainnet",
+          MAINNET_EXECUTION: "false",
+        },
+        fetch: fetchDependency(upstreamFetch),
+        readNearPrincipalAuthorization: nearAuthorizationReader,
+      });
+
+      const response = await handler(
+        nearReviewRequest(nearReviewAuthorization()),
+        context("near.intents.executable-quote.review"),
+      );
+
+      expect(response.status).toBe(200);
+      expect(upstreamFetch).toHaveBeenCalledTimes(1);
+      expect(upstreamFetch).toHaveBeenCalledWith(
+        "https://harbor.example/api/ops/near.intents.executable-quote.review",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify(NEAR_EXECUTABLE_QUOTE_REVIEW_ARGS),
+        }),
+      );
+    });
+
+    it("rejects an anonymous request before Harbor dispatch", async () => {
+      const upstreamFetch = vi.fn();
+      const handler = createProductionHarborProxyHandler({
+        env: ENVIRONMENT,
+        fetch: fetchDependency(upstreamFetch),
+        readNearPrincipalAuthorization: nearAuthorizationReader,
+      });
+
+      const response = await handler(
+        nearReviewRequest(),
+        context("near.intents.executable-quote.review"),
+      );
+
+      expect(response.status).toBe(401);
+      expect((await response.json()).error.code).toBe("HARBOR_PROXY_UNAUTHORIZED");
+      expect(upstreamFetch).not.toHaveBeenCalled();
+    });
+
+    it("does not accept an XRPL wallet session as NEAR authorization", async () => {
+      const walletSession = sealWalletSession({
+        version: 1,
+        account: ACCOUNT,
+        network: "testnet",
+        expiresAt: Date.now() + 60_000,
+      }, SESSION_SECRET, AUTH_ENVIRONMENT);
+      const upstreamFetch = vi.fn();
+      const handler = createProductionHarborProxyHandler({
+        authorizeOperation: () => true,
+        env: ENVIRONMENT,
+        fetch: fetchDependency(upstreamFetch),
+        readNearPrincipalAuthorization: nearAuthorizationReader,
+      });
+
+      const response = await handler(
+        nearReviewRequest(undefined, {
+          cookie: `${WALLET_SESSION_COOKIE}=${encodeURIComponent(walletSession)}`,
+        }),
+        context("near.intents.executable-quote.review"),
+      );
+
+      expect(response.status).toBe(401);
+      expect((await response.json()).error.code).toBe("HARBOR_PROXY_UNAUTHORIZED");
+      expect(upstreamFetch).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["another NEAR account", nearReviewAuthorization({ account_id: "other.near" })],
+      ["no executable-review scope", nearReviewAuthorization({
+        operations: ["near.intents.approval.review"],
+      })],
+      ["an expired authorization", nearReviewAuthorization({
+        issued_at: "2097-12-31T22:00:00.000Z",
+        expires_at: "2097-12-31T23:00:00.000Z",
+      })],
+    ] as const)("rejects a sealed authorization for %s", async (_case, authorization) => {
+      const upstreamFetch = vi.fn();
+      const handler = createProductionHarborProxyHandler({
+        env: ENVIRONMENT,
+        fetch: fetchDependency(upstreamFetch),
+        readNearPrincipalAuthorization: nearAuthorizationReader,
+      });
+
+      const response = await handler(
+        nearReviewRequest(authorization),
+        context("near.intents.executable-quote.review"),
+      );
+
+      expect(response.status).toBe(401);
+      expect((await response.json()).error.code).toBe("HARBOR_PROXY_UNAUTHORIZED");
+      expect(upstreamFetch).not.toHaveBeenCalled();
+    });
+
+    it("rejects a tampered sealed authorization", async () => {
+      const sealed = sealNearPrincipalAuthorization(
+        nearReviewAuthorization(),
+        { SESSION_SECRET },
+      );
+      const upstreamFetch = vi.fn();
+      const handler = createProductionHarborProxyHandler({
+        env: ENVIRONMENT,
+        fetch: fetchDependency(upstreamFetch),
+        readNearPrincipalAuthorization: nearAuthorizationReader,
+      });
+
+      const response = await handler(
+        nearReviewRequest(undefined, {
+          cookie: `${NEAR_PRINCIPAL_AUTHORIZATION_COOKIE}=${encodeURIComponent(`${sealed}x`)}`,
+        }),
+        context("near.intents.executable-quote.review"),
+      );
+
+      expect(response.status).toBe(401);
+      expect((await response.json()).error.code).toBe("HARBOR_PROXY_UNAUTHORIZED");
+      expect(upstreamFetch).not.toHaveBeenCalled();
+    });
+
+    it("preserves same-origin enforcement before NEAR authorization", async () => {
+      const readAuthorization = vi.fn(nearAuthorizationReader);
+      const upstreamFetch = vi.fn();
+      const handler = createProductionHarborProxyHandler({
+        env: ENVIRONMENT,
+        fetch: fetchDependency(upstreamFetch),
+        readNearPrincipalAuthorization: readAuthorization,
+      });
+
+      const response = await handler(
+        nearReviewRequest(nearReviewAuthorization(), { origin: "https://evil.example" }),
+        context("near.intents.executable-quote.review"),
+      );
+
+      expect(response.status).toBe(403);
+      expect((await response.json()).error.code).toBe("HARBOR_PROXY_FORBIDDEN_ORIGIN");
+      expect(readAuthorization).not.toHaveBeenCalled();
+      expect(upstreamFetch).not.toHaveBeenCalled();
+    });
+
+    it("keeps live forwarding disabled in Harbor mock mode", async () => {
+      const upstreamFetch = vi.fn();
+      const handler = createProductionHarborProxyHandler({
+        env: { ...ENVIRONMENT, HARBOR_MOCK: "1" },
+        fetch: fetchDependency(upstreamFetch),
+        readNearPrincipalAuthorization: nearAuthorizationReader,
+      });
+
+      const response = await handler(
+        nearReviewRequest(nearReviewAuthorization()),
+        context("near.intents.executable-quote.review"),
+      );
+
+      expect(response.status).toBe(503);
+      expect((await response.json()).error.code).toBe("HARBOR_PROXY_MOCK_DISABLED");
+      expect(upstreamFetch).not.toHaveBeenCalled();
+    });
   });
 
   it.each([

@@ -3,16 +3,20 @@
 import { LoaderCircle, Radio, RefreshCw } from "lucide-react";
 import React, { useMemo, useState } from "react";
 
-import { createBrowserHarborClient } from "@/lib/harbor-browser";
+import { createBrowserHarborClient } from "../../lib/harbor-browser";
 import {
   loadLiveNearIntentsDryQuote,
   loadLiveNearIntentsTokens,
-} from "@/lib/near-live-preview";
+} from "../../lib/near-live-preview";
+
+import { NearOwnerFundedLiveReview } from "./near-owner-funded-live-review";
 
 type TokenInventory = Awaited<ReturnType<typeof loadLiveNearIntentsTokens>>;
 type DryQuote = Awaited<ReturnType<typeof loadLiveNearIntentsDryQuote>>;
 
-export function NearIntentsLivePreview() {
+export function NearIntentsLivePreview({
+  executableReviewEnabled = false,
+}: Readonly<{ executableReviewEnabled?: boolean }>) {
   const harbor = useMemo(() => createBrowserHarborClient(), []);
   const [inventory, setInventory] = useState<TokenInventory>();
   const [quote, setQuote] = useState<DryQuote>();
@@ -115,6 +119,8 @@ export function NearIntentsLivePreview() {
           <Result label="Deposit address" value="Not issued for dry quote" />
           <Result label="Execution" value="Disabled" />
         </dl> : null}
+
+        <NearOwnerFundedLiveReview client={harbor} enabled={executableReviewEnabled} />
       </div>
     </section>
   );

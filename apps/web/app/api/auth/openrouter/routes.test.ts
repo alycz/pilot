@@ -1033,6 +1033,23 @@ describe("model and session routes", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("returns a sanitized unavailable response when the default model is not configured", async () => {
+    const wallet = walletFixture();
+    delete process.env.MODEL_DEFAULT;
+
+    const response = await getSession(request(
+      "https://pilot.example/api/auth/openrouter/session",
+      { cookies: { [WALLET_SESSION_COOKIE]: wallet.cookie } },
+    ));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error: "Model access configuration is unavailable.",
+      code: "MODEL_ACCESS_UNAVAILABLE",
+    });
+    expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
   it("uses the authenticated Harbor status backend without exposing its credential or wallet identity", async () => {
     const wallet = walletFixture();
     useHarborDemoBackend();

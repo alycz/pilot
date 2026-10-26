@@ -474,8 +474,8 @@ export class D1NearAttemptStore {
             transition.state, transition.reservationState, transition.providerStatus,
             transition.reservationRevisionIncrement,
             input.checkedAt, transition.unknownSince, input.transitionId,
-            input.outcome, transition.providerStatus, input.unknownReason ?? null,
-            input.evidenceDigest ?? null, evidenceJson,
+            transition.recordedOutcome, transition.recordedProviderStatus,
+            transition.recordedUnknownReason, transition.recordedEvidenceDigest, evidenceJson,
             counter.consumed_atomic, counter.revision, counterNext,
             this.tenantId, this.principalId, idempotencyKey,
             row.request_digest, input.expectedEntryRevision, row.state,
@@ -561,6 +561,10 @@ export class D1NearAttemptStore {
     providerStatus: NearHostedProviderStatus | null;
     unknownSince: string | null;
     reservationRevisionIncrement: 0 | 1;
+    recordedOutcome: "unknown" | "pending" | "terminal";
+    recordedProviderStatus: NearHostedProviderStatus | null;
+    recordedUnknownReason: NearHostedUnknownReason | null;
+    recordedEvidenceDigest: string | null;
   }> {
     if (input.outcome === "unknown") {
       if (!input.unknownReason || input.providerStatus !== undefined || input.evidenceDigest !== undefined ||
@@ -570,6 +574,8 @@ export class D1NearAttemptStore {
       return {
         state: "unknown", reservationState: "outcome_unknown", providerStatus: null,
         unknownSince: row.unknown_since ?? input.checkedAt, reservationRevisionIncrement: 1,
+        recordedOutcome: "unknown", recordedProviderStatus: null,
+        recordedUnknownReason: input.unknownReason, recordedEvidenceDigest: null,
       };
     }
     if (input.outcome === "pending") {
@@ -582,16 +588,32 @@ export class D1NearAttemptStore {
       return {
         state: "pending", reservationState: "outcome_unknown", providerStatus: input.providerStatus,
         unknownSince: null, reservationRevisionIncrement: 0,
+        recordedOutcome: "pending", recordedProviderStatus: input.providerStatus,
+        recordedUnknownReason: null, recordedEvidenceDigest: null,
       };
     }
     if (!input.providerStatus || !["SUCCESS", "REFUNDED", "FAILED"].includes(input.providerStatus) ||
         !input.evidenceDigest || input.unknownReason !== undefined || !["unknown", "pending"].includes(row.state)) {
       fail("INVALID_TRANSITION", "Terminal reconciliation evidence is invalid for the current attempt");
     }
-    return input.providerStatus === "SUCCESS"
-      ? { state: "settled", reservationState: "committed", providerStatus: "SUCCESS", unknownSince: null, reservationRevisionIncrement: 1 }
-      : input.providerStatus === "REFUNDED"
-        ? { state: "refunded", reservationState: "released", providerStatus: "REFUNDED", unknownSince: null, reservationRevisionIncrement: 1 }
-        : { state: "failed", reservationState: "released", providerStatus: "FAILED", unknownSince: null, reservationRevisionIncrement: 1 };
+    // A 1Click provider terminal status is an observation, not independent
+    // settlement evidence. The v1 hosted schema does not retain the exact
+    // approved destination asset/recipient/minimum-output or origin refund
+    // route needed to verify a terminal transition. Preserve the provider
+    // observation in last_evidence_json, but deliberately persist a generic
+    // UNKNOWN transition so the reservation cannot be released or committed.
+    // A forward schema must add those immutable bindings before hosted
+    // owner-funded attempts may finalize.
+    return {
+      state: "unknown",
+      reservationState: "outcome_unknown",
+      providerStatus: null,
+      unknownSince: row.unknown_since ?? input.checkedAt,
+      reservationRevisionIncrement: 1,
+      recordedOutcome: "unknown",
+      recordedProviderStatus: null,
+      recordedUnknownReason: "unavailable",
+      recordedEvidenceDigest: null,
+    };
   }
 }

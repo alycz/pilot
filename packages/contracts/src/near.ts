@@ -247,10 +247,412 @@ export const Near1ClickStatusResponseSchema = z
   .strict();
 export type Near1ClickStatusResponse = z.infer<typeof Near1ClickStatusResponseSchema>;
 
+export const NEAR_ARBITRUM_USDC_CONTRACT =
+  "0xaf88d065e77c8cc2239327c5edb3a432268e5831" as const;
+export const NEAR_ARBITRUM_USDC_ASSET_ID =
+  "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near" as const;
+export const NEAR_WRAPPED_NEAR_CONTRACT = "wrap.near" as const;
+export const NEAR_WRAPPED_NEAR_ASSET_ID = "nep141:wrap.near" as const;
+
+const ArbitrumAddressSchema = z.string().regex(/^0x[0-9A-Fa-f]{40}$/);
+const ArbitrumTransactionHashSchema = z.string().regex(/^0x[0-9A-Fa-f]{64}$/);
+const NearTransactionOrReceiptHashSchema = z
+  .string()
+  .min(43)
+  .max(45)
+  .regex(/^[1-9A-HJ-NP-Za-km-z]+$/);
+
+/**
+ * The only owner-funded executable route in this slice. This describes asset
+ * identity; it does not authorize Pilot to control or debit the owner's wallet.
+ */
+export const NearArbitrumUsdcToWnearRouteSchema = z
+  .object({
+    version: z.literal("pilot-near-arbitrum-usdc-to-wnear-route-v1"),
+    origin_chain: z.literal("arb"),
+    origin_chain_id: z.literal(42161),
+    origin_token_contract: z.literal(NEAR_ARBITRUM_USDC_CONTRACT),
+    origin_asset_id: z.literal(NEAR_ARBITRUM_USDC_ASSET_ID),
+    origin_decimals: z.literal(6),
+    destination_chain: z.literal("near"),
+    destination_network: z.literal("mainnet"),
+    destination_token_contract: z.literal(NEAR_WRAPPED_NEAR_CONTRACT),
+    destination_asset_id: z.literal(NEAR_WRAPPED_NEAR_ASSET_ID),
+    destination_decimals: z.literal(24),
+    funding_mode: z.literal("manual-owner-wallet-send"),
+    manual_owner_funding_only: z.literal(true),
+    pilot_budget_scope: z.literal("does-not-control-owner-wallet-send"),
+  })
+  .strict();
+export type NearArbitrumUsdcToWnearRoute = z.infer<
+  typeof NearArbitrumUsdcToWnearRouteSchema
+>;
+
+/** Exact provider request echo accepted for the single supported route. */
+export const NearArbitrumUsdcToWnearExecutableQuoteRequestSchema =
+  Near1ClickExecutableQuoteRequestSchema.superRefine((request, context) => {
+    if (request.originAsset !== NEAR_ARBITRUM_USDC_ASSET_ID) {
+      context.addIssue({
+        code: "custom",
+        path: ["originAsset"],
+        message: "origin asset must be the supported Arbitrum native USDC asset",
+      });
+    }
+    if (request.destinationAsset !== NEAR_WRAPPED_NEAR_ASSET_ID) {
+      context.addIssue({
+        code: "custom",
+        path: ["destinationAsset"],
+        message: "destination asset must be wrapped NEAR",
+      });
+    }
+    if (!ArbitrumAddressSchema.safeParse(request.refundTo).success) {
+      context.addIssue({
+        code: "custom",
+        path: ["refundTo"],
+        message: "refund address must be an Arbitrum address",
+      });
+    }
+    if (!NearAccountIdSchema.safeParse(request.recipient).success) {
+      context.addIssue({
+        code: "custom",
+        path: ["recipient"],
+        message: "recipient must be a NEAR account",
+      });
+    }
+    if (request.depositMode !== "SIMPLE") {
+      context.addIssue({
+        code: "custom",
+        path: ["depositMode"],
+        message: "the supported EVM deposit route must not use memo routing",
+      });
+    }
+  });
+export type NearArbitrumUsdcToWnearExecutableQuoteRequest = z.infer<
+  typeof NearArbitrumUsdcToWnearExecutableQuoteRequestSchema
+>;
+
+/**
+ * Signature verification and quote hashing happen over the provider response
+ * before this normalized approval binding is constructed.
+ */
+export const NearArbitrumUsdcToWnearExecutableQuoteBindingSchema = z
+  .object({
+    version: z.literal("pilot-near-arbitrum-usdc-to-wnear-quote-binding-v1"),
+    route: NearArbitrumUsdcToWnearRouteSchema,
+    provider_signature_verified: z.literal(true),
+    provider_signature: z.string().min(1).max(2_048),
+    quote_hash: Near1ClickQuoteHashSchema,
+    correlation_id: SafeIdentifierSchema,
+    provider_timestamp: DateTimeSchema,
+    request_echo: NearArbitrumUsdcToWnearExecutableQuoteRequestSchema,
+    provider_quote_response: Near1ClickExecutableQuoteResponseSchema,
+    amount_in: AtomicAmountSchema,
+    min_amount_out: AtomicAmountSchema,
+    recipient: NearAccountIdSchema,
+    refund_to: ArbitrumAddressSchema,
+    deposit_address: ArbitrumAddressSchema,
+    /** This supported EVM deposit path rejects memo-bearing quotes. */
+    deposit_memo_present: z.literal(false),
+    /** Provider refund-start boundary echoed by the executable quote. */
+    provider_deadline_at: DateTimeSchema,
+    provider_time_when_inactive_at: DateTimeSchema,
+    /** Local review freshness, distinct from the provider refund boundary. */
+    approval_expires_at: DateTimeSchema,
+  })
+  .strict()
+  .superRefine((binding, context) => {
+    const issue = (path: string[], message: string) => context.addIssue({
+      code: "custom",
+      path,
+      message,
+    });
+    if (binding.amount_in !== binding.request_echo.amount) {
+      issue(["amount_in"], "amount must match the signed provider request echo");
+    }
+    if (binding.provider_signature !== binding.provider_quote_response.signature) {
+      issue(["provider_signature"], "provider signature must match the executable quote response");
+    }
+    if (binding.correlation_id !== binding.provider_quote_response.correlationId) {
+      issue(["correlation_id"], "correlation id must match the executable quote response");
+    }
+    if (binding.provider_timestamp !== binding.provider_quote_response.timestamp) {
+      issue(["provider_timestamp"], "provider timestamp must match the executable quote response");
+    }
+    if (
+      JSON.stringify(binding.request_echo)
+      !== JSON.stringify(binding.provider_quote_response.quoteRequest)
+    ) {
+      issue(["request_echo"], "request echo must match the executable quote response");
+    }
+    if (binding.amount_in !== binding.provider_quote_response.quote.amountIn) {
+      issue(["amount_in"], "amount must match the executable quote response");
+    }
+    if (binding.min_amount_out !== binding.provider_quote_response.quote.minAmountOut) {
+      issue(["min_amount_out"], "minimum output must match the executable quote response");
+    }
+    if (binding.recipient !== binding.request_echo.recipient) {
+      issue(["recipient"], "recipient must match the signed provider request echo");
+    }
+    if (binding.refund_to.toLowerCase() !== binding.request_echo.refundTo.toLowerCase()) {
+      issue(["refund_to"], "refund address must match the signed provider request echo");
+    }
+    if (binding.provider_deadline_at !== binding.request_echo.deadline) {
+      issue(["provider_deadline_at"], "provider deadline must match the signed request echo");
+    }
+    if (
+      binding.deposit_address.toLowerCase()
+      !== binding.provider_quote_response.quote.depositAddress.toLowerCase()
+    ) {
+      issue(["deposit_address"], "deposit address must match the executable quote response");
+    }
+    if (binding.provider_quote_response.quote.depositMemo !== undefined) {
+      issue(["provider_quote_response", "quote", "depositMemo"], "the supported EVM route must not include a deposit memo");
+    }
+    if (binding.provider_deadline_at !== binding.provider_quote_response.quote.deadline) {
+      issue(["provider_deadline_at"], "provider deadline must match the executable quote response");
+    }
+    if (
+      binding.provider_time_when_inactive_at
+      !== binding.provider_quote_response.quote.timeWhenInactive
+    ) {
+      issue(
+        ["provider_time_when_inactive_at"],
+        "provider inactivity time must match the executable quote response",
+      );
+    }
+    if (Date.parse(binding.approval_expires_at) > Date.parse(binding.provider_deadline_at)) {
+      issue(["approval_expires_at"], "local approval must expire no later than provider refund start");
+    }
+    if (Date.parse(binding.provider_time_when_inactive_at) > Date.parse(binding.provider_deadline_at)) {
+      issue(["provider_time_when_inactive_at"], "provider inactivity time cannot follow refund start");
+    }
+  });
+export type NearArbitrumUsdcToWnearExecutableQuoteBinding = z.infer<
+  typeof NearArbitrumUsdcToWnearExecutableQuoteBindingSchema
+>;
+
+/** Owner-reported origin-chain provenance; this is not independent verification. */
+export const NearArbitrumUsdcOwnerFundingEvidenceSchema = z
+  .object({
+    version: z.literal("pilot-near-arbitrum-usdc-owner-funding-v1"),
+    provenance: z.literal("owner-reported"),
+    independently_verified: z.literal(false),
+    funding_mode: z.literal("manual-owner-wallet-send"),
+    chain: z.literal("arb"),
+    chain_id: z.literal(42161),
+    token_contract: z.literal(NEAR_ARBITRUM_USDC_CONTRACT),
+    token_decimals: z.literal(6),
+    transaction_hash: ArbitrumTransactionHashSchema,
+    source_address: ArbitrumAddressSchema,
+    deposit_address: ArbitrumAddressSchema,
+    amount_in: AtomicAmountSchema,
+    reported_at: DateTimeSchema,
+  })
+  .strict();
+export type NearArbitrumUsdcOwnerFundingEvidence = z.infer<
+  typeof NearArbitrumUsdcOwnerFundingEvidenceSchema
+>;
+
+const NearArbitrumUsdcOriginReceiptEvidenceBaseSchema = z.object({
+  version: z.literal("pilot-near-arbitrum-usdc-origin-receipt-v1"),
+  provenance: z.literal("origin-chain-verified"),
+  verification_source: z.literal("arbitrum-rpc-transaction-receipt"),
+  chain: z.literal("arb"),
+  chain_id: z.literal(42161),
+  token_contract: z.literal(NEAR_ARBITRUM_USDC_CONTRACT),
+  token_decimals: z.literal(6),
+  funding_transaction_hash: ArbitrumTransactionHashSchema,
+  source_address: ArbitrumAddressSchema,
+  deposit_address: ArbitrumAddressSchema,
+  amount_in: AtomicAmountSchema,
+  block_number: z.number().int().nonnegative(),
+  block_hash: ArbitrumTransactionHashSchema,
+  verified_at: DateTimeSchema,
+});
+
+/**
+ * Durable origin-chain evidence intake. Defining this contract does not claim
+ * that an Arbitrum receipt verifier is installed or has run.
+ */
+export const NearArbitrumUsdcOriginReceiptEvidenceSchema = z.discriminatedUnion(
+  "outcome",
+  [
+    NearArbitrumUsdcOriginReceiptEvidenceBaseSchema.extend({
+      outcome: z.literal("funding-confirmed"),
+      receipt_status: z.literal("success"),
+    }).strict(),
+    NearArbitrumUsdcOriginReceiptEvidenceBaseSchema.extend({
+      outcome: z.literal("funding-failed"),
+      receipt_status: z.literal("failed"),
+    }).strict(),
+    NearArbitrumUsdcOriginReceiptEvidenceBaseSchema.extend({
+      outcome: z.literal("refund-confirmed"),
+      receipt_status: z.literal("success"),
+      refund_transaction_hash: ArbitrumTransactionHashSchema,
+      refund_to: ArbitrumAddressSchema,
+      refunded_amount: AtomicAmountSchema,
+    }).strict(),
+  ],
+);
+export type NearArbitrumUsdcOriginReceiptEvidence = z.infer<
+  typeof NearArbitrumUsdcOriginReceiptEvidenceSchema
+>;
+
+const NearArbitrumUsdcToWnearProviderStatusEvidenceBaseSchema = z.object({
+  version: z.literal("pilot-near-arbitrum-usdc-to-wnear-settlement-v1"),
+  correlation_id: SafeIdentifierSchema,
+  quote_hash: Near1ClickQuoteHashSchema,
+  nested_quote_signature_verified: z.literal(true),
+  deposit_address: ArbitrumAddressSchema,
+  deposit_memo_present: z.literal(false),
+  provider_status: Near1ClickProviderStatusSchema,
+  provider_checked_at: DateTimeSchema,
+  safe_to_resubmit: z.literal(false),
+});
+
+export const NearWnearIndependentDestinationReceiptSchema = z
+  .object({
+    source: z.literal("near-rpc-final-receipt"),
+    network: z.literal("near:mainnet"),
+    receipt_id: NearTransactionOrReceiptHashSchema,
+    transaction_hash: NearTransactionOrReceiptHashSchema.optional(),
+    block_height: z.number().int().positive(),
+    execution_status: z.literal("SUCCESS"),
+    recipient: NearAccountIdSchema,
+    token_contract: z.literal(NEAR_WRAPPED_NEAR_CONTRACT),
+    asset_id: z.literal(NEAR_WRAPPED_NEAR_ASSET_ID),
+    token_decimals: z.literal(24),
+    amount_received: AtomicAmountSchema,
+    verified_at: DateTimeSchema,
+  })
+  .strict();
+export type NearWnearIndependentDestinationReceipt = z.infer<
+  typeof NearWnearIndependentDestinationReceiptSchema
+>;
+
+/** Provider SUCCESS alone remains provider-reported until a receipt is supplied. */
+export const NearArbitrumUsdcToWnearSettlementEvidenceSchema = z
+  .discriminatedUnion("evidence_level", [
+    NearArbitrumUsdcToWnearProviderStatusEvidenceBaseSchema.extend({
+      evidence_level: z.literal("provider-reported-only"),
+      independent_destination_receipt: z.literal(false),
+    }).strict(),
+    NearArbitrumUsdcToWnearProviderStatusEvidenceBaseSchema.extend({
+      evidence_level: z.literal("independent-destination-receipt"),
+      independent_destination_receipt: NearWnearIndependentDestinationReceiptSchema,
+    }).strict(),
+  ])
+  .superRefine((evidence, context) => {
+    if (
+      evidence.evidence_level === "independent-destination-receipt"
+      && ["REFUNDED", "FAILED"].includes(evidence.provider_status)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["provider_status"],
+        message: "terminal provider failure conflicts with successful destination receipt evidence",
+      });
+    }
+  });
+export type NearArbitrumUsdcToWnearSettlementEvidence = z.infer<
+  typeof NearArbitrumUsdcToWnearSettlementEvidenceSchema
+>;
+
+export const NearArbitrumUsdcToWnearOwnerFundedExecutionSchema = z
+  .object({
+    version: z.literal("pilot-near-arbitrum-usdc-to-wnear-owner-funded-execution-v1"),
+    route: NearArbitrumUsdcToWnearRouteSchema,
+    quote: NearArbitrumUsdcToWnearExecutableQuoteBindingSchema,
+    funding: NearArbitrumUsdcOwnerFundingEvidenceSchema,
+    origin_verification: NearArbitrumUsdcOriginReceiptEvidenceSchema.optional(),
+    settlement: NearArbitrumUsdcToWnearSettlementEvidenceSchema,
+  })
+  .strict()
+  .superRefine((execution, context) => {
+    const issue = (path: string[], message: string) => context.addIssue({
+      code: "custom",
+      path,
+      message,
+    });
+    if (JSON.stringify(execution.route) !== JSON.stringify(execution.quote.route)) {
+      issue(["quote", "route"], "quote route must match the execution route");
+    }
+    if (execution.funding.amount_in !== execution.quote.amount_in) {
+      issue(["funding", "amount_in"], "owner funding amount must match the executable quote");
+    }
+    if (
+      execution.funding.source_address.toLowerCase()
+      !== execution.quote.refund_to.toLowerCase()
+    ) {
+      issue(["funding", "source_address"], "owner funding source must match the refund address");
+    }
+    if (
+      execution.funding.deposit_address.toLowerCase()
+      !== execution.quote.deposit_address.toLowerCase()
+    ) {
+      issue(["funding", "deposit_address"], "owner funding destination must match the provider deposit address");
+    }
+    if (execution.origin_verification) {
+      const origin = execution.origin_verification;
+      if (origin.funding_transaction_hash !== execution.funding.transaction_hash) {
+        issue(
+          ["origin_verification", "funding_transaction_hash"],
+          "verified origin receipt must match the owner-reported transaction",
+        );
+      }
+      if (origin.source_address.toLowerCase() !== execution.funding.source_address.toLowerCase()) {
+        issue(["origin_verification", "source_address"], "verified origin source must match owner report");
+      }
+      if (origin.deposit_address.toLowerCase() !== execution.funding.deposit_address.toLowerCase()) {
+        issue(["origin_verification", "deposit_address"], "verified origin destination must match owner report");
+      }
+      if (origin.amount_in !== execution.funding.amount_in) {
+        issue(["origin_verification", "amount_in"], "verified origin amount must match owner report");
+      }
+      if (
+        origin.outcome === "refund-confirmed"
+        && origin.refund_to.toLowerCase() !== execution.quote.refund_to.toLowerCase()
+      ) {
+        issue(["origin_verification", "refund_to"], "verified refund must return to the quote refund address");
+      }
+    }
+    if (execution.settlement.correlation_id !== execution.quote.correlation_id) {
+      issue(["settlement", "correlation_id"], "settlement must match the quote correlation id");
+    }
+    if (execution.settlement.quote_hash !== execution.quote.quote_hash) {
+      issue(["settlement", "quote_hash"], "settlement must match the verified quote hash");
+    }
+    if (
+      execution.settlement.deposit_address.toLowerCase()
+      !== execution.quote.deposit_address.toLowerCase()
+    ) {
+      issue(["settlement", "deposit_address"], "settlement must match the provider deposit address");
+    }
+    if (execution.settlement.evidence_level === "independent-destination-receipt") {
+      const receipt = execution.settlement.independent_destination_receipt;
+      if (receipt.recipient !== execution.quote.recipient) {
+        issue(
+          ["settlement", "independent_destination_receipt", "recipient"],
+          "destination receipt recipient must match the executable quote",
+        );
+      }
+      if (BigInt(receipt.amount_received) < BigInt(execution.quote.min_amount_out)) {
+        issue(
+          ["settlement", "independent_destination_receipt", "amount_received"],
+          "destination receipt amount must satisfy the quote minimum output",
+        );
+      }
+    }
+  });
+export type NearArbitrumUsdcToWnearOwnerFundedExecution = z.infer<
+  typeof NearArbitrumUsdcToWnearOwnerFundedExecutionSchema
+>;
+
 export const NearAuthorizedOperationSchema = z.enum([
   "near.intents.tokens",
   /** The current Harbor operation is contractually dry-only. */
   "near.intents.quote",
+  "near.intents.executable-quote.review",
   "near.intents.status",
   "near.intents.approval.review",
 ]);
@@ -263,7 +665,7 @@ export const NearPrincipalAuthorizationSchema = z
     principal_id: SafeIdentifierSchema,
     account_id: NearAccountIdSchema,
     network: z.literal("near:mainnet"),
-    operations: z.array(NearAuthorizedOperationSchema).min(1).max(4)
+    operations: z.array(NearAuthorizedOperationSchema).min(1).max(5)
       .refine((operations) => new Set(operations).size === operations.length, {
         message: "authorized operations must be unique",
       }),

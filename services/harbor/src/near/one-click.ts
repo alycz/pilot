@@ -43,6 +43,25 @@ const HttpsUrlSchema = z.string().url().max(2_048).refine((value) => {
   }
 }, "must be an HTTPS URL without credentials");
 
+export const ONE_CLICK_ARB_USDC_TO_WNEAR_ROUTE = Object.freeze({
+  id: "arbitrum-usdc-to-near-wnear-v1",
+  origin: Object.freeze({
+    assetId: "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near",
+    blockchain: "arb",
+    contractAddress: "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+    decimals: 6,
+    symbol: "USDC",
+    chainId: 42161,
+  }),
+  destination: Object.freeze({
+    assetId: "nep141:wrap.near",
+    blockchain: "near",
+    contractAddress: "wrap.near",
+    decimals: 24,
+    symbol: "wNEAR",
+  }),
+} as const);
+
 const QuoteRequestSchema = z.object({
   dry: z.boolean(),
   swapType: z.literal("EXACT_INPUT"),
@@ -65,6 +84,12 @@ const QuoteRequestSchema = z.object({
   message: "origin and destination assets must differ",
 });
 
+const ChainDepositAddressSchema = z.object({
+  blockchain: BlockchainSchema,
+  address: AddressSchema,
+  memo: PrintableTextSchema.optional(),
+}).strip();
+
 const QuoteSchema = z.object({
   amountIn: AtomicAmountSchema,
   amountInFormatted: NonnegativeDecimalSchema,
@@ -77,6 +102,7 @@ const QuoteSchema = z.object({
   timeEstimate: z.number().int().nonnegative(),
   depositAddress: AddressSchema.optional(),
   depositMemo: PrintableTextSchema.optional(),
+  chainDepositAddresses: z.array(ChainDepositAddressSchema).max(64).optional(),
   deadline: DateTimeSchema.optional(),
   timeWhenInactive: DateTimeSchema.optional(),
   refundFee: AtomicAmountOrZeroSchema.optional(),
@@ -153,6 +179,12 @@ export const OneClickStatusResponseSchema = z.object({
   swapDetails: SwapDetailsSchema,
 }).strip();
 export type OneClickStatusResponse = z.output<typeof OneClickStatusResponseSchema>;
+export type OneClickStatusInput = Readonly<{
+  depositAddress: string;
+  depositMemo?: string;
+  expectedCorrelationId?: string;
+  expectedQuoteHash?: string;
+}>;
 export type VerifiedOneClickQuote = Readonly<{
   response: OneClickQuoteResponse;
   quoteHash: string;
@@ -183,6 +215,18 @@ export class OneClickClientError extends Error {
 
 function officialVerifier(response: unknown): boolean {
   return verifyOfficialQuoteSignature(response as OfficialOneClickQuoteResponse);
+}
+
+function quoteHash(response: unknown): string {
+  let hash: string;
+  try {
+    hash = officialQuoteHash(response as OfficialOneClickQuoteResponse);
+  } catch {
+    throw new OneClickClientError("INVALID_RESPONSE", "NEAR Intents quote hash canonicalization failed");
+  }
+  const parsed = QuoteHashSchema.safeParse(hash);
+  if (!parsed.success) throw new OneClickClientError("INVALID_RESPONSE", "NEAR Intents returned an invalid quote hash");
+  return parsed.data;
 }
 
 function integerOption(value: number | undefined, fallback: number, label: string): number {
@@ -366,13 +410,19 @@ export class OneClickClient {
     }
     return {
       response: parsed.data,
-      quoteHash: QuoteHashSchema.parse(officialQuoteHash(raw as OfficialOneClickQuoteResponse)),
+      quoteHash: quoteHash(raw),
     };
   }
 
-  async status(input: { depositAddress: string; depositMemo?: string }): Promise<OneClickStatusResponse> {
+  async status(input: OneClickStatusInput): Promise<OneClickStatusResponse> {
     const depositAddress = AddressSchema.parse(input.depositAddress);
     const depositMemo = input.depositMemo === undefined ? undefined : PrintableTextSchema.parse(input.depositMemo);
+    const expectedCorrelationId = input.expectedCorrelationId === undefined
+      ? undefined
+      : CorrelationIdSchema.parse(input.expectedCorrelationId);
+    const expectedQuoteHash = input.expectedQuoteHash === undefined
+      ? undefined
+      : QuoteHashSchema.parse(input.expectedQuoteHash);
     const query = new URLSearchParams({ depositAddress });
     if (depositMemo !== undefined) query.set("depositMemo", depositMemo);
     const raw = await this.#request(`/v0/status?${query.toString()}`);
@@ -381,10 +431,17 @@ export class OneClickClient {
     let verified = false;
     try { verified = await this.#verify(rawQuote); } catch { verified = false; }
     if (!verified) throw new OneClickClientError("INVALID_SIGNATURE", "NEAR Intents status quote signature verification failed");
+    const actualQuoteHash = quoteHash(rawQuote);
     const parsed = OneClickStatusResponseSchema.safeParse(raw);
     if (!parsed.success) throw new OneClickClientError("INVALID_RESPONSE", "NEAR Intents returned an invalid status");
     if (parsed.data.correlationId !== parsed.data.quoteResponse.correlationId) {
       throw new OneClickClientError("REQUEST_MISMATCH", "NEAR Intents status correlation did not match the verified quote");
+    }
+    if (expectedCorrelationId !== undefined && parsed.data.quoteResponse.correlationId !== expectedCorrelationId) {
+      throw new OneClickClientError("REQUEST_MISMATCH", "NEAR Intents status did not match the expected quote correlation");
+    }
+    if (expectedQuoteHash !== undefined && actualQuoteHash !== expectedQuoteHash) {
+      throw new OneClickClientError("REQUEST_MISMATCH", "NEAR Intents status did not match the expected quote hash");
     }
     const quoted = parsed.data.quoteResponse.quote;
     if (quoted.depositAddress !== depositAddress || quoted.depositMemo !== depositMemo) {

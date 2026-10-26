@@ -9,7 +9,14 @@ import {
   Near1ClickExecutableQuoteResponseSchema,
   Near1ClickProviderStatusSchema,
   Near1ClickTokenSchema,
+  NearArbitrumUsdcOriginReceiptEvidenceSchema,
+  NearArbitrumUsdcOwnerFundingEvidenceSchema,
+  NearArbitrumUsdcToWnearExecutableQuoteBindingSchema,
+  NearArbitrumUsdcToWnearOwnerFundedExecutionSchema,
+  NearArbitrumUsdcToWnearRouteSchema,
+  NearArbitrumUsdcToWnearSettlementEvidenceSchema,
   NearApprovalBindingSchema,
+  NearAuthorizedOperationSchema,
   NearBudgetReservationSchema,
   NearBudgetReservationTransitionSchema,
   NearExecutionAttemptSchema,
@@ -69,6 +76,119 @@ const approval: NearApprovalBinding = {
   deposit_address: "deposit.near",
   approval_expires_at: "2026-11-02T11:58:00.000Z",
   provider_deadline_at: "2026-11-02T12:00:00.000Z",
+};
+
+const ownerAddress = `0x${"1".repeat(40)}`;
+const depositAddress = `0x${"2".repeat(40)}`;
+const fundingTransactionHash = `0x${"A".repeat(64)}`;
+const originBlockHash = `0x${"B".repeat(64)}`;
+
+const ownerFundedRoute = {
+  version: "pilot-near-arbitrum-usdc-to-wnear-route-v1" as const,
+  origin_chain: "arb" as const,
+  origin_chain_id: 42161 as const,
+  origin_token_contract: "0xaf88d065e77c8cc2239327c5edb3a432268e5831" as const,
+  origin_asset_id: "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near" as const,
+  origin_decimals: 6 as const,
+  destination_chain: "near" as const,
+  destination_network: "mainnet" as const,
+  destination_token_contract: "wrap.near" as const,
+  destination_asset_id: "nep141:wrap.near" as const,
+  destination_decimals: 24 as const,
+  funding_mode: "manual-owner-wallet-send" as const,
+  manual_owner_funding_only: true as const,
+  pilot_budget_scope: "does-not-control-owner-wallet-send" as const,
+};
+
+const ownerFundedRequestEcho = {
+  swapType: "EXACT_INPUT" as const,
+  slippageTolerance: 100,
+  originAsset: ownerFundedRoute.origin_asset_id,
+  depositType: "ORIGIN_CHAIN" as const,
+  destinationAsset: ownerFundedRoute.destination_asset_id,
+  amount: "1000000",
+  refundTo: ownerAddress,
+  refundType: "ORIGIN_CHAIN" as const,
+  recipient: "alice.near",
+  recipientType: "DESTINATION_CHAIN" as const,
+  deadline: "2026-11-02T12:00:00.000Z",
+  depositMode: "SIMPLE" as const,
+  confidentiality: "public" as const,
+  quoteWaitingTimeMs: 0,
+  insured: false as const,
+  dry: false as const,
+};
+
+const ownerFundedProviderQuoteResponse = {
+  correlationId: "arb-usdc-quote-1",
+  timestamp: "2026-11-02T11:55:00.000Z",
+  signature: "verified-provider-signature",
+  quoteRequest: ownerFundedRequestEcho,
+  quote: {
+    amountIn: "1000000",
+    amountInFormatted: "1",
+    amountInUsd: "1",
+    minAmountIn: "1000000",
+    amountOut: "310000000000000000000000",
+    amountOutFormatted: "0.31",
+    amountOutUsd: "1",
+    minAmountOut: "300000000000000000000000",
+    timeEstimate: 120,
+    depositAddress,
+    deadline: "2026-11-02T12:00:00.000Z",
+    timeWhenInactive: "2026-11-02T11:59:00.000Z",
+  },
+};
+
+const ownerFundedQuote = {
+  version: "pilot-near-arbitrum-usdc-to-wnear-quote-binding-v1" as const,
+  route: ownerFundedRoute,
+  provider_signature_verified: true as const,
+  provider_signature: ownerFundedProviderQuoteResponse.signature,
+  quote_hash: "3".repeat(44),
+  correlation_id: ownerFundedProviderQuoteResponse.correlationId,
+  provider_timestamp: ownerFundedProviderQuoteResponse.timestamp,
+  request_echo: ownerFundedRequestEcho,
+  provider_quote_response: ownerFundedProviderQuoteResponse,
+  amount_in: "1000000",
+  min_amount_out: "300000000000000000000000",
+  recipient: "alice.near",
+  refund_to: ownerAddress,
+  deposit_address: depositAddress,
+  deposit_memo_present: false as const,
+  provider_deadline_at: "2026-11-02T12:00:00.000Z",
+  provider_time_when_inactive_at: "2026-11-02T11:59:00.000Z",
+  approval_expires_at: "2026-11-02T11:58:00.000Z",
+};
+
+const ownerFundingEvidence = {
+  version: "pilot-near-arbitrum-usdc-owner-funding-v1" as const,
+  provenance: "owner-reported" as const,
+  independently_verified: false as const,
+  funding_mode: "manual-owner-wallet-send" as const,
+  chain: "arb" as const,
+  chain_id: 42161 as const,
+  token_contract: ownerFundedRoute.origin_token_contract,
+  token_decimals: 6 as const,
+  transaction_hash: fundingTransactionHash,
+  source_address: ownerAddress,
+  deposit_address: depositAddress,
+  amount_in: "1000000",
+  reported_at: "2026-11-02T11:58:30.000Z",
+};
+
+const providerOnlySettlement = {
+  version: "pilot-near-arbitrum-usdc-to-wnear-settlement-v1" as const,
+  evidence_level: "provider-reported-only" as const,
+  correlation_id: ownerFundedQuote.correlation_id,
+  quote_hash: ownerFundedQuote.quote_hash,
+  nested_quote_signature_verified: true as const,
+  deposit_address: depositAddress,
+  deposit_memo_present: false as const,
+  provider_status: "SUCCESS" as const,
+  provider_checked_at: "2026-11-02T12:03:00.000Z",
+  safe_to_resubmit: false as const,
+  independent_destination_receipt: false as const,
 };
 
 describe("NEAR 1Click contracts", () => {
@@ -506,5 +626,194 @@ describe("NEAR approval and replay binding", () => {
       mode: "disabled",
       mainnet_execution_enabled: true,
     }).success).toBe(false);
+  });
+});
+
+describe("Arbitrum USDC to wNEAR owner-funded route contracts", () => {
+  it("pins one exact route and explicitly excludes owner sends from Pilot budget control", () => {
+    expect(NearArbitrumUsdcToWnearRouteSchema.parse(ownerFundedRoute)).toEqual(ownerFundedRoute);
+    expect(NearArbitrumUsdcToWnearRouteSchema.safeParse({
+      ...ownerFundedRoute,
+      origin_chain_id: 1,
+    }).success).toBe(false);
+    expect(NearArbitrumUsdcToWnearRouteSchema.safeParse({
+      ...ownerFundedRoute,
+      origin_decimals: 18,
+    }).success).toBe(false);
+    expect(NearArbitrumUsdcToWnearRouteSchema.safeParse({
+      ...ownerFundedRoute,
+      origin_token_contract: `0x${"9".repeat(40)}`,
+    }).success).toBe(false);
+    expect(NearArbitrumUsdcToWnearRouteSchema.safeParse({
+      ...ownerFundedRoute,
+      pilot_budget_scope: "app-enforced",
+    }).success).toBe(false);
+  });
+
+  it("binds the verified executable quote, exact echo, route, amounts, and deadlines", () => {
+    expect(NearArbitrumUsdcToWnearExecutableQuoteBindingSchema.safeParse(
+      ownerFundedQuote,
+    ).success).toBe(true);
+    expect(NearArbitrumUsdcToWnearExecutableQuoteBindingSchema.safeParse({
+      ...ownerFundedQuote,
+      provider_signature_verified: false,
+    }).success).toBe(false);
+    expect(NearArbitrumUsdcToWnearExecutableQuoteBindingSchema.safeParse({
+      ...ownerFundedQuote,
+      amount_in: "1000001",
+    }).success).toBe(false);
+    expect(NearArbitrumUsdcToWnearExecutableQuoteBindingSchema.safeParse({
+      ...ownerFundedQuote,
+      min_amount_out: "299999999999999999999999",
+    }).success).toBe(false);
+    expect(NearArbitrumUsdcToWnearExecutableQuoteBindingSchema.safeParse({
+      ...ownerFundedQuote,
+      provider_quote_response: {
+        ...ownerFundedProviderQuoteResponse,
+        signature: "different-provider-signature",
+      },
+    }).success).toBe(false);
+    expect(NearArbitrumUsdcToWnearExecutableQuoteBindingSchema.safeParse({
+      ...ownerFundedQuote,
+      request_echo: { ...ownerFundedQuote.request_echo, depositMode: "MEMO" },
+    }).success).toBe(false);
+    expect(NearArbitrumUsdcToWnearExecutableQuoteBindingSchema.safeParse({
+      ...ownerFundedQuote,
+      request_echo: { ...ownerFundedQuote.request_echo, originAsset: "nep141:wrap.near" },
+    }).success).toBe(false);
+    expect(NearArbitrumUsdcToWnearExecutableQuoteBindingSchema.safeParse({
+      ...ownerFundedQuote,
+      deposit_memo_present: true,
+    }).success).toBe(false);
+    expect(NearArbitrumUsdcToWnearExecutableQuoteBindingSchema.safeParse({
+      ...ownerFundedQuote,
+      provider_quote_response: {
+        ...ownerFundedProviderQuoteResponse,
+        quote: {
+          ...ownerFundedProviderQuoteResponse.quote,
+          depositMemo: "forbidden",
+        },
+      },
+    }).success).toBe(false);
+    expect(NearArbitrumUsdcToWnearExecutableQuoteBindingSchema.safeParse({
+      ...ownerFundedQuote,
+      deposit_memo: "forbidden",
+    }).success).toBe(false);
+    expect(NearArbitrumUsdcToWnearExecutableQuoteBindingSchema.safeParse({
+      ...ownerFundedQuote,
+      approval_expires_at: "2026-11-02T12:00:01.000Z",
+    }).success).toBe(false);
+  });
+
+  it("keeps owner-reported funding distinct from origin-chain verification", () => {
+    expect(NearArbitrumUsdcOwnerFundingEvidenceSchema.parse(
+      ownerFundingEvidence,
+    ).independently_verified).toBe(false);
+    expect(NearArbitrumUsdcOwnerFundingEvidenceSchema.safeParse({
+      ...ownerFundingEvidence,
+      independently_verified: true,
+    }).success).toBe(false);
+
+    const verifiedOrigin = {
+      version: "pilot-near-arbitrum-usdc-origin-receipt-v1" as const,
+      provenance: "origin-chain-verified" as const,
+      verification_source: "arbitrum-rpc-transaction-receipt" as const,
+      outcome: "funding-confirmed" as const,
+      receipt_status: "success" as const,
+      chain: "arb" as const,
+      chain_id: 42161 as const,
+      token_contract: ownerFundedRoute.origin_token_contract,
+      token_decimals: 6 as const,
+      funding_transaction_hash: fundingTransactionHash,
+      source_address: ownerAddress,
+      deposit_address: depositAddress,
+      amount_in: "1000000",
+      block_number: 123456,
+      block_hash: originBlockHash,
+      verified_at: "2026-11-02T11:59:30.000Z",
+    };
+    expect(NearArbitrumUsdcOriginReceiptEvidenceSchema.safeParse(verifiedOrigin).success).toBe(true);
+    expect(NearArbitrumUsdcToWnearOwnerFundedExecutionSchema.safeParse({
+      version: "pilot-near-arbitrum-usdc-to-wnear-owner-funded-execution-v1",
+      route: ownerFundedRoute,
+      quote: ownerFundedQuote,
+      funding: ownerFundingEvidence,
+      origin_verification: verifiedOrigin,
+      settlement: providerOnlySettlement,
+    }).success).toBe(true);
+    expect(NearArbitrumUsdcToWnearOwnerFundedExecutionSchema.safeParse({
+      version: "pilot-near-arbitrum-usdc-to-wnear-owner-funded-execution-v1",
+      route: ownerFundedRoute,
+      quote: ownerFundedQuote,
+      funding: ownerFundingEvidence,
+      origin_verification: {
+        ...verifiedOrigin,
+        funding_transaction_hash: `0x${"C".repeat(64)}`,
+      },
+      settlement: providerOnlySettlement,
+    }).success).toBe(false);
+  });
+
+  it("does not treat provider SUCCESS as independent destination evidence", () => {
+    expect(NearArbitrumUsdcToWnearSettlementEvidenceSchema.parse(
+      providerOnlySettlement,
+    )).toMatchObject({
+      evidence_level: "provider-reported-only",
+      provider_status: "SUCCESS",
+      independent_destination_receipt: false,
+    });
+
+    const independentlyVerified = {
+      ...providerOnlySettlement,
+      evidence_level: "independent-destination-receipt" as const,
+      independent_destination_receipt: {
+        source: "near-rpc-final-receipt" as const,
+        network: "near:mainnet" as const,
+        receipt_id: "4".repeat(44),
+        transaction_hash: "5".repeat(44),
+        block_height: 987654,
+        execution_status: "SUCCESS" as const,
+        recipient: ownerFundedQuote.recipient,
+        token_contract: "wrap.near" as const,
+        asset_id: "nep141:wrap.near" as const,
+        token_decimals: 24 as const,
+        amount_received: ownerFundedQuote.min_amount_out,
+        verified_at: "2026-11-02T12:04:00.000Z",
+      },
+    };
+    expect(NearArbitrumUsdcToWnearOwnerFundedExecutionSchema.safeParse({
+      version: "pilot-near-arbitrum-usdc-to-wnear-owner-funded-execution-v1",
+      route: ownerFundedRoute,
+      quote: ownerFundedQuote,
+      funding: ownerFundingEvidence,
+      settlement: independentlyVerified,
+    }).success).toBe(true);
+    expect(NearArbitrumUsdcToWnearOwnerFundedExecutionSchema.safeParse({
+      version: "pilot-near-arbitrum-usdc-to-wnear-owner-funded-execution-v1",
+      route: ownerFundedRoute,
+      quote: ownerFundedQuote,
+      funding: ownerFundingEvidence,
+      settlement: {
+        ...independentlyVerified,
+        independent_destination_receipt: {
+          ...independentlyVerified.independent_destination_receipt,
+          amount_received: "1",
+        },
+      },
+    }).success).toBe(false);
+    expect(NearArbitrumUsdcToWnearSettlementEvidenceSchema.safeParse({
+      ...independentlyVerified,
+      provider_status: "FAILED",
+    }).success).toBe(false);
+  });
+
+  it("authorizes executable review and deposit notification as distinct operations", () => {
+    expect(NearAuthorizedOperationSchema.safeParse(
+      "near.intents.executable-quote.review",
+    ).success).toBe(true);
+    expect(NearAuthorizedOperationSchema.safeParse(
+      "near.intents.deposit-tx.submit",
+    ).success).toBe(false);
+    expect(NearAuthorizedOperationSchema.safeParse("near.intents.execute").success).toBe(false);
   });
 });

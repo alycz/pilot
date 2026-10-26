@@ -2,7 +2,12 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { computeNearApprovalDigest, type NearApprovalBinding } from "@pilot/contracts/near";
+import {
+  NEAR_ARBITRUM_USDC_ASSET_ID,
+  NEAR_ARBITRUM_USDC_CONTRACT,
+  computeNearApprovalDigest,
+  type NearApprovalBinding,
+} from "@pilot/contracts/near";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -16,6 +21,9 @@ import {
 } from "../src/index.js";
 
 const temporaryDirectories: string[] = [];
+const OWNER_SOURCE = `0x${"1".repeat(40)}`;
+const DEPOSIT_ADDRESS = `0x${"2".repeat(40)}`;
+const FUNDING_TRANSACTION = `0x${"a".repeat(64)}`;
 
 afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((path) =>
@@ -48,14 +56,13 @@ async function input(overrides: InputOverrides = {}): Promise<NearReserveAttempt
     quote_id: `quote-${overrides.attempt_id ?? "1"}`,
     quote_hash: "4".repeat(44),
     provider_signature_verified: true,
-    origin_asset: "nep141:wrap.near",
-    destination_asset: "nep141:usdc.omft.near",
+    origin_asset: NEAR_ARBITRUM_USDC_ASSET_ID,
+    destination_asset: "nep141:wrap.near",
     amount_in: amount,
     min_amount_out: "50",
     recipient: "recipient.near",
-    refund_to: "refund.near",
-    deposit_address: "provider-deposit.near",
-    deposit_memo: "route-123",
+    refund_to: OWNER_SOURCE,
+    deposit_address: DEPOSIT_ADDRESS,
     approval_expires_at: "2026-11-01T00:05:00.000Z",
     provider_deadline_at: "2026-11-01T00:10:00.000Z",
   };
@@ -132,6 +139,113 @@ function providerEvidence(
   } as const;
 }
 
+function ownerFunding(reportedAt = "2026-11-01T00:00:02.000Z") {
+  return {
+    version: "pilot-near-arbitrum-usdc-owner-funding-v1",
+    provenance: "owner-reported",
+    independently_verified: false,
+    funding_mode: "manual-owner-wallet-send",
+    chain: "arb",
+    chain_id: 42161,
+    token_contract: NEAR_ARBITRUM_USDC_CONTRACT,
+    token_decimals: 6,
+    transaction_hash: FUNDING_TRANSACTION,
+    source_address: OWNER_SOURCE,
+    deposit_address: DEPOSIT_ADDRESS,
+    amount_in: "60",
+    reported_at: reportedAt,
+  } as const;
+}
+
+function originReceipt(
+  outcome: "funding-confirmed" | "funding-failed" | "refund-confirmed" = "funding-confirmed",
+  verifiedAt = "2026-11-01T00:00:03.000Z",
+) {
+  const base = {
+    version: "pilot-near-arbitrum-usdc-origin-receipt-v1",
+    provenance: "origin-chain-verified",
+    verification_source: "arbitrum-rpc-transaction-receipt",
+    chain: "arb",
+    chain_id: 42161,
+    token_contract: NEAR_ARBITRUM_USDC_CONTRACT,
+    token_decimals: 6,
+    funding_transaction_hash: FUNDING_TRANSACTION,
+    source_address: OWNER_SOURCE,
+    deposit_address: DEPOSIT_ADDRESS,
+    amount_in: "60",
+    block_number: 123,
+    block_hash: `0x${"b".repeat(64)}`,
+    verified_at: verifiedAt,
+  } as const;
+  return outcome === "refund-confirmed" ? {
+    ...base,
+    outcome,
+    receipt_status: "success" as const,
+    refund_transaction_hash: `0x${"c".repeat(64)}`,
+    refund_to: OWNER_SOURCE,
+    refunded_amount: "60",
+  } : {
+    ...base,
+    outcome,
+    receipt_status: outcome === "funding-confirmed" ? "success" as const : "failed" as const,
+  };
+}
+
+function settlement(
+  providerStatus: "PROCESSING" | "SUCCESS" | "REFUNDED" | "FAILED",
+  checkedAt: string,
+  independentlyVerified = false,
+) {
+  const base = {
+    version: "pilot-near-arbitrum-usdc-to-wnear-settlement-v1",
+    correlation_id: "quote-1",
+    quote_hash: "4".repeat(44),
+    nested_quote_signature_verified: true,
+    deposit_address: DEPOSIT_ADDRESS,
+    deposit_memo_present: false,
+    provider_status: providerStatus,
+    provider_checked_at: checkedAt,
+    safe_to_resubmit: false,
+  } as const;
+  return independentlyVerified ? {
+    ...base,
+    evidence_level: "independent-destination-receipt" as const,
+    independent_destination_receipt: {
+      source: "near-rpc-final-receipt" as const,
+      network: "near:mainnet" as const,
+      receipt_id: "5".repeat(44),
+      transaction_hash: "6".repeat(44),
+      block_height: 456,
+      execution_status: "SUCCESS" as const,
+      recipient: "recipient.near",
+      token_contract: "wrap.near" as const,
+      asset_id: "nep141:wrap.near" as const,
+      token_decimals: 24 as const,
+      amount_received: "50",
+      verified_at: checkedAt,
+    },
+  } : {
+    ...base,
+    evidence_level: "provider-reported-only" as const,
+    independent_destination_receipt: false as const,
+  };
+}
+
+function fundingTransition(
+  evidence: unknown,
+  revision: number,
+  transitionId: string,
+) {
+  return {
+    principal_id: "principal-1",
+    account_id: "alice.near",
+    idempotency_key: "idempotency-1",
+    transition_id: transitionId,
+    expected_entry_revision: revision,
+    evidence,
+  };
+}
+
 async function localFile(
   faultInjector?: (phase: LocalFileFaultPhase) => void | Promise<void>,
 ) {
@@ -183,7 +297,7 @@ describe("NEAR durable attempt safety", () => {
       principal_id: "principal-1", idempotency_key: "idempotency-1", transition_id: "refund-1",
       expected_entry_revision: 2, evidence: withoutEvidenceDigest,
     })).rejects.toMatchObject({ code: "INVALID_INPUT" });
-    expect(await store.budgetSummary("principal-1", "nep141:wrap.near"))
+    expect(await store.budgetSummary("principal-1", NEAR_ARBITRUM_USDC_ASSET_ID))
       .toEqual(expect.objectContaining({ unknown_atomic: "60" }));
   });
 
@@ -200,7 +314,7 @@ describe("NEAR durable attempt safety", () => {
     expect(outcomes.filter((item) => item.status === "fulfilled")).toHaveLength(1);
     expect(outcomes.filter((item) => item.status === "rejected"))
       .toEqual([expect.objectContaining({ reason: expect.objectContaining({ code: "BUDGET_EXCEEDED" }) })]);
-    expect(await storeA.budgetSummary("principal-1", "nep141:wrap.near"))
+    expect(await storeA.budgetSummary("principal-1", NEAR_ARBITRUM_USDC_ASSET_ID))
       .toEqual(expect.objectContaining({ consumed_atomic: "60" }));
   });
 
@@ -250,7 +364,7 @@ describe("NEAR durable attempt safety", () => {
     expect(pending.entry.reservation.state).toBe("outcome_unknown");
     expect(await store.replayDecision("principal-1", "idempotency-1"))
       .toEqual(expect.objectContaining({ action: "poll_existing" }));
-    expect(await store.budgetSummary("principal-1", "nep141:wrap.near"))
+    expect(await store.budgetSummary("principal-1", NEAR_ARBITRUM_USDC_ASSET_ID))
       .toEqual(expect.objectContaining({ unknown_atomic: "60", consumed_atomic: "60" }));
 
     const refunded = await store.reconcile({
@@ -283,19 +397,147 @@ describe("NEAR durable attempt safety", () => {
     await expect(store.reconcile(transition)).resolves.toEqual({ replay: true, entry: settled.entry });
     await expect(store.reconcile({ ...transition, evidence: providerEvidence(unknown.entry, "FAILED", "2026-11-01T00:02:00.000Z") }))
       .rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
-    expect(await store.budgetSummary("principal-1", "nep141:wrap.near"))
+    expect(await store.budgetSummary("principal-1", NEAR_ARBITRUM_USDC_ASSET_ID))
       .toEqual(expect.objectContaining({ committed_atomic: "60", consumed_atomic: "60" }));
   });
 });
 
+describe("NEAR local owner-funded lifecycle", () => {
+  it("binds the exact manual funding transaction and denies identity or replay drift", async () => {
+    const store = new NearAttemptStore(new MemoryNearAttemptPersistence());
+    await store.reserve(await input());
+    const report = fundingTransition(ownerFunding(), 1, "funding-report-1");
+    const recorded = await store.recordOwnerFundingEvidence(report);
+    expect(recorded.entry.owner_funding).toMatchObject({
+      status: "outcome_unknown",
+      binding: {
+        chain_id: 42161,
+        token_contract: NEAR_ARBITRUM_USDC_CONTRACT,
+        source_address: OWNER_SOURCE,
+        transaction_hash: FUNDING_TRANSACTION,
+        amount_in: "60",
+        deposit_address: DEPOSIT_ADDRESS,
+      },
+    });
+    await expect(store.recordOwnerFundingEvidence(report))
+      .resolves.toEqual({ replay: true, entry: recorded.entry });
+    await expect(store.recordOwnerFundingEvidence({ ...report, account_id: "mallory.near" }))
+      .rejects.toMatchObject({ code: "AUTHORIZATION_INVALID" });
+    await expect(store.recordOwnerFundingEvidence({ ...report, principal_id: "principal-2" }))
+      .rejects.toMatchObject({ code: "ATTEMPT_NOT_FOUND" });
+    await expect(store.recordOwnerFundingEvidence({
+      ...report,
+      evidence: { ...ownerFunding(), transaction_hash: `0x${"d".repeat(64)}` },
+    })).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+    expect(await store.replayDecision("principal-1", "idempotency-1"))
+      .toEqual(expect.objectContaining({ action: "blocked_unknown", safe_to_resubmit: false }));
+  });
+
+  it("keeps provider SUCCESS nonterminal until an independent destination receipt", async () => {
+    const store = new NearAttemptStore(new MemoryNearAttemptPersistence());
+    await store.reserve(await input());
+    await store.recordOwnerFundingEvidence(fundingTransition(ownerFunding(), 1, "funding-1"));
+    await store.recordOwnerFundingEvidence(fundingTransition(
+      originReceipt(), 2, "origin-1",
+    ));
+    const provider = await store.recordOwnerFundingEvidence(fundingTransition(
+      settlement("SUCCESS", "2026-11-01T00:00:04.000Z"), 3, "provider-1",
+    ));
+    expect(provider.entry.owner_funding?.status).toBe("provider_observed");
+    expect(provider.entry.attempt.state).toBe("unknown");
+    expect(provider.entry.reservation.state).toBe("outcome_unknown");
+    expect(await store.replayDecision("principal-1", "idempotency-1"))
+      .toEqual(expect.objectContaining({ action: "blocked_unknown", safe_to_resubmit: false }));
+
+    const settled = await store.recordOwnerFundingEvidence(fundingTransition(
+      settlement("SUCCESS", "2026-11-01T00:00:05.000Z", true), 4, "destination-1",
+    ));
+    expect(settled.entry.owner_funding?.status).toBe("destination_chain_verified");
+    expect(settled.entry.attempt.state).toBe("settled");
+    expect(settled.entry.reservation.state).toBe("committed");
+  });
+
+  it("retains ambiguous provider refund/failure and releases only on matching origin evidence", async () => {
+    const store = new NearAttemptStore(new MemoryNearAttemptPersistence());
+    await store.reserve(await input());
+    await store.recordOwnerFundingEvidence(fundingTransition(ownerFunding(), 1, "funding-1"));
+    const observed = await store.recordOwnerFundingEvidence(fundingTransition(
+      settlement("REFUNDED", "2026-11-01T00:00:03.000Z"), 2, "provider-refund-1",
+    ));
+    expect(observed.entry.reservation.state).toBe("outcome_unknown");
+    expect(await store.budgetSummary("principal-1", NEAR_ARBITRUM_USDC_ASSET_ID))
+      .toEqual(expect.objectContaining({ consumed_atomic: "60" }));
+    const refunded = await store.recordOwnerFundingEvidence(fundingTransition(
+      originReceipt("refund-confirmed", "2026-11-01T00:00:04.000Z"), 3, "origin-refund-1",
+    ));
+    expect(refunded.entry.attempt.state).toBe("refunded");
+    expect(refunded.entry.reservation.state).toBe("released");
+    expect(await store.budgetSummary("principal-1", NEAR_ARBITRUM_USDC_ASSET_ID))
+      .toEqual(expect.objectContaining({ consumed_atomic: "0" }));
+  });
+
+  it("retains a provider-reported failure until the origin failure is independently verified", async () => {
+    const store = new NearAttemptStore(new MemoryNearAttemptPersistence());
+    await store.reserve(await input());
+    await store.recordOwnerFundingEvidence(fundingTransition(ownerFunding(), 1, "funding-1"));
+    const observed = await store.recordOwnerFundingEvidence(fundingTransition(
+      settlement("FAILED", "2026-11-01T00:00:03.000Z"), 2, "provider-failure-1",
+    ));
+    expect(observed.entry.attempt.state).toBe("unknown");
+    expect(observed.entry.reservation.state).toBe("outcome_unknown");
+    expect(await store.budgetSummary("principal-1", NEAR_ARBITRUM_USDC_ASSET_ID))
+      .toEqual(expect.objectContaining({ consumed_atomic: "60" }));
+
+    const failed = await store.recordOwnerFundingEvidence(fundingTransition(
+      originReceipt("funding-failed", "2026-11-01T00:00:04.000Z"), 3, "origin-failure-1",
+    ));
+    expect(failed.entry.attempt.state).toBe("failed");
+    expect(failed.entry.reservation.state).toBe("released");
+    expect(await store.budgetSummary("principal-1", NEAR_ARBITRUM_USDC_ASSET_ID))
+      .toEqual(expect.objectContaining({ consumed_atomic: "0" }));
+  });
+
+  it("uses entry revision CAS so only one concurrent observation wins", async () => {
+    const persistence = new MemoryNearAttemptPersistence();
+    const storeA = new NearAttemptStore(persistence);
+    const storeB = new NearAttemptStore(persistence);
+    await storeA.reserve(await input());
+    await storeA.recordOwnerFundingEvidence(fundingTransition(ownerFunding(), 1, "funding-1"));
+    const outcomes = await Promise.allSettled([
+      storeA.recordOwnerFundingEvidence(fundingTransition(
+        originReceipt(), 2, "origin-race",
+      )),
+      storeB.recordOwnerFundingEvidence(fundingTransition(
+        settlement("PROCESSING", "2026-11-01T00:00:03.000Z"), 2, "provider-race",
+      )),
+    ]);
+    expect(outcomes.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(outcomes.filter((result) => result.status === "rejected"))
+      .toEqual([expect.objectContaining({ reason: expect.objectContaining({ code: "VERSION_CONFLICT" }) })]);
+  });
+});
+
 describe("NEAR local file restart and crash boundaries", () => {
+  it("persists owner funding provenance and exact replay across restart", async () => {
+    const { path } = await localFile();
+    const store = new NearAttemptStore(new LocalFileNearAttemptPersistence(path));
+    await store.reserve(await input());
+    const report = fundingTransition(ownerFunding(), 1, "funding-restart-1");
+    const recorded = await store.recordOwnerFundingEvidence(report);
+    const restarted = new NearAttemptStore(new LocalFileNearAttemptPersistence(path));
+    await expect(restarted.recordOwnerFundingEvidence(report))
+      .resolves.toEqual({ replay: true, entry: recorded.entry });
+    expect((await restarted.snapshot()).entries[0]?.owner_funding?.binding.transaction_hash)
+      .toBe(FUNDING_TRANSACTION);
+  });
+
   it("survives restart and returns an exact replay without double reservation", async () => {
     const { path, persistence } = await localFile();
     const exact = await input();
     const first = await new NearAttemptStore(persistence).reserve(exact);
     const restarted = new NearAttemptStore(new LocalFileNearAttemptPersistence(path));
     await expect(restarted.reserve(exact)).resolves.toEqual({ replay: true, entry: first.entry });
-    expect(await restarted.budgetSummary("principal-1", "nep141:wrap.near"))
+    expect(await restarted.budgetSummary("principal-1", NEAR_ARBITRUM_USDC_ASSET_ID))
       .toEqual(expect.objectContaining({ consumed_atomic: "60" }));
   });
 
@@ -344,7 +586,7 @@ describe("NEAR local file restart and crash boundaries", () => {
     await expect(crashing.reserve(exact)).rejects.toThrow("simulated crash after rename");
     const restarted = new NearAttemptStore(new LocalFileNearAttemptPersistence(path));
     await expect(restarted.reserve(exact)).resolves.toEqual(expect.objectContaining({ replay: true }));
-    expect(await restarted.budgetSummary("principal-1", "nep141:wrap.near"))
+    expect(await restarted.budgetSummary("principal-1", NEAR_ARBITRUM_USDC_ASSET_ID))
       .toEqual(expect.objectContaining({ consumed_atomic: "60" }));
   });
 
@@ -376,13 +618,13 @@ describe("NEAR local file restart and crash boundaries", () => {
       .resolves.toEqual(expect.objectContaining({ replay: true }));
     expect(await restarted.replayDecision("principal-1", "idempotency-1"))
       .toEqual(expect.objectContaining({ action: "blocked_unknown", safe_to_resubmit: false }));
-    expect(await restarted.budgetSummary("principal-1", "nep141:wrap.near"))
+    expect(await restarted.budgetSummary("principal-1", NEAR_ARBITRUM_USDC_ASSET_ID))
       .toEqual(expect.objectContaining({ unknown_atomic: "60", consumed_atomic: "60" }));
   });
 
   it("fails closed on unknown schema versions without modifying the file", async () => {
     const { path } = await localFile();
-    const unsupported = { schema_version: 2, revision: 0, entries: [] };
+    const unsupported = { schema_version: 3, revision: 0, entries: [] };
     await writeFile(path, JSON.stringify(unsupported), { mode: 0o600 });
     const store = new NearAttemptStore(new LocalFileNearAttemptPersistence(path));
     await expect(store.snapshot()).rejects.toMatchObject({ code: "PERSISTENCE_CORRUPT" });

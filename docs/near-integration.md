@@ -172,6 +172,23 @@ as a claim that every catalogued venue is executable.
 - `SUCCESS` is provider-reported unless destination evidence is independently
   verified. Unknown or missing status never proves non-execution and never
   authorizes an automatic replacement payment.
+- Automatic refund release is intentionally unavailable with the current
+  official 1Click contract. The status schema exposes only untyped
+  `nearTxHashes` / `originChainTxHashes` arrays plus provider-reported
+  `refundedAmount` and `refundReason`; it does not identify a refund-specific
+  transaction or trusted refund sender. `TransactionDetails` contains only a
+  hash and explorer URL. Quote signature verification covers the quote request,
+  quote, and timestamp—not later status or `swapDetails` refund metadata. See
+  the official [status API](https://docs.near-intents.org/api-reference/oneclick/check-swap-execution-status),
+  [quote-signature contract](https://docs.near-intents.org/integration/distribution-channels/1click-api/verify-quote-signature),
+  and [SDK transaction model](https://raw.githubusercontent.com/defuse-protocol/one-click-sdk-typescript/main/src/models/TransactionDetails.ts).
+  A coincidental incoming NEAR transfer therefore cannot be distinguished from
+  the actual refund strongly enough to release budget. Provider `REFUNDED`
+  remains an investigation trigger only: Pilot keeps the attempt UNKNOWN,
+  keeps its reservation charged, and never auto-resubmits. Enabling terminal
+  refund release requires an official typed refund transaction identity,
+  trusted sender/contract semantics, documented post-fee and partial-refund
+  amount rules, and independently verified finalized chain evidence.
 - A NEAR function-call key allowance pays gas; it is not a token spending cap.
 - NEAR AI privacy is operator-declared metadata until its attestation and E2EE
   path receive separate acceptance. It is not wired into live chat by default.

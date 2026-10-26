@@ -52,7 +52,7 @@ function success(): Response {
     jsonrpc: "2.0",
     id: RPC_ID,
     result: {
-      block_hash: "11111111111111111111111111111111",
+      block_hash: "1".repeat(44),
       block_height: 1,
       nonce: 1,
       permission: "FullAccess",
@@ -245,6 +245,29 @@ describe("NEP-413 full-access-key verifier", () => {
     });
     await expect(verifier.verify(signedInput())).rejects.toMatchObject({
       code: "FULL_ACCESS_KEY_REQUIRED",
+    });
+  });
+
+  it.each([
+    ["missing final block", { nonce: 1, permission: "FullAccess" }],
+    ["invalid block hash", {
+      block_hash: "not-a-near-hash",
+      block_height: 1,
+      nonce: 1,
+      permission: "FullAccess",
+    }],
+    ["unsafe key nonce", {
+      block_hash: "1".repeat(44),
+      block_height: 1,
+      nonce: Number.MAX_SAFE_INTEGER + 1,
+      permission: "FullAccess",
+    }],
+  ])("rejects an untrusted FullAccess result with %s", async (_name, result) => {
+    const verifier = createNearNep413FullAccessKeyVerifier({
+      fetch: vi.fn(async () => json({ jsonrpc: "2.0", id: RPC_ID, result })),
+    });
+    await expect(verifier.verify(signedInput())).rejects.toMatchObject({
+      code: "RPC_PROTOCOL_INVALID",
     });
   });
 

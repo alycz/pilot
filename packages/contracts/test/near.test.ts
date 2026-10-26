@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   canonicalNearApprovalJson,
+  computeNearNativeNearToArbitrumUsdcApprovalDigest,
   computeNearApprovalDigest,
   NEAR_APPROVAL_DIGEST_DOMAIN,
   Near1ClickDryQuoteRequestSchema,
@@ -22,9 +23,24 @@ import {
   NearExecutionAttemptSchema,
   NearExecutionReplayDecisionSchema,
   NearIdempotencyBindingSchema,
+  NearNativeNearAccountControlProofSchema,
+  NearNativeNearToArbitrumUsdcApprovalPayloadSchema,
+  NearNativeNearToArbitrumUsdcEconomicApprovalEnvelopeSchema,
+  NearNativeNearToArbitrumUsdcExecutableQuoteBindingSchema,
+  NearNativeNearToArbitrumUsdcFundingInstructionsSchema,
+  NearNativeNearToArbitrumUsdcOwnerFundedExecutionSchema,
+  NearNativeNearToArbitrumUsdcReconciliationSchema,
+  NearNativeNearToArbitrumUsdcReservationBindingSchema,
+  NearNativeNearToArbitrumUsdcReserveRequestSchema,
+  NearNativeNearToArbitrumUsdcReserveResultSchema,
+  NearNativeNearToArbitrumUsdcRouteSchema,
+  NearNativeNearSourceFundingEvidenceSchema,
   NearPrincipalAuthorizationSchema,
   NearReconciliationEvidenceSchema,
   NearWalletExecutionPolicySchema,
+  verifyNearNativeNearToArbitrumUsdcEconomicApproval,
+  verifyNearNativeNearToArbitrumUsdcOwnerFundedExecution,
+  verifyNearNativeNearToArbitrumUsdcReserveRequest,
   type NearApprovalBinding,
 } from "../src/near";
 
@@ -190,6 +206,206 @@ const providerOnlySettlement = {
   safe_to_resubmit: false as const,
   independent_destination_receipt: false as const,
 };
+
+const reverseRecipient = `0x${"6".repeat(40)}`;
+const reverseRoute = {
+  version: "pilot-near-native-to-arbitrum-usdc-route-v1" as const,
+  profile_status: "hosted-default-off" as const,
+  execution_default: "off" as const,
+  activation_gate: "independent-source-and-destination-receipt-verification-required" as const,
+  origin_chain: "near" as const,
+  origin_network: "near:mainnet" as const,
+  origin_asset_id: "nep141:wrap.near" as const,
+  origin_token_contract: "wrap.near" as const,
+  origin_decimals: 24 as const,
+  source_transfer_asset: "native-near" as const,
+  managed_wrapping_by_1click: true as const,
+  destination_chain: "arb" as const,
+  destination_chain_id: 42161 as const,
+  destination_asset_id: ownerFundedRoute.origin_asset_id,
+  destination_token_contract: ownerFundedRoute.origin_token_contract,
+  destination_decimals: 6 as const,
+  deposit_mode: "SIMPLE" as const,
+  funding_mode: "manual-owner-wallet-send" as const,
+  manual_owner_funding_only: true as const,
+  pilot_budget_scope: "does-not-control-owner-wallet-send" as const,
+};
+
+const reverseRequestEcho = {
+  swapType: "EXACT_INPUT" as const,
+  slippageTolerance: 100,
+  originAsset: reverseRoute.origin_asset_id,
+  depositType: "ORIGIN_CHAIN" as const,
+  destinationAsset: reverseRoute.destination_asset_id,
+  amount: "1000000000000000000000000",
+  refundTo: "alice.near",
+  refundType: "ORIGIN_CHAIN" as const,
+  recipient: reverseRecipient,
+  recipientType: "DESTINATION_CHAIN" as const,
+  deadline: "2026-11-02T13:00:00.000Z",
+  depositMode: "SIMPLE" as const,
+  confidentiality: "public" as const,
+  quoteWaitingTimeMs: 0,
+  insured: false as const,
+  dry: false as const,
+};
+
+const reverseProviderQuoteResponse = {
+  correlationId: "near-to-arb-quote-1",
+  timestamp: "2026-11-02T12:50:00.000Z",
+  signature: "reverse-provider-signature",
+  quoteRequest: reverseRequestEcho,
+  quote: {
+    amountIn: reverseRequestEcho.amount,
+    amountInFormatted: "1",
+    amountInUsd: "2.79",
+    minAmountIn: reverseRequestEcho.amount,
+    amountOut: "2790000",
+    amountOutFormatted: "2.79",
+    amountOutUsd: "2.79",
+    minAmountOut: "2750000",
+    timeEstimate: 120,
+    depositAddress: "deposit-router.near",
+    deadline: reverseRequestEcho.deadline,
+    timeWhenInactive: "2026-11-02T12:59:00.000Z",
+  },
+};
+
+const reverseQuote = {
+  version: "pilot-near-native-to-arbitrum-usdc-quote-binding-v1" as const,
+  route: reverseRoute,
+  provider_signature_verified: true as const,
+  provider_signature: reverseProviderQuoteResponse.signature,
+  quote_hash: "7".repeat(44),
+  correlation_id: reverseProviderQuoteResponse.correlationId,
+  provider_timestamp: reverseProviderQuoteResponse.timestamp,
+  request_echo: reverseRequestEcho,
+  provider_quote_response: reverseProviderQuoteResponse,
+  amount_in: reverseRequestEcho.amount,
+  min_amount_out: reverseProviderQuoteResponse.quote.minAmountOut,
+  recipient: reverseRecipient,
+  refund_to: "alice.near",
+  deposit_address: "deposit-router.near",
+  deposit_memo_present: false as const,
+  provider_deadline_at: reverseRequestEcho.deadline,
+  provider_time_when_inactive_at: reverseProviderQuoteResponse.quote.timeWhenInactive,
+  approval_expires_at: "2026-11-02T12:57:00.000Z",
+};
+
+const reverseReservation = {
+  version: "pilot-near-native-near-to-arbitrum-usdc-reservation-v1" as const,
+  reservation_id: "reverse-reservation-1",
+  attempt_id: "reverse-attempt-1",
+  principal_id: "principal-1",
+  near_account_id: "alice.near",
+  network: "near:mainnet" as const,
+  idempotency_version: "pilot-near-idempotency-v1" as const,
+  idempotency_key: "reverse-request-1",
+  request_digest: "8".repeat(64),
+  asset_id: "nep141:wrap.near" as const,
+  amount_atomic: reverseQuote.amount_in,
+  expected_revision: 0,
+  reserved_revision: 1,
+};
+
+const reverseApprovalPayload = {
+  version: "pilot-near-native-near-to-arbitrum-usdc-approval-payload-v1" as const,
+  route: reverseRoute,
+  principal_id: "principal-1",
+  near_account_id: "alice.near",
+  network: "near:mainnet" as const,
+  policy_digest: "9".repeat(64),
+  quote_hash: reverseQuote.quote_hash,
+  correlation_id: reverseQuote.correlation_id,
+  origin_asset_id: reverseRoute.origin_asset_id,
+  destination_asset_id: reverseRoute.destination_asset_id,
+  amount_in: reverseQuote.amount_in,
+  min_amount_out: reverseQuote.min_amount_out,
+  recipient: reverseQuote.recipient,
+  refund_to: reverseQuote.refund_to,
+  deposit_address: reverseQuote.deposit_address,
+  deposit_memo_present: false as const,
+  provider_deadline_at: reverseQuote.provider_deadline_at,
+  approved_at: "2026-11-02T12:52:00.000Z",
+  approval_expires_at: "2026-11-02T12:57:00.000Z",
+  reservation: reverseReservation,
+};
+
+const reverseAccountControl = {
+  version: "pilot-near-account-control-proof-v1" as const,
+  proof_kind: "nep413" as const,
+  scope: "source-account-control-only" as const,
+  grants_economic_transfer_approval: false as const,
+  authorization_id: "reverse-account-control-1",
+  principal_id: "principal-1",
+  near_account_id: "alice.near",
+  network: "near:mainnet" as const,
+  verified_at: "2026-11-02T12:51:00.000Z",
+};
+
+const reverseFundingInstructions = {
+  version: "pilot-near-native-near-to-arbitrum-usdc-funding-instructions-v1" as const,
+  route_version: reverseRoute.version,
+  funding_method: "manual-native-near-transfer" as const,
+  network: "near:mainnet" as const,
+  quote_hash: reverseQuote.quote_hash,
+  correlation_id: reverseQuote.correlation_id,
+  source_account_id: "alice.near",
+  refund_account_id: reverseQuote.refund_to,
+  destination_recipient: reverseQuote.recipient,
+  deposit_account_id: reverseQuote.deposit_address,
+  deposit_memo_present: false as const,
+  amount_yocto_near: reverseQuote.amount_in,
+  provider_deadline_at: reverseQuote.provider_deadline_at,
+};
+
+const reverseSourceFunding = {
+  version: "pilot-near-native-near-source-funding-v1" as const,
+  provenance: "near-rpc-finalized-native-transfer" as const,
+  network: "near:mainnet" as const,
+  transaction_hash: "A".repeat(44),
+  receipt_id: "B".repeat(44),
+  block_height: 123456,
+  finality: "final" as const,
+  execution_status: "SUCCESS" as const,
+  source_account_id: "alice.near",
+  receiver_account_id: reverseQuote.deposit_address,
+  amount_yocto_near: reverseQuote.amount_in,
+  included_at: "2026-11-02T12:53:00.000Z",
+  verified_at: "2026-11-02T12:54:00.000Z",
+};
+
+const reverseProviderSuccess = {
+  version: "pilot-near-native-near-to-arbitrum-usdc-reconciliation-v1" as const,
+  outcome: "provider-success-only" as const,
+  quote_hash: reverseQuote.quote_hash,
+  correlation_id: reverseQuote.correlation_id,
+  deposit_account_id: reverseQuote.deposit_address,
+  deposit_memo_present: false as const,
+  checked_at: "2026-11-02T12:58:00.000Z",
+  safe_to_resubmit: false as const,
+  provider_status: "SUCCESS" as const,
+  independent_destination_receipt: false as const,
+};
+
+async function reverseApprovalEnvelope(
+  payload = reverseApprovalPayload,
+) {
+  const approvalDigest = await computeNearNativeNearToArbitrumUsdcApprovalDigest(payload);
+  return {
+    version: "pilot-near-native-near-to-arbitrum-usdc-economic-approval-v1" as const,
+    payload,
+    approval_digest: approvalDigest,
+    account_control: reverseAccountControl,
+    economic_approval: {
+      approval_id: "reverse-economic-approval-1",
+      method: "owner-reviewed-native-near-transfer" as const,
+      owner_confirmed: true as const,
+      approved_payload_digest: approvalDigest,
+      confirmed_at: payload.approved_at,
+    },
+  };
+}
 
 describe("NEAR 1Click contracts", () => {
   it("requires exact provider asset identifiers rather than ticker symbols", () => {
@@ -807,7 +1023,7 @@ describe("Arbitrum USDC to wNEAR owner-funded route contracts", () => {
     }).success).toBe(false);
   });
 
-  it("authorizes executable review and deposit notification as distinct operations", () => {
+  it("authorizes only the implemented executable review operation", () => {
     expect(NearAuthorizedOperationSchema.safeParse(
       "near.intents.executable-quote.review",
     ).success).toBe(true);
@@ -815,5 +1031,370 @@ describe("Arbitrum USDC to wNEAR owner-funded route contracts", () => {
       "near.intents.deposit-tx.submit",
     ).success).toBe(false);
     expect(NearAuthorizedOperationSchema.safeParse("near.intents.execute").success).toBe(false);
+  });
+});
+
+describe("native NEAR to Arbitrum USDC owner-funded route contracts", () => {
+  it("pins the provisional default-off route and its exact catalog identities", () => {
+    expect(NearNativeNearToArbitrumUsdcRouteSchema.parse(reverseRoute)).toMatchObject({
+      profile_status: "hosted-default-off",
+      execution_default: "off",
+      activation_gate: "independent-source-and-destination-receipt-verification-required",
+      origin_asset_id: "nep141:wrap.near",
+      source_transfer_asset: "native-near",
+      destination_chain_id: 42161,
+      destination_token_contract: "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+    });
+    expect(NearNativeNearToArbitrumUsdcRouteSchema.safeParse({
+      ...reverseRoute,
+      execution_default: "on",
+    }).success).toBe(false);
+    expect(NearNativeNearToArbitrumUsdcRouteSchema.safeParse({
+      ...reverseRoute,
+      activation_gate: "storage-required",
+    }).success).toBe(false);
+    expect(NearNativeNearToArbitrumUsdcRouteSchema.safeParse({
+      ...reverseRoute,
+      destination_asset_id: "USDC",
+    }).success).toBe(false);
+  });
+
+  it("binds the verified executable quote and rejects memo or material-field drift", () => {
+    expect(NearNativeNearToArbitrumUsdcExecutableQuoteBindingSchema.safeParse(
+      reverseQuote,
+    ).success).toBe(true);
+    expect(NearNativeNearToArbitrumUsdcExecutableQuoteBindingSchema.safeParse({
+      ...reverseQuote,
+      min_amount_out: "2749999",
+    }).success).toBe(false);
+    expect(NearNativeNearToArbitrumUsdcExecutableQuoteBindingSchema.safeParse({
+      ...reverseQuote,
+      recipient: `0x${"7".repeat(40)}`,
+    }).success).toBe(false);
+    expect(NearNativeNearToArbitrumUsdcExecutableQuoteBindingSchema.safeParse({
+      ...reverseQuote,
+      provider_quote_response: {
+        ...reverseProviderQuoteResponse,
+        quote: { ...reverseProviderQuoteResponse.quote, depositMemo: "memo" },
+      },
+    }).success).toBe(false);
+    expect(NearNativeNearToArbitrumUsdcExecutableQuoteBindingSchema.safeParse({
+      ...reverseQuote,
+      request_echo: { ...reverseRequestEcho, originAsset: ownerFundedRoute.origin_asset_id },
+    }).success).toBe(false);
+  });
+
+  it("domain-separates a fresh quote-bound economic approval from NEP-413 account control", async () => {
+    const envelope = await reverseApprovalEnvelope();
+    expect(NearNativeNearAccountControlProofSchema.parse(
+      envelope.account_control,
+    ).grants_economic_transfer_approval).toBe(false);
+    expect(NearNativeNearToArbitrumUsdcReservationBindingSchema.safeParse(
+      reverseReservation,
+    ).success).toBe(true);
+    expect(NearNativeNearToArbitrumUsdcEconomicApprovalEnvelopeSchema.safeParse(
+      envelope,
+    ).success).toBe(true);
+    expect(await verifyNearNativeNearToArbitrumUsdcEconomicApproval(envelope)).toBe(true);
+
+    const changedRecipient = {
+      ...reverseApprovalPayload,
+      recipient: `0x${"7".repeat(40)}`,
+    };
+    expect(await computeNearNativeNearToArbitrumUsdcApprovalDigest(changedRecipient))
+      .not.toBe(envelope.approval_digest);
+    expect(await verifyNearNativeNearToArbitrumUsdcEconomicApproval({
+      ...envelope,
+      payload: changedRecipient,
+    })).toBe(false);
+    expect(NearNativeNearAccountControlProofSchema.safeParse({
+      ...reverseAccountControl,
+      grants_economic_transfer_approval: true,
+    }).success).toBe(false);
+    expect(NearNativeNearToArbitrumUsdcApprovalPayloadSchema.safeParse({
+      ...reverseApprovalPayload,
+      approval_expires_at: "2026-11-02T12:57:00.001Z",
+    }).success).toBe(false);
+    expect(NearNativeNearToArbitrumUsdcReservationBindingSchema.safeParse({
+      ...reverseReservation,
+      reserved_revision: 2,
+    }).success).toBe(false);
+  });
+
+  it("requires exact finalized native funding before recording provider settlement", async () => {
+    const approval = await reverseApprovalEnvelope();
+    const execution = {
+      version: "pilot-near-native-near-to-arbitrum-usdc-owner-funded-execution-v1" as const,
+      route: reverseRoute,
+      quote: reverseQuote,
+      approval,
+      funding_instructions: reverseFundingInstructions,
+      source_funding: reverseSourceFunding,
+      reconciliation: reverseProviderSuccess,
+    };
+    expect(NearNativeNearToArbitrumUsdcFundingInstructionsSchema.safeParse(
+      reverseFundingInstructions,
+    ).success).toBe(true);
+    expect(NearNativeNearSourceFundingEvidenceSchema.safeParse(
+      reverseSourceFunding,
+    ).success).toBe(true);
+    expect(NearNativeNearToArbitrumUsdcOwnerFundedExecutionSchema.safeParse(
+      execution,
+    ).success).toBe(true);
+    expect(await verifyNearNativeNearToArbitrumUsdcOwnerFundedExecution(execution)).toBe(true);
+    expect(NearNativeNearToArbitrumUsdcOwnerFundedExecutionSchema.safeParse({
+      ...execution,
+      source_funding: {
+        ...reverseSourceFunding,
+        receiver_account_id: "wrong-deposit.near",
+      },
+    }).success).toBe(false);
+    expect(NearNativeNearSourceFundingEvidenceSchema.safeParse({
+      ...reverseSourceFunding,
+      finality: "optimistic",
+    }).success).toBe(false);
+    expect(NearNativeNearToArbitrumUsdcOwnerFundedExecutionSchema.safeParse({
+      ...execution,
+      source_funding: {
+        ...reverseSourceFunding,
+        included_at: "2026-11-02T12:57:00.001Z",
+        verified_at: "2026-11-02T12:58:00.000Z",
+      },
+    }).success).toBe(false);
+  });
+
+  it("keeps unknown and provider SUCCESS non-retryable without claiming final delivery", () => {
+    expect(NearNativeNearToArbitrumUsdcReconciliationSchema.parse({
+      version: "pilot-near-native-near-to-arbitrum-usdc-reconciliation-v1",
+      outcome: "unknown",
+      quote_hash: reverseQuote.quote_hash,
+      correlation_id: reverseQuote.correlation_id,
+      deposit_account_id: reverseQuote.deposit_address,
+      deposit_memo_present: false,
+      checked_at: "2026-11-02T12:58:00.000Z",
+      safe_to_resubmit: false,
+      reason: "not_found",
+    }).safe_to_resubmit).toBe(false);
+    expect(NearNativeNearToArbitrumUsdcReconciliationSchema.safeParse({
+      ...reverseProviderSuccess,
+      safe_to_resubmit: true,
+    }).success).toBe(false);
+    expect(NearNativeNearToArbitrumUsdcReconciliationSchema.parse(
+      reverseProviderSuccess,
+    )).toMatchObject({
+      outcome: "provider-success-only",
+      independent_destination_receipt: false,
+    });
+  });
+
+  it("requires a canonical finalized USDC Transfer event for independent settlement", async () => {
+    const approval = await reverseApprovalEnvelope();
+    const destinationReceipt = {
+      version: "pilot-near-arbitrum-canonical-usdc-receipt-v1" as const,
+      provenance: "arbitrum-rpc-finalized-erc20-transfer" as const,
+      chain: "arb" as const,
+      chain_id: 42161 as const,
+      transaction_hash: `0x${"C".repeat(64)}`,
+      block_hash: `0x${"D".repeat(64)}`,
+      block_number: 654321,
+      transaction_index: 2,
+      log_index: 4,
+      finality: "final" as const,
+      receipt_status: "success" as const,
+      event_signature: "Transfer(address,address,uint256)" as const,
+      token_contract: ownerFundedRoute.origin_token_contract,
+      token_decimals: 6 as const,
+      sender_address: `0x${"8".repeat(40)}`,
+      recipient_address: reverseRecipient,
+      amount_received: reverseQuote.min_amount_out,
+      verified_at: "2026-11-02T13:01:00.000Z",
+    };
+    const reconciliation = {
+      ...reverseProviderSuccess,
+      outcome: "independently-settled" as const,
+      independent_destination_receipt: undefined,
+      destination_receipt: destinationReceipt,
+    };
+    const { independent_destination_receipt: _removed, ...cleanReconciliation } = reconciliation;
+    const execution = {
+      version: "pilot-near-native-near-to-arbitrum-usdc-owner-funded-execution-v1" as const,
+      route: reverseRoute,
+      quote: reverseQuote,
+      approval,
+      funding_instructions: reverseFundingInstructions,
+      source_funding: reverseSourceFunding,
+      reconciliation: cleanReconciliation,
+    };
+    expect(await verifyNearNativeNearToArbitrumUsdcOwnerFundedExecution(execution)).toBe(true);
+    expect(NearNativeNearToArbitrumUsdcOwnerFundedExecutionSchema.safeParse({
+      ...execution,
+      reconciliation: {
+        ...cleanReconciliation,
+        destination_receipt: { ...destinationReceipt, amount_received: "1" },
+      },
+    }).success).toBe(false);
+    expect(NearNativeNearToArbitrumUsdcOwnerFundedExecutionSchema.safeParse({
+      ...execution,
+      reconciliation: {
+        ...cleanReconciliation,
+        destination_receipt: {
+          ...destinationReceipt,
+          token_contract: `0x${"9".repeat(40)}`,
+        },
+      },
+    }).success).toBe(false);
+    expect(NearNativeNearToArbitrumUsdcReconciliationSchema.safeParse({
+      ...cleanReconciliation,
+      provider_status: "REFUNDED",
+    }).success).toBe(false);
+  });
+
+  it("binds a finalized provider refund to the reviewed NEAR refund account", async () => {
+    const approval = await reverseApprovalEnvelope();
+    const refund = {
+      version: "pilot-near-native-near-refund-receipt-v1" as const,
+      provenance: "near-rpc-finalized-refund" as const,
+      network: "near:mainnet" as const,
+      transaction_hash: "C".repeat(44),
+      receipt_id: "D".repeat(44),
+      block_height: 123500,
+      finality: "final" as const,
+      execution_status: "SUCCESS" as const,
+      refund_account_id: reverseQuote.refund_to,
+      amount_refunded_yocto_near: "999000000000000000000000",
+      verified_at: "2026-11-02T13:02:00.000Z",
+    };
+    const refunded = {
+      version: "pilot-near-native-near-to-arbitrum-usdc-reconciliation-v1" as const,
+      outcome: "refunded" as const,
+      quote_hash: reverseQuote.quote_hash,
+      correlation_id: reverseQuote.correlation_id,
+      deposit_account_id: reverseQuote.deposit_address,
+      deposit_memo_present: false as const,
+      checked_at: "2026-11-02T13:02:00.000Z",
+      safe_to_resubmit: false as const,
+      provider_status: "REFUNDED" as const,
+      refund_receipt: refund,
+    };
+    const execution = {
+      version: "pilot-near-native-near-to-arbitrum-usdc-owner-funded-execution-v1" as const,
+      route: reverseRoute,
+      quote: reverseQuote,
+      approval,
+      funding_instructions: reverseFundingInstructions,
+      source_funding: reverseSourceFunding,
+      reconciliation: refunded,
+    };
+    expect(NearNativeNearToArbitrumUsdcOwnerFundedExecutionSchema.safeParse(
+      execution,
+    ).success).toBe(true);
+    expect(NearNativeNearToArbitrumUsdcOwnerFundedExecutionSchema.safeParse({
+      ...execution,
+      reconciliation: {
+        ...refunded,
+        refund_receipt: { ...refund, refund_account_id: "mallory.near" },
+      },
+    }).success).toBe(false);
+  });
+
+  it("admits only the exact live quote, economic approval, and reservation identifiers", async () => {
+    const approval = await reverseApprovalEnvelope();
+    const request = {
+      version: "pilot-near-native-to-arbitrum-usdc-reserve-request-v1" as const,
+      quote_binding: reverseQuote,
+      approval,
+      idempotency_version: reverseReservation.idempotency_version,
+      idempotency_key: reverseReservation.idempotency_key,
+      attempt_id: reverseReservation.attempt_id,
+      reservation_id: reverseReservation.reservation_id,
+    };
+    expect(NearAuthorizedOperationSchema.safeParse(
+      "near.intents.owner-funded.reserve",
+    ).success).toBe(true);
+    expect(NearNativeNearToArbitrumUsdcReserveRequestSchema.safeParse(request).success)
+      .toBe(true);
+    expect(await verifyNearNativeNearToArbitrumUsdcReserveRequest(
+      request,
+      Date.parse("2026-11-02T12:53:00.000Z"),
+    )).toBe(true);
+    expect(NearNativeNearToArbitrumUsdcReserveRequestSchema.safeParse({
+      ...request,
+      reservation_id: "other-reservation",
+    }).success).toBe(false);
+    expect(NearNativeNearToArbitrumUsdcReserveRequestSchema.safeParse({
+      ...request,
+      budget_limit_atomic: "999999999999999999999999999999",
+    }).success).toBe(false);
+    expect(NearNativeNearToArbitrumUsdcReserveRequestSchema.safeParse({
+      ...request,
+      policy: { allow: true },
+    }).success).toBe(false);
+    expect(NearNativeNearToArbitrumUsdcReserveRequestSchema.safeParse({
+      ...request,
+      execution_enabled: true,
+    }).success).toBe(false);
+    expect(await verifyNearNativeNearToArbitrumUsdcReserveRequest(
+      request,
+      Date.parse(reverseApprovalPayload.approval_expires_at),
+    )).toBe(false);
+    expect(await verifyNearNativeNearToArbitrumUsdcReserveRequest({
+      ...request,
+      approval: {
+        ...approval,
+        payload: { ...approval.payload, min_amount_out: "1" },
+      },
+    }, Date.parse("2026-11-02T12:53:00.000Z"))).toBe(false);
+  });
+
+  it("returns only durable reserved or replay state with manual execution disabled", async () => {
+    const approval = await reverseApprovalEnvelope();
+    const base = {
+      version: "pilot-near-native-to-arbitrum-usdc-reserve-result-v1" as const,
+      source: "live" as const,
+      provider_signature_verified: true as const,
+      admission_id: approval.economic_approval.approval_id,
+      quote_hash: reverseQuote.quote_hash,
+      correlation_id: reverseQuote.correlation_id,
+      approval_digest: approval.approval_digest,
+      request_digest: reverseReservation.request_digest,
+      idempotency_version: reverseReservation.idempotency_version,
+      idempotency_key: reverseReservation.idempotency_key,
+      attempt_id: reverseReservation.attempt_id,
+      reservation_id: reverseReservation.reservation_id,
+      attempt_state: "approved" as const,
+      reservation_state: "reserved" as const,
+      attempt_revision: 1,
+      reservation_revision: reverseReservation.reserved_revision,
+      funding_instructions: reverseFundingInstructions,
+      execution_enabled: false as const,
+      manual_owner_funding_only: true as const,
+    };
+    expect(NearNativeNearToArbitrumUsdcReserveResultSchema.safeParse({
+      ...base,
+      action: "reserved",
+      replayed_existing: false,
+    }).success).toBe(true);
+    expect(NearNativeNearToArbitrumUsdcReserveResultSchema.safeParse({
+      ...base,
+      action: "replay",
+      replayed_existing: true,
+    }).success).toBe(true);
+    for (const mutation of [
+      { execution_enabled: true },
+      { manual_owner_funding_only: false },
+      { source: "fixture" },
+      { action: "reserved", replayed_existing: true },
+      { budget_limit_atomic: "999999999999999999999999999999" },
+      { wallet_signature: "forbidden" },
+      { signed_transaction: "forbidden" },
+      { broadcast: true },
+    ]) {
+      expect(NearNativeNearToArbitrumUsdcReserveResultSchema.safeParse({
+        ...base,
+        action: "reserved",
+        replayed_existing: false,
+        ...mutation,
+      }).success).toBe(false);
+    }
   });
 });

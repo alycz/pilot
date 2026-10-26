@@ -400,10 +400,13 @@ function hasNearExecutableQuoteReviewAuthorization(
 
   try {
     const authorization = readAuthorization(request);
+    const nearAccount = args.route === "near-native-to-arbitrum-usdc-v1"
+      ? args.refund_to
+      : args.recipient;
     return authorization !== null &&
       authorization.network === "near:mainnet" &&
       authorization.operations.includes(NEAR_EXECUTABLE_QUOTE_REVIEW_OP) &&
-      authorization.account_id === args.recipient;
+      authorization.account_id === nearAccount;
   } catch {
     // Missing or invalid cookie-sealing configuration must fail closed.
     return false;

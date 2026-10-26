@@ -49,6 +49,7 @@ export async function loadLiveNearOwnerFundedStatus(
 ): Promise<LiveNearOwnerFundedStatus> {
   const lookup = review.owner_review.status_lookup;
   const envelope = await client.op("near.intents.status", {
+    ...("profile" in lookup ? { profile: lookup.profile } : {}),
     deposit_address: lookup.deposit_address,
     expected_correlation_id: lookup.expected_correlation_id,
     expected_quote_hash: lookup.expected_quote_hash,

@@ -5,7 +5,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   D1NearAttemptStore,
+  type NearHostedArbitrumUsdcReceiptEvidence,
   type NearHostedEvidenceInput,
+  type NearHostedNativeReconciliation,
+  type NearHostedNativeRefundReceiptEvidence,
+  type NearHostedNativeSourceFundingEvidence,
+  type NearHostedNativeToArbitrumBinding,
   type NearHostedReserveInput,
 } from "../src/near/attempt-store";
 
@@ -15,12 +20,18 @@ class Coordinator {
   readonly sqlite = new DatabaseSync(":memory:");
   tail: Promise<void> = Promise.resolve();
 
-  constructor() {
+  constructor(nativeLifecycle = true) {
     this.sqlite.exec("PRAGMA foreign_keys = ON");
     this.sqlite.exec(readFileSync(
       new URL("../migrations/0018_near_attempt_store.sql", import.meta.url),
       "utf8",
     ));
+    if (nativeLifecycle) {
+      this.sqlite.exec(readFileSync(
+        new URL("../migrations/0020_near_native_to_arbitrum_usdc_lifecycle.sql", import.meta.url),
+        "utf8",
+      ));
+    }
   }
 }
 
@@ -112,6 +123,14 @@ function oneShotBarrier(parties = 2): () => Promise<void> {
 const ONE_NEAR_ATOMIC = "1000000000000000000000000";
 const ONE_AND_HALF_NEAR_ATOMIC = "1500000000000000000000000";
 const ASSET = "nep141:wrap.near";
+const ARBITRUM_USDC_ASSET =
+  "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near" as const;
+const ARBITRUM_USDC_CONTRACT = "0xaf88d065e77c8cc2239327c5edb3a432268e5831" as const;
+const ARBITRUM_RECIPIENT = `0x${"1".repeat(40)}`;
+const ARBITRUM_SENDER = `0x${"2".repeat(40)}`;
+const ARBITRUM_TRANSACTION = `0x${"a".repeat(64)}`;
+const SOURCE_TRANSACTION = "5".repeat(44);
+const SOURCE_RECEIPT = "6".repeat(44);
 const TEST_NOW = Date.parse("2026-11-01T00:04:00.000Z");
 
 function attemptStore(
@@ -190,6 +209,162 @@ function evidence(
   };
 }
 
+function nativeReservation(input: Partial<NearHostedReserveInput> = {}): NearHostedReserveInput {
+  return reservation({
+    depositAddress: "native-deposit.near",
+    depositMemo: undefined,
+    assetId: ASSET,
+    amountAtomic: ONE_NEAR_ATOMIC,
+    budgetLimitAtomic: ONE_AND_HALF_NEAR_ATOMIC,
+    ...input,
+  });
+}
+
+function nativeBinding(
+  input: Partial<NearHostedNativeToArbitrumBinding> = {},
+): NearHostedNativeToArbitrumBinding {
+  return {
+    version: "pilot-near-native-to-arbitrum-usdc-hosted-binding-v1",
+    accountId: "alice.near",
+    approvalDigest: "B".repeat(64),
+    quoteId: "quote-1",
+    quoteHash: "4".repeat(44),
+    correlationId: "quote-1",
+    originAssetId: "nep141:wrap.near",
+    originTokenContract: "wrap.near",
+    amountIn: ONE_NEAR_ATOMIC,
+    refundTo: "alice.near",
+    depositAddress: "native-deposit.near",
+    destinationAssetId: ARBITRUM_USDC_ASSET,
+    destinationTokenContract: ARBITRUM_USDC_CONTRACT,
+    destinationRecipient: ARBITRUM_RECIPIENT,
+    minAmountOut: "500000",
+    ...input,
+  };
+}
+
+function sourceFunding(
+  input: Partial<NearHostedNativeSourceFundingEvidence> = {},
+): NearHostedNativeSourceFundingEvidence {
+  return {
+    version: "pilot-near-native-near-source-funding-v1",
+    provenance: "near-rpc-finalized-native-transfer",
+    network: "near:mainnet",
+    transaction_hash: SOURCE_TRANSACTION,
+    receipt_id: SOURCE_RECEIPT,
+    block_height: 123,
+    finality: "final",
+    execution_status: "SUCCESS",
+    source_account_id: "alice.near",
+    receiver_account_id: "native-deposit.near",
+    amount_yocto_near: ONE_NEAR_ATOMIC,
+    included_at: "2026-11-01T00:01:00.000Z",
+    verified_at: "2026-11-01T00:01:30.000Z",
+    ...input,
+  };
+}
+
+function arbitrumReceipt(
+  input: Partial<NearHostedArbitrumUsdcReceiptEvidence> = {},
+): NearHostedArbitrumUsdcReceiptEvidence {
+  return {
+    version: "pilot-near-arbitrum-canonical-usdc-receipt-v1",
+    provenance: "arbitrum-rpc-finalized-erc20-transfer",
+    chain: "arb",
+    chain_id: 42161,
+    transaction_hash: ARBITRUM_TRANSACTION,
+    block_hash: `0x${"b".repeat(64)}`,
+    block_number: 456,
+    transaction_index: 1,
+    log_index: 2,
+    finality: "final",
+    receipt_status: "success",
+    event_signature: "Transfer(address,address,uint256)",
+    token_contract: ARBITRUM_USDC_CONTRACT,
+    token_decimals: 6,
+    sender_address: ARBITRUM_SENDER,
+    recipient_address: ARBITRUM_RECIPIENT,
+    amount_received: "500000",
+    verified_at: "2026-11-01T00:03:00.000Z",
+    ...input,
+  };
+}
+
+function refundReceipt(
+  input: Partial<NearHostedNativeRefundReceiptEvidence> = {},
+): NearHostedNativeRefundReceiptEvidence {
+  return {
+    version: "pilot-near-native-near-refund-receipt-v1",
+    provenance: "near-rpc-finalized-refund",
+    network: "near:mainnet",
+    transaction_hash: "7".repeat(44),
+    receipt_id: "8".repeat(44),
+    block_height: 789,
+    finality: "final",
+    execution_status: "SUCCESS",
+    refund_account_id: "alice.near",
+    amount_refunded_yocto_near: ONE_NEAR_ATOMIC,
+    verified_at: "2026-11-01T00:03:00.000Z",
+    ...input,
+  };
+}
+
+function nativeReconciliation(
+  outcome: NearHostedNativeReconciliation["outcome"],
+  input: Record<string, unknown> = {},
+): NearHostedNativeReconciliation {
+  const base = {
+    version: "pilot-near-native-near-to-arbitrum-usdc-reconciliation-v1",
+    quote_hash: "4".repeat(44),
+    correlation_id: "quote-1",
+    deposit_account_id: "native-deposit.near",
+    deposit_memo_present: false,
+    checked_at: "2026-11-01T00:03:30.000Z",
+    safe_to_resubmit: false,
+  } as const;
+  if (outcome === "pending") {
+    return { ...base, outcome, provider_status: "PROCESSING", ...input } as NearHostedNativeReconciliation;
+  }
+  if (outcome === "unknown") {
+    return { ...base, outcome, reason: "timeout", ...input } as NearHostedNativeReconciliation;
+  }
+  if (outcome === "refunded") {
+    return {
+      ...base, outcome, provider_status: "REFUNDED", refund_receipt: refundReceipt(), ...input,
+    } as NearHostedNativeReconciliation;
+  }
+  if (outcome === "failed") {
+    return {
+      ...base, outcome, provider_status: "FAILED", independent_terminal_evidence: false, ...input,
+    } as NearHostedNativeReconciliation;
+  }
+  if (outcome === "provider-success-only") {
+    return {
+      ...base, outcome, provider_status: "SUCCESS", independent_destination_receipt: false, ...input,
+    } as NearHostedNativeReconciliation;
+  }
+  return {
+    ...base,
+    outcome,
+    provider_status: "SUCCESS",
+    destination_receipt: arbitrumReceipt(),
+    ...input,
+  } as NearHostedNativeReconciliation;
+}
+
+function nativeTransition(
+  evidenceValue: NearHostedNativeSourceFundingEvidence | NearHostedNativeReconciliation,
+  revision: number,
+  transitionId: string,
+) {
+  return {
+    accountId: "alice.near",
+    transitionId,
+    expectedEntryRevision: revision,
+    binding: nativeBinding(),
+    evidence: evidenceValue,
+  } as const;
+}
 describe("D1 hosted NEAR attempt reservation", () => {
   it("keeps arbitrary-precision atomic accounting exact without SQLite numeric casts", async () => {
     const coordinator = new Coordinator();
@@ -404,5 +579,294 @@ describe("D1 hosted NEAR attempt reconciliation", () => {
       expectedEntryRevision: 2,
       checkedAt: "2026-11-01T00:05:00.000Z",
     }))).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  });
+});
+
+describe("D1 hosted native NEAR to Arbitrum USDC lifecycle", () => {
+  it("atomically binds finalized native source funding and replays only exact evidence", async () => {
+    const coordinator = new Coordinator();
+    const store = attemptStore(coordinator);
+    const admitted = await store.reserveNativeNearToArbitrum(nativeReservation(), nativeBinding());
+    expect(admitted).toEqual(expect.objectContaining({
+      replay: false,
+      attempt: expect.objectContaining({ state: "approved", reservationState: "reserved" }),
+      lifecycle: expect.objectContaining({ lifecycleState: "reserved", lifecycleRevision: 0 }),
+    }));
+    await expect(store.reserveNativeNearToArbitrum(nativeReservation(), nativeBinding()))
+      .resolves.toEqual(expect.objectContaining({ replay: true }));
+    await expect(store.reserveNativeNearToArbitrum(
+      nativeReservation(),
+      nativeBinding({ destinationRecipient: `0x${"9".repeat(40)}` }),
+    )).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+    const transition = nativeTransition(sourceFunding(), 1, "source-funding-1");
+    const recorded = await store.recordNativeNearToArbitrumEvidence("idempotency-1", transition);
+    expect(recorded).toEqual(expect.objectContaining({
+      replay: false,
+      attempt: expect.objectContaining({
+        state: "unknown", reservationState: "outcome_unknown", entryRevision: 2,
+      }),
+      lifecycle: expect.objectContaining({
+        lifecycleState: "source_verified",
+        sourceTransactionHash: SOURCE_TRANSACTION,
+        lifecycleRevision: 1,
+      }),
+    }));
+    expect(await store.budgetConsumed(ASSET)).toBe(ONE_NEAR_ATOMIC);
+    await expect(store.recordNativeNearToArbitrumEvidence("idempotency-1", transition))
+      .resolves.toEqual(expect.objectContaining({ replay: true }));
+    await expect(store.recordNativeNearToArbitrumEvidence("idempotency-1", {
+      ...transition,
+      binding: nativeBinding({ destinationRecipient: `0x${"9".repeat(40)}` }),
+    })).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+    await expect(store.recordNativeNearToArbitrumEvidence("idempotency-1", {
+      ...transition,
+      accountId: "mallory.near",
+    })).rejects.toMatchObject({ code: "INVALID_TRANSITION" });
+    await expect(attemptStore(coordinator, "tenant-1", "principal-2")
+      .recordNativeNearToArbitrumEvidence("idempotency-1", transition))
+      .rejects.toMatchObject({ code: "ATTEMPT_NOT_FOUND" });
+  });
+
+  it("rejects source funding that changes the approved account, deposit, or amount", async () => {
+    const coordinator = new Coordinator();
+    const store = attemptStore(coordinator);
+    await store.reserveNativeNearToArbitrum(nativeReservation(), nativeBinding());
+    await expect(store.recordNativeNearToArbitrumEvidence("idempotency-1", nativeTransition(
+      sourceFunding({ receiver_account_id: "attacker.near" }), 1, "wrong-source-1",
+    ))).rejects.toMatchObject({ code: "INVALID_TRANSITION" });
+    await expect(store.recordNativeNearToArbitrumEvidence("idempotency-1", nativeTransition(
+      sourceFunding({ amount_yocto_near: "999" }), 1, "wrong-amount-1",
+    ))).rejects.toMatchObject({ code: "INVALID_TRANSITION" });
+    expect(await store.budgetConsumed(ASSET)).toBe(ONE_NEAR_ATOMIC);
+  });
+
+  it.each([
+    "pending",
+    "unknown",
+    "failed",
+    "provider-success-only",
+  ] as const)("rejects %s provider evidence before finalized native source funding", async (outcome) => {
+    const coordinator = new Coordinator();
+    const store = attemptStore(coordinator);
+    await store.reserveNativeNearToArbitrum(nativeReservation(), nativeBinding());
+
+    await expect(store.recordNativeNearToArbitrumEvidence(
+      "idempotency-1",
+      nativeTransition(nativeReconciliation(outcome), 1, `premature-${outcome}`),
+    )).rejects.toMatchObject({ code: "INVALID_TRANSITION" });
+
+    const retained = await store.reserveNativeNearToArbitrum(nativeReservation(), nativeBinding());
+    expect(retained).toEqual(expect.objectContaining({
+      replay: true,
+      attempt: expect.objectContaining({ state: "approved", reservationState: "reserved", entryRevision: 1 }),
+      lifecycle: expect.objectContaining({ lifecycleState: "reserved", lifecycleRevision: 0 }),
+    }));
+    expect(await store.budgetConsumed(ASSET)).toBe(ONE_NEAR_ATOMIC);
+  });
+
+  it("rolls back the reservation when immutable binding admission fails", async () => {
+    const coordinator = new Coordinator();
+    coordinator.sqlite.exec(`CREATE TRIGGER reject_native_binding
+      BEFORE INSERT ON near_native_to_arbitrum_usdc_lifecycles
+      BEGIN SELECT RAISE(ABORT, 'simulated binding write failure'); END;`);
+    const store = attemptStore(coordinator);
+    await expect(store.reserveNativeNearToArbitrum(nativeReservation(), nativeBinding()))
+      .rejects.toMatchObject({ code: "UNAVAILABLE" });
+    expect(await store.budgetConsumed(ASSET)).toBe("0");
+    expect(coordinator.sqlite.prepare("SELECT count(*) AS count FROM near_hosted_attempts")
+      .get()).toEqual({ count: 0 });
+    expect(coordinator.sqlite.prepare("SELECT count(*) AS count FROM near_native_to_arbitrum_usdc_lifecycles")
+      .get()).toEqual({ count: 0 });
+  });
+
+  it("refuses to attach a native route binding after a generic reservation", async () => {
+    const coordinator = new Coordinator();
+    const store = attemptStore(coordinator);
+    await store.reserve(nativeReservation());
+    await expect(store.recordNativeNearToArbitrumEvidence(
+      "idempotency-1",
+      nativeTransition(sourceFunding(), 1, "late-source-1"),
+    )).rejects.toMatchObject({ code: "INVALID_TRANSITION" });
+    expect(coordinator.sqlite.prepare(
+      "SELECT count(*) AS count FROM near_native_to_arbitrum_usdc_lifecycles",
+    ).get()).toEqual({ count: 0 });
+  });
+
+  it("admits one atomic reservation+binding across competing Worker instances", async () => {
+    const coordinator = new Coordinator();
+    const barrier = oneShotBarrier();
+    const storeA = attemptStore(coordinator, "tenant-1", "principal-1", { afterReservationRead: barrier });
+    const storeB = attemptStore(coordinator, "tenant-1", "principal-1", { afterReservationRead: barrier });
+    const [first, second] = await Promise.all([
+      storeA.reserveNativeNearToArbitrum(nativeReservation(), nativeBinding()),
+      storeB.reserveNativeNearToArbitrum(nativeReservation(), nativeBinding()),
+    ]);
+    expect([first.replay, second.replay].sort()).toEqual([false, true]);
+    expect(await storeA.budgetConsumed(ASSET)).toBe(ONE_NEAR_ATOMIC);
+    expect(coordinator.sqlite.prepare(
+      "SELECT count(*) AS count FROM near_native_to_arbitrum_usdc_lifecycles",
+    ).get()).toEqual({ count: 1 });
+  });
+
+  it("keeps provider SUCCESS unknown until a finalized canonical USDC receipt commits", async () => {
+    const coordinator = new Coordinator();
+    const store = attemptStore(coordinator);
+    await store.reserveNativeNearToArbitrum(nativeReservation(), nativeBinding());
+    await store.recordNativeNearToArbitrumEvidence(
+      "idempotency-1", nativeTransition(sourceFunding(), 1, "source-1"),
+    );
+    const provider = await store.recordNativeNearToArbitrumEvidence(
+      "idempotency-1",
+      nativeTransition(nativeReconciliation("provider-success-only", {
+        checked_at: "2026-11-01T00:02:00.000Z",
+      }), 2, "provider-success-1"),
+    );
+    expect(provider.attempt).toEqual(expect.objectContaining({
+      state: "unknown", reservationState: "outcome_unknown", entryRevision: 3,
+    }));
+    expect(provider.lifecycle).toEqual(expect.objectContaining({
+      lifecycleState: "provider_observed", lastProviderStatus: "SUCCESS",
+    }));
+    expect(await store.budgetConsumed(ASSET)).toBe(ONE_NEAR_ATOMIC);
+
+    const wrongRecipient = nativeReconciliation("independently-settled", {
+      destination_receipt: arbitrumReceipt({ recipient_address: `0x${"9".repeat(40)}` }),
+    });
+    await expect(store.recordNativeNearToArbitrumEvidence(
+      "idempotency-1", nativeTransition(wrongRecipient, 3, "wrong-destination-1"),
+    )).rejects.toMatchObject({ code: "INVALID_TRANSITION" });
+
+    const settled = await store.recordNativeNearToArbitrumEvidence(
+      "idempotency-1",
+      nativeTransition(nativeReconciliation("independently-settled"), 3, "destination-1"),
+    );
+    expect(settled.attempt).toEqual(expect.objectContaining({
+      state: "settled", reservationState: "committed", providerStatus: "SUCCESS",
+    }));
+    expect(settled.lifecycle.lifecycleState).toBe("destination_verified");
+    expect(await store.budgetConsumed(ASSET)).toBe(ONE_NEAR_ATOMIC);
+  });
+
+  it("keeps provider failure held and releases only an exact finalized NEAR refund", async () => {
+    const coordinator = new Coordinator();
+    const store = attemptStore(coordinator);
+    await store.reserveNativeNearToArbitrum(nativeReservation(), nativeBinding());
+    await store.recordNativeNearToArbitrumEvidence(
+      "idempotency-1", nativeTransition(sourceFunding(), 1, "source-1"),
+    );
+    const providerFailure = await store.recordNativeNearToArbitrumEvidence(
+      "idempotency-1",
+      nativeTransition(nativeReconciliation("failed", {
+        checked_at: "2026-11-01T00:02:00.000Z",
+      }), 2, "provider-failure-1"),
+    );
+    expect(providerFailure.attempt.reservationState).toBe("outcome_unknown");
+    expect(await store.budgetConsumed(ASSET)).toBe(ONE_NEAR_ATOMIC);
+
+    await expect(store.recordNativeNearToArbitrumEvidence(
+      "idempotency-1",
+      nativeTransition(nativeReconciliation("refunded", {
+        refund_receipt: refundReceipt({ amount_refunded_yocto_near: "999" }),
+      }), 3, "wrong-refund-1"),
+    )).rejects.toMatchObject({ code: "INVALID_TRANSITION" });
+
+    const refunded = await store.recordNativeNearToArbitrumEvidence(
+      "idempotency-1",
+      nativeTransition(nativeReconciliation("refunded"), 3, "refund-1"),
+    );
+    expect(refunded.attempt).toEqual(expect.objectContaining({
+      state: "refunded", reservationState: "released", providerStatus: "REFUNDED",
+    }));
+    expect(await store.budgetConsumed(ASSET)).toBe("0");
+  });
+
+  it("uses cross-Worker CAS so one same-revision observation wins", async () => {
+    const coordinator = new Coordinator();
+    const baseline = attemptStore(coordinator);
+    await baseline.reserveNativeNearToArbitrum(nativeReservation(), nativeBinding());
+    await baseline.recordNativeNearToArbitrumEvidence(
+      "idempotency-1", nativeTransition(sourceFunding(), 1, "source-1"),
+    );
+    const barrier = oneShotBarrier();
+    const storeA = attemptStore(coordinator, "tenant-1", "principal-1", {
+      afterReconciliationRead: barrier,
+    });
+    const storeB = attemptStore(coordinator, "tenant-1", "principal-1", {
+      afterReconciliationRead: barrier,
+    });
+    const outcomes = await Promise.allSettled([
+      storeA.recordNativeNearToArbitrumEvidence(
+        "idempotency-1",
+        nativeTransition(nativeReconciliation("pending", {
+          checked_at: "2026-11-01T00:02:00.000Z",
+        }), 2, "pending-race"),
+      ),
+      storeB.recordNativeNearToArbitrumEvidence(
+        "idempotency-1",
+        nativeTransition(nativeReconciliation("unknown", {
+          checked_at: "2026-11-01T00:02:00.000Z",
+        }), 2, "unknown-race"),
+      ),
+    ]);
+    expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome.status === "rejected"))
+      .toEqual([expect.objectContaining({ reason: expect.objectContaining({ code: "VERSION_CONFLICT" }) })]);
+    expect(await baseline.budgetConsumed(ASSET)).toBe(ONE_NEAR_ATOMIC);
+  });
+
+  it("rejects a stale-read provider SUCCESS racing finalized source funding", async () => {
+    const coordinator = new Coordinator();
+    const baseline = attemptStore(coordinator);
+    await baseline.reserveNativeNearToArbitrum(nativeReservation(), nativeBinding());
+    const barrier = oneShotBarrier();
+    const sourceWorker = attemptStore(coordinator, "tenant-1", "principal-1", {
+      afterReconciliationRead: barrier,
+    });
+    const providerWorker = attemptStore(coordinator, "tenant-1", "principal-1", {
+      afterReconciliationRead: barrier,
+    });
+
+    const [sourceResult, providerResult] = await Promise.allSettled([
+      sourceWorker.recordNativeNearToArbitrumEvidence(
+        "idempotency-1",
+        nativeTransition(sourceFunding(), 1, "source-race"),
+      ),
+      providerWorker.recordNativeNearToArbitrumEvidence(
+        "idempotency-1",
+        nativeTransition(nativeReconciliation("provider-success-only", {
+          checked_at: "2026-11-01T00:02:00.000Z",
+        }), 1, "premature-provider-success-race"),
+      ),
+    ]);
+
+    expect(sourceResult).toEqual(expect.objectContaining({ status: "fulfilled" }));
+    expect(providerResult).toEqual(expect.objectContaining({
+      status: "rejected",
+      reason: expect.objectContaining({ code: "INVALID_TRANSITION" }),
+    }));
+    const retained = await baseline.reserveNativeNearToArbitrum(nativeReservation(), nativeBinding());
+    expect(retained).toEqual(expect.objectContaining({
+      replay: true,
+      attempt: expect.objectContaining({ state: "unknown", reservationState: "outcome_unknown", entryRevision: 2 }),
+      lifecycle: expect.objectContaining({
+        lifecycleState: "source_verified",
+        lifecycleRevision: 1,
+      }),
+    }));
+    expect(retained.lifecycle).not.toHaveProperty("lastProviderStatus");
+    expect(await baseline.budgetConsumed(ASSET)).toBe(ONE_NEAR_ATOMIC);
+  });
+
+  it("fails closed when forward schema 0020 is unavailable", async () => {
+    const coordinator = new Coordinator(false);
+    const store = attemptStore(coordinator);
+    await expect(store.reserveNativeNearToArbitrum(nativeReservation(), nativeBinding()))
+      .rejects.toMatchObject({ code: "UNAVAILABLE" });
+    await store.reserve(nativeReservation());
+    await expect(store.recordNativeNearToArbitrumEvidence(
+      "idempotency-1",
+      nativeTransition(sourceFunding(), 1, "source-1"),
+    )).rejects.toMatchObject({ code: "UNAVAILABLE" });
+    expect(await store.budgetConsumed(ASSET)).toBe(ONE_NEAR_ATOMIC);
   });
 });

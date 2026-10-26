@@ -78,6 +78,14 @@ const NEAR_EXECUTABLE_QUOTE_REVIEW_ARGS = {
   refund_to: "0x1111111111111111111111111111111111111111",
   refund_deadline: "2098-01-01T00:30:00.000Z",
 } as const;
+const NEAR_NATIVE_EXECUTABLE_QUOTE_REVIEW_ARGS = {
+  route: "near-native-to-arbitrum-usdc-v1",
+  amount_atomic: "1000000000000000000000000",
+  slippage_bps: 75,
+  recipient: "0x4444444444444444444444444444444444444444",
+  refund_to: NEAR_ACCOUNT,
+  refund_deadline: "2098-01-01T00:30:00.000Z",
+} as const;
 const HASH = "A".repeat(64);
 const RLUSD_ISSUER = "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV";
 const RLUSD_CURRENCY = "524C555344000000000000000000000000000000";
@@ -353,6 +361,44 @@ describe("POST /api/harbor/[op]", () => {
           body: JSON.stringify(NEAR_EXECUTABLE_QUOTE_REVIEW_ARGS),
         }),
       );
+    });
+
+    it("binds native NEAR ownership to refund_to rather than the Arbitrum recipient", async () => {
+      const upstreamFetch = vi.fn(async () => Response.json({ ok: true }));
+      const handler = createProductionHarborProxyHandler({
+        env: ENVIRONMENT,
+        fetch: fetchDependency(upstreamFetch),
+        readNearPrincipalAuthorization: nearAuthorizationReader,
+      });
+      const sealed = sealNearPrincipalAuthorization(
+        nearReviewAuthorization(),
+        { SESSION_SECRET },
+      );
+      const headers = {
+        cookie: `${NEAR_PRINCIPAL_AUTHORIZATION_COOKIE}=${encodeURIComponent(sealed)}`,
+      };
+
+      const response = await handler(request(
+        JSON.stringify(NEAR_NATIVE_EXECUTABLE_QUOTE_REVIEW_ARGS),
+        {
+          url: "https://pilot.example/api/harbor/near.intents.executable-quote.review",
+          headers,
+        },
+      ), context("near.intents.executable-quote.review"));
+
+      expect(response.status).toBe(200);
+      expect(upstreamFetch).toHaveBeenCalledTimes(1);
+
+      const crossAccount = await handler(request(JSON.stringify({
+        ...NEAR_NATIVE_EXECUTABLE_QUOTE_REVIEW_ARGS,
+        refund_to: "other.near",
+      }), {
+        url: "https://pilot.example/api/harbor/near.intents.executable-quote.review",
+        headers,
+      }), context("near.intents.executable-quote.review"));
+      expect(crossAccount.status).toBe(401);
+      expect((await crossAccount.json()).error.code).toBe("HARBOR_PROXY_UNAUTHORIZED");
+      expect(upstreamFetch).toHaveBeenCalledTimes(1);
     });
 
     it("rejects an anonymous request before Harbor dispatch", async () => {

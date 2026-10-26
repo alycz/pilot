@@ -653,6 +653,8 @@ export const NearAuthorizedOperationSchema = z.enum([
   /** The current Harbor operation is contractually dry-only. */
   "near.intents.quote",
   "near.intents.executable-quote.review",
+  "near.intents.owner-funded.reserve",
+  "near.intents.owner-funded.reconcile",
   "near.intents.status",
   "near.intents.approval.review",
 ]);
@@ -665,7 +667,7 @@ export const NearPrincipalAuthorizationSchema = z
     principal_id: SafeIdentifierSchema,
     account_id: NearAccountIdSchema,
     network: z.literal("near:mainnet"),
-    operations: z.array(NearAuthorizedOperationSchema).min(1).max(5)
+    operations: z.array(NearAuthorizedOperationSchema).min(1).max(6)
       .refine((operations) => new Set(operations).size === operations.length, {
         message: "authorized operations must be unique",
       }),
@@ -1166,3 +1168,748 @@ export const NearWalletExecutionPolicySchema = z
     path: ["mode"],
   });
 export type NearWalletExecutionPolicy = z.infer<typeof NearWalletExecutionPolicySchema>;
+
+/**
+ * Hosted reverse route confirmed against the 1Click catalog. Execution stays
+ * default-off until source and destination receipts are independently verified;
+ * this contract does not imply that durable storage is always needed.
+ */
+export const NearNativeNearToArbitrumUsdcRouteSchema = z
+  .object({
+    version: z.literal("pilot-near-native-to-arbitrum-usdc-route-v1"),
+    profile_status: z.literal("hosted-default-off"),
+    execution_default: z.literal("off"),
+    activation_gate: z.literal("independent-source-and-destination-receipt-verification-required"),
+    origin_chain: z.literal("near"),
+    origin_network: z.literal("near:mainnet"),
+    origin_asset_id: z.literal(NEAR_WRAPPED_NEAR_ASSET_ID),
+    origin_token_contract: z.literal(NEAR_WRAPPED_NEAR_CONTRACT),
+    origin_decimals: z.literal(24),
+    source_transfer_asset: z.literal("native-near"),
+    managed_wrapping_by_1click: z.literal(true),
+    destination_chain: z.literal("arb"),
+    destination_chain_id: z.literal(42161),
+    destination_asset_id: z.literal(NEAR_ARBITRUM_USDC_ASSET_ID),
+    destination_token_contract: z.literal(NEAR_ARBITRUM_USDC_CONTRACT),
+    destination_decimals: z.literal(6),
+    deposit_mode: z.literal("SIMPLE"),
+    funding_mode: z.literal("manual-owner-wallet-send"),
+    manual_owner_funding_only: z.literal(true),
+    pilot_budget_scope: z.literal("does-not-control-owner-wallet-send"),
+  })
+  .strict();
+export type NearNativeNearToArbitrumUsdcRoute = z.infer<
+  typeof NearNativeNearToArbitrumUsdcRouteSchema
+>;
+
+export const NearNativeNearToArbitrumUsdcExecutableQuoteRequestSchema =
+  Near1ClickExecutableQuoteRequestSchema.superRefine((request, context) => {
+    const issue = (path: string[], message: string) => context.addIssue({
+      code: "custom",
+      path,
+      message,
+    });
+    if (request.originAsset !== NEAR_WRAPPED_NEAR_ASSET_ID) {
+      issue(["originAsset"], "origin asset must be the catalogued wrapped-NEAR identifier");
+    }
+    if (request.destinationAsset !== NEAR_ARBITRUM_USDC_ASSET_ID) {
+      issue(["destinationAsset"], "destination asset must be canonical Arbitrum USDC");
+    }
+    if (!NearAccountIdSchema.safeParse(request.refundTo).success) {
+      issue(["refundTo"], "refund destination must be a NEAR account");
+    }
+    if (!ArbitrumAddressSchema.safeParse(request.recipient).success) {
+      issue(["recipient"], "recipient must be a reviewed Arbitrum address");
+    }
+    if (request.depositMode !== "SIMPLE") {
+      issue(["depositMode"], "the provisional native NEAR route rejects memo deposits");
+    }
+  });
+export type NearNativeNearToArbitrumUsdcExecutableQuoteRequest = z.infer<
+  typeof NearNativeNearToArbitrumUsdcExecutableQuoteRequestSchema
+>;
+
+export const NearNativeNearToArbitrumUsdcExecutableQuoteBindingSchema = z
+  .object({
+    version: z.literal("pilot-near-native-to-arbitrum-usdc-quote-binding-v1"),
+    route: NearNativeNearToArbitrumUsdcRouteSchema,
+    provider_signature_verified: z.literal(true),
+    provider_signature: z.string().min(1).max(2_048),
+    quote_hash: Near1ClickQuoteHashSchema,
+    correlation_id: SafeIdentifierSchema,
+    provider_timestamp: DateTimeSchema,
+    request_echo: NearNativeNearToArbitrumUsdcExecutableQuoteRequestSchema,
+    provider_quote_response: Near1ClickExecutableQuoteResponseSchema,
+    amount_in: AtomicAmountSchema,
+    min_amount_out: AtomicAmountSchema,
+    recipient: ArbitrumAddressSchema,
+    refund_to: NearAccountIdSchema,
+    deposit_address: NearAccountIdSchema,
+    deposit_memo_present: z.literal(false),
+    provider_deadline_at: DateTimeSchema,
+    provider_time_when_inactive_at: DateTimeSchema,
+    approval_expires_at: DateTimeSchema,
+  })
+  .strict()
+  .superRefine((binding, context) => {
+    const issue = (path: string[], message: string) => context.addIssue({
+      code: "custom",
+      path,
+      message,
+    });
+    const response = binding.provider_quote_response;
+    if (binding.provider_signature !== response.signature) {
+      issue(["provider_signature"], "signature must match the verified executable response");
+    }
+    if (binding.correlation_id !== response.correlationId) {
+      issue(["correlation_id"], "correlation id must match the verified executable response");
+    }
+    if (binding.provider_timestamp !== response.timestamp) {
+      issue(["provider_timestamp"], "timestamp must match the verified executable response");
+    }
+    if (JSON.stringify(binding.request_echo) !== JSON.stringify(response.quoteRequest)) {
+      issue(["request_echo"], "request echo must match the verified executable response");
+    }
+    if (binding.amount_in !== binding.request_echo.amount || binding.amount_in !== response.quote.amountIn) {
+      issue(["amount_in"], "input amount must match the request echo and executable response");
+    }
+    if (binding.min_amount_out !== response.quote.minAmountOut) {
+      issue(["min_amount_out"], "minimum output must match the executable response");
+    }
+    if (binding.recipient.toLowerCase() !== binding.request_echo.recipient.toLowerCase()) {
+      issue(["recipient"], "recipient must match the signed request echo");
+    }
+    if (binding.refund_to !== binding.request_echo.refundTo) {
+      issue(["refund_to"], "refund account must match the signed request echo");
+    }
+    if (binding.deposit_address !== response.quote.depositAddress) {
+      issue(["deposit_address"], "deposit account must match the executable response");
+    }
+    if (response.quote.depositMemo !== undefined) {
+      issue(["provider_quote_response", "quote", "depositMemo"], "memo-bearing deposits are not supported");
+    }
+    if (
+      binding.provider_deadline_at !== binding.request_echo.deadline
+      || binding.provider_deadline_at !== response.quote.deadline
+    ) {
+      issue(["provider_deadline_at"], "refund-start deadline must match request and response");
+    }
+    if (binding.provider_time_when_inactive_at !== response.quote.timeWhenInactive) {
+      issue(["provider_time_when_inactive_at"], "inactivity time must match the executable response");
+    }
+    if (Date.parse(binding.provider_time_when_inactive_at) > Date.parse(binding.provider_deadline_at)) {
+      issue(["provider_time_when_inactive_at"], "inactivity time cannot follow refund start");
+    }
+    if (
+      Date.parse(binding.approval_expires_at) <= Date.parse(binding.provider_timestamp)
+      || Date.parse(binding.approval_expires_at) > Date.parse(binding.provider_deadline_at)
+    ) {
+      issue(["approval_expires_at"], "quote review must expire after issuance and no later than refund start");
+    }
+  });
+export type NearNativeNearToArbitrumUsdcExecutableQuoteBinding = z.infer<
+  typeof NearNativeNearToArbitrumUsdcExecutableQuoteBindingSchema
+>;
+
+export const NearNativeNearToArbitrumUsdcReservationBindingSchema = z
+  .object({
+    version: z.literal("pilot-near-native-near-to-arbitrum-usdc-reservation-v1"),
+    reservation_id: SafeIdentifierSchema,
+    attempt_id: SafeIdentifierSchema,
+    principal_id: SafeIdentifierSchema,
+    near_account_id: NearAccountIdSchema,
+    network: z.literal("near:mainnet"),
+    idempotency_version: NearIdempotencyVersionSchema,
+    idempotency_key: SafeIdentifierSchema,
+    request_digest: Sha256DigestSchema,
+    asset_id: z.literal(NEAR_WRAPPED_NEAR_ASSET_ID),
+    amount_atomic: AtomicAmountSchema,
+    expected_revision: z.number().int().nonnegative(),
+    reserved_revision: z.number().int().positive(),
+  })
+  .strict()
+  .refine((reservation) => reservation.reserved_revision === reservation.expected_revision + 1, {
+    path: ["reserved_revision"],
+    message: "an atomic reservation must advance the expected revision exactly once",
+  });
+export type NearNativeNearToArbitrumUsdcReservationBinding = z.infer<
+  typeof NearNativeNearToArbitrumUsdcReservationBindingSchema
+>;
+
+export const NearNativeNearToArbitrumUsdcApprovalPayloadSchema = z
+  .object({
+    version: z.literal("pilot-near-native-near-to-arbitrum-usdc-approval-payload-v1"),
+    route: NearNativeNearToArbitrumUsdcRouteSchema,
+    principal_id: SafeIdentifierSchema,
+    near_account_id: NearAccountIdSchema,
+    network: z.literal("near:mainnet"),
+    policy_digest: Sha256DigestSchema,
+    quote_hash: Near1ClickQuoteHashSchema,
+    correlation_id: SafeIdentifierSchema,
+    origin_asset_id: z.literal(NEAR_WRAPPED_NEAR_ASSET_ID),
+    destination_asset_id: z.literal(NEAR_ARBITRUM_USDC_ASSET_ID),
+    amount_in: AtomicAmountSchema,
+    min_amount_out: AtomicAmountSchema,
+    recipient: ArbitrumAddressSchema,
+    refund_to: NearAccountIdSchema,
+    deposit_address: NearAccountIdSchema,
+    deposit_memo_present: z.literal(false),
+    provider_deadline_at: DateTimeSchema,
+    approved_at: DateTimeSchema,
+    approval_expires_at: DateTimeSchema,
+    reservation: NearNativeNearToArbitrumUsdcReservationBindingSchema,
+  })
+  .strict()
+  .superRefine((approval, context) => {
+    const issue = (path: string[], message: string) => context.addIssue({
+      code: "custom",
+      path,
+      message,
+    });
+    const approvedAt = Date.parse(approval.approved_at);
+    const expiresAt = Date.parse(approval.approval_expires_at);
+    if (expiresAt <= approvedAt || expiresAt - approvedAt > 5 * 60_000) {
+      issue(["approval_expires_at"], "economic approval must be positive and no longer than five minutes");
+    }
+    if (expiresAt > Date.parse(approval.provider_deadline_at)) {
+      issue(["approval_expires_at"], "economic approval must expire before provider refund start");
+    }
+    const reservation = approval.reservation;
+    if (
+      reservation.principal_id !== approval.principal_id
+      || reservation.near_account_id !== approval.near_account_id
+      || reservation.network !== approval.network
+      || reservation.asset_id !== approval.origin_asset_id
+      || reservation.amount_atomic !== approval.amount_in
+    ) {
+      issue(["reservation"], "reservation identity and amount must match the economic approval");
+    }
+  });
+export type NearNativeNearToArbitrumUsdcApprovalPayload = z.infer<
+  typeof NearNativeNearToArbitrumUsdcApprovalPayloadSchema
+>;
+
+export const NEAR_NATIVE_NEAR_TO_ARBITRUM_USDC_APPROVAL_DOMAIN =
+  "pilot.near-intents.native-near-to-arbitrum-usdc.approval.v1" as const;
+
+export function canonicalNearNativeNearToArbitrumUsdcApprovalJson(
+  value: NearNativeNearToArbitrumUsdcApprovalPayload,
+): string {
+  return canonicalJson(NearNativeNearToArbitrumUsdcApprovalPayloadSchema.parse(value));
+}
+
+export async function computeNearNativeNearToArbitrumUsdcApprovalDigest(
+  value: NearNativeNearToArbitrumUsdcApprovalPayload,
+): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(
+      `${NEAR_NATIVE_NEAR_TO_ARBITRUM_USDC_APPROVAL_DOMAIN}\0${canonicalNearNativeNearToArbitrumUsdcApprovalJson(value)}`,
+    ),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0")).join("").toUpperCase();
+}
+
+export const NearNativeNearAccountControlProofSchema = z
+  .object({
+    version: z.literal("pilot-near-account-control-proof-v1"),
+    proof_kind: z.literal("nep413"),
+    scope: z.literal("source-account-control-only"),
+    grants_economic_transfer_approval: z.literal(false),
+    authorization_id: SafeIdentifierSchema,
+    principal_id: SafeIdentifierSchema,
+    near_account_id: NearAccountIdSchema,
+    network: z.literal("near:mainnet"),
+    verified_at: DateTimeSchema,
+  })
+  .strict();
+export type NearNativeNearAccountControlProof = z.infer<
+  typeof NearNativeNearAccountControlProofSchema
+>;
+
+export const NearNativeNearToArbitrumUsdcEconomicApprovalEnvelopeSchema = z
+  .object({
+    version: z.literal("pilot-near-native-near-to-arbitrum-usdc-economic-approval-v1"),
+    payload: NearNativeNearToArbitrumUsdcApprovalPayloadSchema,
+    approval_digest: Sha256DigestSchema,
+    account_control: NearNativeNearAccountControlProofSchema,
+    economic_approval: z.object({
+      approval_id: SafeIdentifierSchema,
+      method: z.literal("owner-reviewed-native-near-transfer"),
+      owner_confirmed: z.literal(true),
+      approved_payload_digest: Sha256DigestSchema,
+      confirmed_at: DateTimeSchema,
+    }).strict(),
+  })
+  .strict()
+  .superRefine((envelope, context) => {
+    const issue = (path: string[], message: string) => context.addIssue({
+      code: "custom",
+      path,
+      message,
+    });
+    if (envelope.economic_approval.approved_payload_digest !== envelope.approval_digest) {
+      issue(["economic_approval", "approved_payload_digest"], "owner confirmation must bind the approval digest");
+    }
+    if (
+      envelope.account_control.principal_id !== envelope.payload.principal_id
+      || envelope.account_control.near_account_id !== envelope.payload.near_account_id
+      || envelope.account_control.network !== envelope.payload.network
+    ) {
+      issue(["account_control"], "account-control proof must match approval principal and NEAR account");
+    }
+    const verifiedAt = Date.parse(envelope.account_control.verified_at);
+    const confirmedAt = Date.parse(envelope.economic_approval.confirmed_at);
+    if (verifiedAt > confirmedAt || confirmedAt - verifiedAt > 5 * 60_000) {
+      issue(["account_control", "verified_at"], "account-control proof must be fresh when economic approval is confirmed");
+    }
+    if (envelope.economic_approval.confirmed_at !== envelope.payload.approved_at) {
+      issue(["economic_approval", "confirmed_at"], "confirmation time must match approval issue time");
+    }
+  });
+export type NearNativeNearToArbitrumUsdcEconomicApprovalEnvelope = z.infer<
+  typeof NearNativeNearToArbitrumUsdcEconomicApprovalEnvelopeSchema
+>;
+
+export async function verifyNearNativeNearToArbitrumUsdcEconomicApproval(
+  value: NearNativeNearToArbitrumUsdcEconomicApprovalEnvelope,
+): Promise<boolean> {
+  const parsed = NearNativeNearToArbitrumUsdcEconomicApprovalEnvelopeSchema.safeParse(value);
+  if (!parsed.success) return false;
+  return await computeNearNativeNearToArbitrumUsdcApprovalDigest(parsed.data.payload)
+    === parsed.data.approval_digest;
+}
+
+export const NearNativeNearToArbitrumUsdcFundingInstructionsSchema = z
+  .object({
+    version: z.literal("pilot-near-native-near-to-arbitrum-usdc-funding-instructions-v1"),
+    route_version: z.literal("pilot-near-native-to-arbitrum-usdc-route-v1"),
+    funding_method: z.literal("manual-native-near-transfer"),
+    network: z.literal("near:mainnet"),
+    quote_hash: Near1ClickQuoteHashSchema,
+    correlation_id: SafeIdentifierSchema,
+    source_account_id: NearAccountIdSchema,
+    refund_account_id: NearAccountIdSchema,
+    destination_recipient: ArbitrumAddressSchema,
+    deposit_account_id: NearAccountIdSchema,
+    deposit_memo_present: z.literal(false),
+    amount_yocto_near: AtomicAmountSchema,
+    provider_deadline_at: DateTimeSchema,
+  })
+  .strict();
+export type NearNativeNearToArbitrumUsdcFundingInstructions = z.infer<
+  typeof NearNativeNearToArbitrumUsdcFundingInstructionsSchema
+>;
+
+export const NearNativeNearSourceFundingEvidenceSchema = z
+  .object({
+    version: z.literal("pilot-near-native-near-source-funding-v1"),
+    provenance: z.literal("near-rpc-finalized-native-transfer"),
+    network: z.literal("near:mainnet"),
+    transaction_hash: NearTransactionOrReceiptHashSchema,
+    receipt_id: NearTransactionOrReceiptHashSchema,
+    block_height: z.number().int().positive(),
+    finality: z.literal("final"),
+    execution_status: z.literal("SUCCESS"),
+    source_account_id: NearAccountIdSchema,
+    receiver_account_id: NearAccountIdSchema,
+    amount_yocto_near: AtomicAmountSchema,
+    included_at: DateTimeSchema,
+    verified_at: DateTimeSchema,
+  })
+  .strict();
+export type NearNativeNearSourceFundingEvidence = z.infer<
+  typeof NearNativeNearSourceFundingEvidenceSchema
+>;
+
+export const NearArbitrumCanonicalUsdcReceiptEvidenceSchema = z
+  .object({
+    version: z.literal("pilot-near-arbitrum-canonical-usdc-receipt-v1"),
+    provenance: z.literal("arbitrum-rpc-finalized-erc20-transfer"),
+    chain: z.literal("arb"),
+    chain_id: z.literal(42161),
+    transaction_hash: ArbitrumTransactionHashSchema,
+    block_hash: ArbitrumTransactionHashSchema,
+    block_number: z.number().int().nonnegative(),
+    transaction_index: z.number().int().nonnegative(),
+    log_index: z.number().int().nonnegative(),
+    finality: z.literal("final"),
+    receipt_status: z.literal("success"),
+    event_signature: z.literal("Transfer(address,address,uint256)"),
+    token_contract: z.literal(NEAR_ARBITRUM_USDC_CONTRACT),
+    token_decimals: z.literal(6),
+    sender_address: ArbitrumAddressSchema,
+    recipient_address: ArbitrumAddressSchema,
+    amount_received: AtomicAmountSchema,
+    verified_at: DateTimeSchema,
+  })
+  .strict();
+export type NearArbitrumCanonicalUsdcReceiptEvidence = z.infer<
+  typeof NearArbitrumCanonicalUsdcReceiptEvidenceSchema
+>;
+
+export const NearNativeNearRefundReceiptEvidenceSchema = z
+  .object({
+    version: z.literal("pilot-near-native-near-refund-receipt-v1"),
+    provenance: z.literal("near-rpc-finalized-refund"),
+    network: z.literal("near:mainnet"),
+    transaction_hash: NearTransactionOrReceiptHashSchema,
+    receipt_id: NearTransactionOrReceiptHashSchema,
+    block_height: z.number().int().positive(),
+    finality: z.literal("final"),
+    execution_status: z.literal("SUCCESS"),
+    refund_account_id: NearAccountIdSchema,
+    amount_refunded_yocto_near: AtomicAmountSchema,
+    verified_at: DateTimeSchema,
+  })
+  .strict();
+export type NearNativeNearRefundReceiptEvidence = z.infer<
+  typeof NearNativeNearRefundReceiptEvidenceSchema
+>;
+
+const NearNativeNearToArbitrumUsdcReconciliationBaseSchema = z.object({
+  version: z.literal("pilot-near-native-near-to-arbitrum-usdc-reconciliation-v1"),
+  quote_hash: Near1ClickQuoteHashSchema,
+  correlation_id: SafeIdentifierSchema,
+  deposit_account_id: NearAccountIdSchema,
+  deposit_memo_present: z.literal(false),
+  checked_at: DateTimeSchema,
+  safe_to_resubmit: z.literal(false),
+});
+
+export const NearNativeNearToArbitrumUsdcReconciliationSchema = z
+  .discriminatedUnion("outcome", [
+    NearNativeNearToArbitrumUsdcReconciliationBaseSchema.extend({
+      outcome: z.literal("pending"),
+      provider_status: Near1ClickPendingStatusSchema,
+    }).strict(),
+    NearNativeNearToArbitrumUsdcReconciliationBaseSchema.extend({
+      outcome: z.literal("unknown"),
+      reason: NearReconciliationUnknownReasonSchema,
+    }).strict(),
+    NearNativeNearToArbitrumUsdcReconciliationBaseSchema.extend({
+      outcome: z.literal("refunded"),
+      provider_status: z.literal("REFUNDED"),
+      refund_receipt: NearNativeNearRefundReceiptEvidenceSchema,
+    }).strict(),
+    NearNativeNearToArbitrumUsdcReconciliationBaseSchema.extend({
+      outcome: z.literal("failed"),
+      provider_status: z.literal("FAILED"),
+      independent_terminal_evidence: z.literal(false),
+    }).strict(),
+    NearNativeNearToArbitrumUsdcReconciliationBaseSchema.extend({
+      outcome: z.literal("provider-success-only"),
+      provider_status: z.literal("SUCCESS"),
+      independent_destination_receipt: z.literal(false),
+    }).strict(),
+    NearNativeNearToArbitrumUsdcReconciliationBaseSchema.extend({
+      outcome: z.literal("independently-settled"),
+      provider_status: Near1ClickProviderStatusSchema,
+      destination_receipt: NearArbitrumCanonicalUsdcReceiptEvidenceSchema,
+    }).strict(),
+  ])
+  .superRefine((reconciliation, context) => {
+    if (
+      reconciliation.outcome === "independently-settled"
+      && ["REFUNDED", "FAILED"].includes(reconciliation.provider_status)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["provider_status"],
+        message: "terminal provider failure conflicts with independently verified delivery",
+      });
+    }
+  });
+export type NearNativeNearToArbitrumUsdcReconciliation = z.infer<
+  typeof NearNativeNearToArbitrumUsdcReconciliationSchema
+>;
+
+export const NearNativeNearToArbitrumUsdcOwnerFundedExecutionSchema = z
+  .object({
+    version: z.literal("pilot-near-native-near-to-arbitrum-usdc-owner-funded-execution-v1"),
+    route: NearNativeNearToArbitrumUsdcRouteSchema,
+    quote: NearNativeNearToArbitrumUsdcExecutableQuoteBindingSchema,
+    approval: NearNativeNearToArbitrumUsdcEconomicApprovalEnvelopeSchema,
+    funding_instructions: NearNativeNearToArbitrumUsdcFundingInstructionsSchema,
+    source_funding: NearNativeNearSourceFundingEvidenceSchema,
+    reconciliation: NearNativeNearToArbitrumUsdcReconciliationSchema,
+  })
+  .strict()
+  .superRefine((execution, context) => {
+    const issue = (path: string[], message: string) => context.addIssue({
+      code: "custom",
+      path,
+      message,
+    });
+    const quote = execution.quote;
+    const payload = execution.approval.payload;
+    const instructions = execution.funding_instructions;
+    const source = execution.source_funding;
+    const reconciliation = execution.reconciliation;
+    if (
+      JSON.stringify(execution.route) !== JSON.stringify(quote.route)
+      || JSON.stringify(execution.route) !== JSON.stringify(payload.route)
+    ) {
+      issue(["route"], "quote and approval must bind the same route profile");
+    }
+    if (
+      payload.quote_hash !== quote.quote_hash
+      || payload.correlation_id !== quote.correlation_id
+      || payload.origin_asset_id !== quote.route.origin_asset_id
+      || payload.destination_asset_id !== quote.route.destination_asset_id
+      || payload.amount_in !== quote.amount_in
+      || payload.min_amount_out !== quote.min_amount_out
+      || payload.recipient.toLowerCase() !== quote.recipient.toLowerCase()
+      || payload.refund_to !== quote.refund_to
+      || payload.deposit_address !== quote.deposit_address
+      || payload.provider_deadline_at !== quote.provider_deadline_at
+      || payload.approval_expires_at !== quote.approval_expires_at
+    ) {
+      issue(["approval", "payload"], "economic approval must bind every material quote field");
+    }
+    if (Date.parse(payload.approved_at) < Date.parse(quote.provider_timestamp)) {
+      issue(["approval", "payload", "approved_at"], "approval cannot predate the provider quote");
+    }
+    if (
+      instructions.route_version !== execution.route.version
+      || instructions.quote_hash !== quote.quote_hash
+      || instructions.correlation_id !== quote.correlation_id
+      || instructions.source_account_id !== payload.near_account_id
+      || instructions.refund_account_id !== quote.refund_to
+      || instructions.destination_recipient.toLowerCase() !== quote.recipient.toLowerCase()
+      || instructions.deposit_account_id !== quote.deposit_address
+      || instructions.amount_yocto_near !== quote.amount_in
+      || instructions.provider_deadline_at !== quote.provider_deadline_at
+    ) {
+      issue(["funding_instructions"], "funding instructions must bind the approved executable quote");
+    }
+    if (
+      source.source_account_id !== instructions.source_account_id
+      || source.receiver_account_id !== instructions.deposit_account_id
+      || source.amount_yocto_near !== instructions.amount_yocto_near
+    ) {
+      issue(["source_funding"], "finalized source transfer must match funding instructions");
+    }
+    if (
+      Date.parse(source.included_at) < Date.parse(payload.approved_at)
+      || Date.parse(source.included_at) > Date.parse(payload.approval_expires_at)
+      || Date.parse(source.verified_at) < Date.parse(source.included_at)
+    ) {
+      issue(
+        ["source_funding", "included_at"],
+        "native transfer must be included during the fresh economic approval window",
+      );
+    }
+    if (
+      reconciliation.quote_hash !== quote.quote_hash
+      || reconciliation.correlation_id !== quote.correlation_id
+      || reconciliation.deposit_account_id !== quote.deposit_address
+    ) {
+      issue(["reconciliation"], "reconciliation must bind the executable quote and deposit route");
+    }
+    if (reconciliation.outcome === "refunded") {
+      if (reconciliation.refund_receipt.refund_account_id !== quote.refund_to) {
+        issue(["reconciliation", "refund_receipt", "refund_account_id"], "refund must return to the reviewed NEAR account");
+      }
+    }
+    if (reconciliation.outcome === "independently-settled") {
+      const receipt = reconciliation.destination_receipt;
+      if (receipt.recipient_address.toLowerCase() !== quote.recipient.toLowerCase()) {
+        issue(["reconciliation", "destination_receipt", "recipient_address"], "USDC event recipient must match owner review");
+      }
+      if (BigInt(receipt.amount_received) < BigInt(quote.min_amount_out)) {
+        issue(["reconciliation", "destination_receipt", "amount_received"], "USDC event must satisfy minimum output");
+      }
+    }
+  });
+export type NearNativeNearToArbitrumUsdcOwnerFundedExecution = z.infer<
+  typeof NearNativeNearToArbitrumUsdcOwnerFundedExecutionSchema
+>;
+
+export async function verifyNearNativeNearToArbitrumUsdcOwnerFundedExecution(
+  value: NearNativeNearToArbitrumUsdcOwnerFundedExecution,
+): Promise<boolean> {
+  const parsed = NearNativeNearToArbitrumUsdcOwnerFundedExecutionSchema.safeParse(value);
+  if (!parsed.success) return false;
+  return verifyNearNativeNearToArbitrumUsdcEconomicApproval(parsed.data.approval);
+}
+
+export const NearNativeNearToArbitrumUsdcReserveRequestSchema = z
+  .object({
+    version: z.literal("pilot-near-native-to-arbitrum-usdc-reserve-request-v1"),
+    quote_binding: NearNativeNearToArbitrumUsdcExecutableQuoteBindingSchema,
+    approval: NearNativeNearToArbitrumUsdcEconomicApprovalEnvelopeSchema,
+    idempotency_version: NearIdempotencyVersionSchema,
+    idempotency_key: SafeIdentifierSchema,
+    attempt_id: SafeIdentifierSchema,
+    reservation_id: SafeIdentifierSchema,
+  })
+  .strict()
+  .superRefine((request, context) => {
+    const issue = (path: string[], message: string) => context.addIssue({
+      code: "custom",
+      path,
+      message,
+    });
+    const quote = request.quote_binding;
+    const payload = request.approval.payload;
+    const reservation = payload.reservation;
+    if (
+      JSON.stringify(quote.route) !== JSON.stringify(payload.route)
+      || payload.quote_hash !== quote.quote_hash
+      || payload.correlation_id !== quote.correlation_id
+      || payload.origin_asset_id !== quote.route.origin_asset_id
+      || payload.destination_asset_id !== quote.route.destination_asset_id
+      || payload.amount_in !== quote.amount_in
+      || payload.min_amount_out !== quote.min_amount_out
+      || payload.recipient.toLowerCase() !== quote.recipient.toLowerCase()
+      || payload.refund_to !== quote.refund_to
+      || payload.deposit_address !== quote.deposit_address
+      || payload.deposit_memo_present !== quote.deposit_memo_present
+      || payload.provider_deadline_at !== quote.provider_deadline_at
+      || payload.approval_expires_at !== quote.approval_expires_at
+    ) {
+      issue(["approval", "payload"], "admission approval must bind every material executable quote field");
+    }
+    if (
+      request.idempotency_version !== reservation.idempotency_version
+      || request.idempotency_key !== reservation.idempotency_key
+      || request.attempt_id !== reservation.attempt_id
+      || request.reservation_id !== reservation.reservation_id
+    ) {
+      issue(["reservation_id"], "admission identifiers must match the approved atomic reservation");
+    }
+  });
+export type NearNativeNearToArbitrumUsdcReserveRequest = z.infer<
+  typeof NearNativeNearToArbitrumUsdcReserveRequestSchema
+>;
+
+/** Verify the economic approval with a trusted server clock before admission. */
+export async function verifyNearNativeNearToArbitrumUsdcReserveRequest(
+  value: NearNativeNearToArbitrumUsdcReserveRequest,
+  nowMs: number,
+): Promise<boolean> {
+  if (!Number.isFinite(nowMs)) return false;
+  const parsed = NearNativeNearToArbitrumUsdcReserveRequestSchema.safeParse(value);
+  if (!parsed.success) return false;
+  const approvedAt = Date.parse(parsed.data.approval.payload.approved_at);
+  const approvalExpiresAt = Date.parse(parsed.data.approval.payload.approval_expires_at);
+  const providerDeadlineAt = Date.parse(parsed.data.quote_binding.provider_deadline_at);
+  if (nowMs < approvedAt || nowMs >= approvalExpiresAt || nowMs >= providerDeadlineAt) {
+    return false;
+  }
+  return verifyNearNativeNearToArbitrumUsdcEconomicApproval(parsed.data.approval);
+}
+
+const NearNativeNearToArbitrumUsdcReserveResultBaseSchema = z.object({
+  version: z.literal("pilot-near-native-to-arbitrum-usdc-reserve-result-v1"),
+  source: z.literal("live"),
+  provider_signature_verified: z.literal(true),
+  admission_id: SafeIdentifierSchema,
+  quote_hash: Near1ClickQuoteHashSchema,
+  correlation_id: SafeIdentifierSchema,
+  approval_digest: Sha256DigestSchema,
+  request_digest: Sha256DigestSchema,
+  idempotency_version: NearIdempotencyVersionSchema,
+  idempotency_key: SafeIdentifierSchema,
+  attempt_id: SafeIdentifierSchema,
+  reservation_id: SafeIdentifierSchema,
+  attempt_state: z.literal("approved"),
+  reservation_state: z.literal("reserved"),
+  attempt_revision: z.number().int().positive(),
+  reservation_revision: z.number().int().positive(),
+  funding_instructions: NearNativeNearToArbitrumUsdcFundingInstructionsSchema,
+  execution_enabled: z.literal(false),
+  manual_owner_funding_only: z.literal(true),
+});
+
+export const NearNativeNearToArbitrumUsdcReserveResultSchema = z.discriminatedUnion(
+  "action",
+  [
+    NearNativeNearToArbitrumUsdcReserveResultBaseSchema.extend({
+      action: z.literal("reserved"),
+      replayed_existing: z.literal(false),
+    }).strict(),
+    NearNativeNearToArbitrumUsdcReserveResultBaseSchema.extend({
+      action: z.literal("replay"),
+      replayed_existing: z.literal(true),
+    }).strict(),
+  ],
+);
+export type NearNativeNearToArbitrumUsdcReserveResult = z.infer<
+  typeof NearNativeNearToArbitrumUsdcReserveResultSchema
+>;
+
+const NearNativeNearToArbitrumUsdcReconcileBaseSchema = z.object({
+  ...NearNativeNearToArbitrumUsdcReserveRequestSchema.shape,
+  version: z.literal("pilot-near-native-to-arbitrum-usdc-reconcile-request-v1"),
+  account_id: NearAccountIdSchema,
+  transition_id: z.string().min(1).max(100).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
+  expected_entry_revision: z.number().int().positive(),
+});
+
+export const NearNativeNearToArbitrumUsdcReconcileRequestSchema = z.discriminatedUnion(
+  "stage",
+  [
+    NearNativeNearToArbitrumUsdcReconcileBaseSchema.extend({
+      stage: z.literal("source-funding"),
+      near_transaction_hash: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{43,45}$/),
+    }).strict(),
+    NearNativeNearToArbitrumUsdcReconcileBaseSchema.extend({
+      stage: z.literal("settlement"),
+    }).strict(),
+  ],
+).superRefine((request, context) => {
+  const { stage: _stage, account_id: _account, transition_id: _transition,
+    expected_entry_revision: _revision, ...rest } = request;
+  const { near_transaction_hash: _hash, ...reserveFields } = rest as typeof rest & {
+    near_transaction_hash?: string;
+  };
+  const reserve = NearNativeNearToArbitrumUsdcReserveRequestSchema.safeParse({
+    ...reserveFields,
+    version: "pilot-near-native-to-arbitrum-usdc-reserve-request-v1",
+  });
+  if (!reserve.success) {
+    context.addIssue({ code: "custom", path: ["approval"], message: "reconciliation must preserve the exact approved reservation" });
+  }
+  if (request.account_id !== request.approval.payload.near_account_id ||
+      request.account_id !== request.quote_binding.refund_to) {
+    context.addIssue({ code: "custom", path: ["account_id"], message: "reconciliation account must match the approved source and refund account" });
+  }
+});
+export type NearNativeNearToArbitrumUsdcReconcileRequest = z.infer<
+  typeof NearNativeNearToArbitrumUsdcReconcileRequestSchema
+>;
+
+export const NearNativeNearToArbitrumUsdcReconcileResultSchema = z.object({
+  version: z.literal("pilot-near-native-to-arbitrum-usdc-reconcile-result-v1"),
+  stage: z.enum(["source-funding", "settlement"]),
+  action: z.enum(["source-verified", "provider-observed", "destination-verified", "unknown", "replay"]),
+  attempt_id: SafeIdentifierSchema,
+  lifecycle_state: z.enum(["reserved", "source_verified", "provider_observed", "destination_verified", "refunded"]),
+  attempt_revision: z.number().int().positive(),
+  lifecycle_revision: z.number().int().positive(),
+  provider_status: Near1ClickProviderStatusSchema.optional(),
+  source_transaction_hash: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{43,45}$/).optional(),
+  destination_transaction_hash: ArbitrumTransactionHashSchema.optional(),
+  reason: z.enum([
+    "timeout", "not_found", "invalid_response", "transport_error",
+    "refund-receipt-required", "destination-receipt-unverified",
+  ]).optional(),
+  safe_to_resubmit: z.literal(false),
+  execution_enabled: z.literal(false),
+}).strict().superRefine((result, context) => {
+  if (result.action === "source-verified" && result.source_transaction_hash === undefined) {
+    context.addIssue({ code: "custom", path: ["source_transaction_hash"], message: "source evidence hash is required" });
+  }
+  if (result.action === "destination-verified" && result.destination_transaction_hash === undefined) {
+    context.addIssue({ code: "custom", path: ["destination_transaction_hash"], message: "destination evidence hash is required" });
+  }
+  if (result.action === "unknown" && result.reason === undefined) {
+    context.addIssue({ code: "custom", path: ["reason"], message: "unknown reconciliation requires a bounded reason" });
+  }
+});
+export type NearNativeNearToArbitrumUsdcReconcileResult = z.infer<
+  typeof NearNativeNearToArbitrumUsdcReconcileResultSchema
+>;

@@ -211,6 +211,10 @@ export const OP_SCREENING_CLASSIFICATION: Readonly<
   // explicitly screened above before model use.
   "near.intents.quote": "untrusted",
   "near.intents.executable-quote.review": "untrusted",
+  // This result contains only locally generated identifiers, strict enums,
+  // atomic amounts, addresses, revisions, and verified provider hashes.
+  "near.intents.owner-funded.reserve": "structured",
+  "near.intents.owner-funded.reconcile": "structured",
   "near.intents.status": "untrusted",
   "near.intents.tokens": "untrusted",
   "onboarding.readiness": "structured",

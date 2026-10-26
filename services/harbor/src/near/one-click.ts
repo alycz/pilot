@@ -62,6 +62,31 @@ export const ONE_CLICK_ARB_USDC_TO_WNEAR_ROUTE = Object.freeze({
   }),
 } as const);
 
+/**
+ * 1Click represents native NEAR with the canonical wrap.near asset ID. For a
+ * managed 1Click ORIGIN_CHAIN quote, the service handles the native wrapping;
+ * the owner funds the returned NEAR deposit account with native NEAR.
+ */
+export const ONE_CLICK_NATIVE_NEAR_TO_ARB_USDC_ROUTE = Object.freeze({
+  id: "near-native-to-arbitrum-usdc-v1",
+  origin: Object.freeze({
+    assetId: "nep141:wrap.near",
+    blockchain: "near",
+    contractAddress: "wrap.near",
+    decimals: 24,
+    symbol: "NEAR",
+    fundingAsset: "native-near",
+  }),
+  destination: Object.freeze({
+    assetId: "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near",
+    blockchain: "arb",
+    contractAddress: "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+    decimals: 6,
+    symbol: "USDC",
+    chainId: 42161,
+  }),
+} as const);
+
 const QuoteRequestSchema = z.object({
   dry: z.boolean(),
   swapType: z.literal("EXACT_INPUT"),

@@ -2,18 +2,26 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { createNearNep413FullAccessKeyVerifier } from "./near-nep413-verifier";
 import {
+  NEAR_PRINCIPAL_AUTHORIZATION_COOKIE,
+  NEAR_PRINCIPAL_AUTHORIZATION_COOKIE_OPTIONS,
   NEAR_WALLET_CHALLENGE_COOKIE,
   NEAR_WALLET_CHALLENGE_COOKIE_OPTIONS,
   NearWalletProofError,
   readNearPrincipalAuthorization,
   resolveNearWalletProofRuntime,
+  sealNearPrincipalAuthorization,
   type NearNep413FullAccessKeyVerifier,
   type NearWalletProofReplayConsumer,
   verifyNearWalletControlProof,
 } from "./near-wallet-proof";
+import {
+  isNearPrincipalPreauthorization,
+  upgradeNearPrincipalAuthorization,
+} from "./near-principal-bootstrap";
 import { readCookie } from "./openrouter-session";
 import { resolvePilotRequestAuthority } from "./runtime-profile";
 import { createHostedNearWalletProofReplayConsumer } from "./wallet-action-proof-consumer";
+import { readWalletSession } from "./wallet-session";
 
 function sameOrigin(request: NextRequest, expectedOrigin: string): boolean {
   const origin = request.headers.get("origin");
@@ -105,12 +113,33 @@ export function createNearSessionHandler(
         now,
         clock,
       });
+      const wallet = isNearPrincipalPreauthorization(verified.authorization)
+        ? readWalletSession(request, environment)
+        : null;
+      if (isNearPrincipalPreauthorization(verified.authorization) && !wallet) {
+        throw new NearWalletProofError(
+          "PRINCIPAL_MISMATCH",
+          "The Pilot wallet session changed during NEAR verification.",
+        );
+      }
+      const upgraded = wallet
+        ? upgradeNearPrincipalAuthorization({
+            preauthorization: verified.authorization,
+            wallet,
+            environment,
+            now: clock(),
+          })
+        : null;
       const response = NextResponse.json(
         {
           authenticated: true,
           wallet_control_verified: true,
           account_id: verified.account_id,
           network: verified.authorization.network,
+          ...(upgraded ? {
+            authorization_upgraded: true,
+            operations: upgraded.operations,
+          } : {}),
           execution_enabled: false,
         },
         { headers: { "Cache-Control": "no-store" } },
@@ -119,6 +148,19 @@ export function createNearSessionHandler(
         ...NEAR_WALLET_CHALLENGE_COOKIE_OPTIONS,
         maxAge: 0,
       });
+      if (upgraded) {
+        response.cookies.set(
+          NEAR_PRINCIPAL_AUTHORIZATION_COOKIE,
+          sealNearPrincipalAuthorization(upgraded, environment),
+          {
+            ...NEAR_PRINCIPAL_AUTHORIZATION_COOKIE_OPTIONS,
+            maxAge: Math.max(
+              1,
+              Math.ceil((Date.parse(upgraded.expires_at) - clock()) / 1_000),
+            ),
+          },
+        );
+      }
       return response;
     } catch (error) {
       return errorResponse(error);

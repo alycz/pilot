@@ -59,8 +59,12 @@ describe("NEAR Intents live executable-review UI", () => {
     );
 
     expect(pageSource).toContain("user-triggered live provider calls");
-    expect(pageSource).toContain("Execution, funding, signing, and settlement remain disabled");
-    expect(pageSource).toContain("Execution disabled · manual funding blocked");
+    expect(pageSource).toContain(
+      "Pilot transaction signing and broadcast remain disabled",
+    );
+    expect(pageSource).toContain(
+      "Pilot signing/broadcast disabled · owner manual funding only after reservation",
+    );
     expect(pageSource).not.toContain("It makes no 1Click request");
     expect(pageSource).not.toContain("Fixture only · execution disabled");
   });

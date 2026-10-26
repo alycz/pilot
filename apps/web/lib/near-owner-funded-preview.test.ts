@@ -76,4 +76,36 @@ describe("owner-funded NEAR preview boundary", () => {
       expected_quote_hash: "3".repeat(44),
     });
   });
+
+  it("preserves the native-route status profile and exact identity binding", async () => {
+    const review = {
+      source: "live",
+      provider_signature_verified: true,
+      owner_review: {
+        status_lookup: {
+          operation: "near.intents.status",
+          profile: "near-native-to-arbitrum-usdc-v1",
+          deposit_address: "deposit.near",
+          deposit_memo: null,
+          expected_correlation_id: "native-correlation",
+          expected_quote_hash: "3".repeat(44),
+        },
+      },
+    } as LiveNearOwnerFundedReview;
+    const op = vi.fn(async () => ({
+      ok: true,
+      data: { source: "fixture", signature_verified: false },
+      asOf: "2026-10-26T00:00:00.000Z",
+      asOfBasis: "fixture",
+    }));
+    const client = { op } as unknown as Pick<HarborClient, "op">;
+
+    await expect(loadLiveNearOwnerFundedStatus(client, review)).rejects.toThrow(/fixture data/);
+    expect(op).toHaveBeenCalledWith("near.intents.status", {
+      profile: "near-native-to-arbitrum-usdc-v1",
+      deposit_address: "deposit.near",
+      expected_correlation_id: "native-correlation",
+      expected_quote_hash: "3".repeat(44),
+    });
+  });
 });

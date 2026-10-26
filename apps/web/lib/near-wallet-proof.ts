@@ -13,7 +13,12 @@ import {
 import { z } from "zod";
 
 import { NearNep413VerifierError } from "./near-nep413-verifier";
+import {
+  isWalletBoundNearPrincipalAuthorization,
+  matchesWalletBoundNearPrincipalAuthorization,
+} from "./near-principal-bootstrap";
 import { readCookie } from "./openrouter-session";
+import { readWalletSession } from "./wallet-session";
 
 export const NEAR_PRINCIPAL_AUTHORIZATION_COOKIE =
   "__Host-pilot-near-principal-authorization";
@@ -106,6 +111,8 @@ export type NearWalletProofRuntimeMode = "disabled" | "challenge-only" | "verify
 
 export type NearWalletProofEnvironment = Readonly<{
   [key: string]: string | undefined;
+  NEXT_PUBLIC_PILOT_BUILD_MARKER?: string;
+  PILOT_DEPLOYMENT_PROFILE?: string;
   PILOT_NEAR_WALLET_PROOF_MODE?: string;
   PILOT_NEAR_WALLET_PROOF_PROVIDER?: string;
   PILOT_NEAR_WALLET_PROOF_RECIPIENT?: string;
@@ -280,10 +287,22 @@ export function readNearPrincipalAuthorization(
     now?: number;
   }> = {},
 ): NearPrincipalAuthorization | null {
-  return openNearPrincipalAuthorization(
+  const authorization = openNearPrincipalAuthorization(
     readCookie(request, NEAR_PRINCIPAL_AUTHORIZATION_COOKIE),
     options,
   );
+  if (!authorization || !isWalletBoundNearPrincipalAuthorization(authorization)) {
+    return authorization;
+  }
+  const environment = options.environment ?? process.env;
+  const wallet = readWalletSession(request, environment);
+  return wallet && matchesWalletBoundNearPrincipalAuthorization(
+      authorization,
+      wallet,
+      environment,
+    )
+    ? authorization
+    : null;
 }
 
 function challengeMessage(input: Readonly<{

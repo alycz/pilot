@@ -15,6 +15,7 @@ const BASE58_VALUES = new Map(
   Array.from(BASE58_ALPHABET, (character, index) => [character, index]),
 );
 const ACCOUNT_ID_PATTERN = /^(?=.{2,64}$)[a-z0-9]+(?:[._-][a-z0-9]+)*$/;
+const BLOCK_HASH_PATTERN = /^[1-9A-HJ-NP-Za-km-z]{43,45}$/;
 const BASE64_SIGNATURE_PATTERN =
   /^(?:[A-Za-z0-9+/]{4}){21}(?:[A-Za-z0-9+/]{2}==)$/;
 
@@ -317,6 +318,19 @@ async function verifyFullAccessKey(
       throw new NearNep413VerifierError(
         "FULL_ACCESS_KEY_REQUIRED",
         "The NEP-413 public key is not a full-access key for this account.",
+      );
+    }
+    if (
+      typeof payload.result.block_hash !== "string" ||
+      !BLOCK_HASH_PATTERN.test(payload.result.block_hash) ||
+      !Number.isSafeInteger(payload.result.block_height) ||
+      (payload.result.block_height as number) < 1 ||
+      !Number.isSafeInteger(payload.result.nonce) ||
+      (payload.result.nonce as number) < 0
+    ) {
+      throw new NearNep413VerifierError(
+        "RPC_PROTOCOL_INVALID",
+        "The NEAR RPC access-key result is invalid.",
       );
     }
   } catch (error) {

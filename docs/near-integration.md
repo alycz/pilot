@@ -14,18 +14,34 @@ as a claim that every catalogued venue is executable.
   hash. A dry quote has no deposit address and is never executable approval.
 - Status reads carry the provider deposit address and memo together, verify the
   nested quote signature, and preserve provider-reported settlement states.
-- `near.intents.executable-quote.review` is a default-off, local-only adapter
-  for one exact route: canonical USDC on Arbitrum One to wNEAR on NEAR mainnet.
-  It dynamically attests both token records, requests `dry: false`, verifies
-  the provider signature and full request echo, rejects memo routing, and binds
-  the exact amount, minimum output, recipient, refund address, deposit address,
-  correlation ID, quote hash, provider refund-start deadline, and a separate
-  five-minute local review freshness window. It returns manual owner-funding
-  instructions only; no wallet transaction is built, signed, funded, or sent.
+- `near.intents.executable-quote.review` has two separate, default-off exact-route
+  profiles. The existing local-only `arb-usdc-to-wnear-manual-v1` profile covers
+  canonical USDC on Arbitrum One -> wNEAR on NEAR mainnet. The hosted-default-off
+  `near-native-to-arbitrum-usdc-v1` profile covers native NEAR owner funding ->
+  canonical USDC on Arbitrum One. For that hosted profile, the 1Click request
+  uses the catalog asset `nep141:wrap.near`, while the owner instruction is an
+  exact native-NEAR transfer to the returned NEAR deposit account and 1Click
+  manages wrapping. The destination is chain ID `42161`, token contract
+  `0xaf88d065e77c8cc2239327c5edb3a432268e5831`, with six decimals. Both profiles
+  dynamically attest their exact token records, request `dry: false`, verify
+  the provider signature and full request echo for live results, reject memo
+  routing, and bind the exact amount, minimum output, recipient, refund address,
+  deposit address, correlation ID, quote hash, provider refund-start deadline,
+  and a separate five-minute review freshness window. They return manual
+  owner-funding instructions only; no wallet transaction is built, signed,
+  funded, or sent.
+- Hosted native-route review distinguishes deterministic fixture output from
+  live provider output. Fixture output is labeled `source: "fixture"`, carries
+  `provider_signature_verified: false`, and is not admissible to reservation.
+  Live output is labeled `source: "live"`, requires the server-side 1Click key,
+  and carries the verified provider quote binding. Neither form is a completed
+  swap or permission to fund.
 - The same-origin web proxy requires an active sealed NEAR principal
-  authorization whose mainnet account is the exact quote recipient and whose
-  scopes include both approval review and executable-quote review. This is a
-  server-issued principal binding, not a fresh wallet-control proof or economic
+  authorization with the required approval/executable-review scopes. For the
+  existing reverse route, its mainnet account is the exact NEAR recipient. For
+  the native route, its account is the exact source/refund account while the
+  separately reviewed recipient is an Arbitrum address. This server-issued
+  principal binding is not by itself a fresh wallet-control proof or economic
   approval. Independent Pilot and Harbor flags remain off by default.
 - Shared contracts distinguish provider signature verification from Pilot's
   principal-bound approval digest. The latter commits to exact asset IDs,
@@ -49,17 +65,41 @@ as a claim that every catalogued venue is executable.
   lifecycle also binds owner-reported Arbitrum funding, origin verification,
   provider observations, and independent NEAR destination evidence. Provider
   `SUCCESS`, `REFUNDED`, or `FAILED` alone is nonterminal.
-- Harbor now also contains a review-only D1 persistence adapter and byte-identical
-  canonical/Free-QuickJS `0018_near_attempt_store.sql` migrations. Hosted
-  counters are scoped by tenant, principal, network, and asset; atomic amounts
-  remain canonical decimal text and are updated with exact Worker `BigInt` plus
-  D1 value/revision CAS triggers. Wallet changes cannot create a fresh budget
-  bucket. The migrations are hash-pinned but have not been applied, and no
-  route currently instantiates the adapter. Because that v1 hosted schema lacks
-  the immutable destination and refund fields required for independent receipt
-  verification, provider terminal statuses now remain `unknown`, retain their
-  reservation, and cannot commit or release hosted budget. A future reviewed
-  schema is required before hosted terminal reconciliation can be enabled.
+- `near.intents.owner-funded.reserve` is a hosted-default-off admission handler
+  for the native-NEAR -> Arbitrum-USDC profile. It accepts only an exact live,
+  provider-signature-verified quote binding plus a fresh principal/account-bound
+  economic approval. It re-verifies the quote hash and approval digest, applies
+  a server-configured atomic budget limit, and atomically records or replays the
+  exact reservation in D1. The browser cannot choose or weaken that budget. Its
+  result always says `execution_enabled: false` and
+  `manual_owner_funding_only: true`; it has no key, signature, transaction, or
+  broadcast output and does not fund the deposit.
+- `near.intents.owner-funded.reconcile` is a separate hosted-default-off,
+  read-only evidence handler for an already owner-funded native route. Its
+  source stage uses Pilot-pinned NEAR mainnet RPC to require one finalized,
+  exact native transfer from the approved owner to the quoted deposit account.
+  Its settlement stage persists signed/bound provider status first, then uses
+  provider destination hashes only as bounded hints and independently requires
+  one finalized canonical-USDC `Transfer` on Arbitrum to the exact reviewed
+  recipient for at least the quoted minimum. Unknown, failed, ambiguous, and
+  transport outcomes remain held with `safe_to_resubmit: false`. Provider
+  `REFUNDED` also remains held because trusted refund discovery and receipt
+  verification are not implemented; the operation cannot release on status
+  alone. No stage constructs, signs, funds, broadcasts, or retries a transfer.
+- Harbor contains a review-only D1 persistence adapter and byte-identical
+  canonical/Free-QuickJS migrations `0018_near_attempt_store.sql`,
+  `0019_near_wallet_proof_replay.sql`, and
+  `0020_near_native_to_arbitrum_usdc_lifecycle.sql`. Migration `0018` adds the
+  tenant/principal/account-bound attempt, atomic budget reservation, replay,
+  unknown-outcome, and reconciliation-evidence state. Migration `0019` adds
+  one-time NEP-413 proof-consumption state. Migration `0020` adds the immutable
+  native-NEAR -> canonical-Arbitrum-USDC lifecycle binding and independent
+  source, provider-observation, destination-receipt, and refund-receipt states.
+  Hosted counters remain scoped by tenant, principal, network, and asset;
+  atomic amounts remain canonical decimal text and are updated with exact
+  Worker `BigInt` plus D1 value/revision CAS triggers. Wallet changes cannot
+  create a fresh budget bucket. All three migrations are checked in for review
+  and have not been applied by this work.
 - A provider-neutral NEAR wallet facade and review card exist with signing and
   execution disabled by default. They contain no submit or broadcast method.
 - Same-origin NEP-413 routes bind an exact sealed server principal
@@ -71,18 +111,33 @@ as a claim that every catalogued venue is executable.
   opaque scope bound to principal, account, network, authorization ID, and
   recipient. Missing RPC or replay storage fails closed; no signature alone is
   treated as wallet control.
-- Canonical/Free-QuickJS `0019_near_wallet_proof_replay.sql` migrations add the
-  dedicated replay table without modifying the already hash-pinned `0017`
-  migration. The migration is review-only and has not been applied. A successful
-  proof clears its challenge and returns a wallet-control confirmation, but does
-  not mint a reusable NEAR login cookie or enable execution.
+- A hosted, default-off bootstrap route derives an opaque principal only from
+  an active sealed Pilot wallet session and issues a five-minute,
+  approval-review-only claim for one asserted NEAR mainnet account. Only after
+  the exact NEP-413 proof and durable nonce consumption succeed does the server
+  upgrade it to a 15-minute authorization limited to approval review,
+  executable-quote review, read-only status, and reservation. Changing or
+  renewing the Pilot wallet session invalidates it; the authorization never
+  grants an access key or transaction capability.
+- Canonical/Free-QuickJS `0019_near_wallet_proof_replay.sql` adds the dedicated
+  replay table without modifying the already hash-pinned `0017` migration. A
+  successful proof clears its challenge and returns a wallet-control
+  confirmation. A bootstrap proof may mint only the short-lived scoped
+  authorization above; it does not enable execution.
 - `/demo/near-intents`, linked from the existing Integrations menu, provides an
   explicitly configured live read path for token inventory, verified dry
-  quotes, the fixed principal-bound executable review, and exact bound status,
-  plus a visibly separate fixture-only lifecycle walkthrough. Provider errors
-  never fall back to fixtures. Funding remains visibly blocked while wNEAR
-  recipient storage is unverified, and the UI exposes no wallet, approval,
-  reservation, signing, transfer, or broadcast action.
+  quotes, exact-route executable review, and exact bound status, plus visibly
+  labeled fixtures. Provider errors never fall back to fixtures. The older
+  reverse route remains blocked while wNEAR destination-delivery semantics are
+  unverified. The native route's review and reserve surfaces remain default-off
+  and manual-owner-funded. Near Connect 0.12.0 is wired behind an independent
+  default-off browser flag with `autoConnect: false`, one app-supplied executor
+  pinned to an immutable repository commit, and no access-key, transaction,
+  delegate-action, or broadcast method. The live UI performs the server-required
+  bootstrap proof before requesting a quote, then requires a fresh quote-bound
+  proof and separate economic approval before durable reservation. No live
+  wallet prompt, signing, provider executable quote, transfer, broadcast, or
+  funded action was run while implementing it.
 - `@pilot/near-chain-signatures` pins `chainsig.js` 1.1.16 for a narrow NEAR
   Testnet -> XRP Testnet native-payment preparation/finalization boundary. It
   exposes no broadcast or generic signing method and remains off until an owner
@@ -106,20 +161,23 @@ as a claim that every catalogued venue is executable.
   quote, funded settlement, mainnet deposit, signed intent, limit order,
   wallet signature, or transaction submission was performed while
   implementing this slice.
-- The executable-review route was exercised only with deterministic fixtures.
-  Its owner-funding instructions are not accepted until a fresh live quote,
-  fresh economic approval, durable reservation, recipient wNEAR storage check,
-  and owner-run wallet acceptance all pass. Pilot budgets cannot stop an owner
-  from transferring outside Pilot.
+- The executable-review routes were exercised only with deterministic fixtures.
+  The native-route reserve handler and D1 lifecycle exist in source but were not
+  accepted against an applied remote migration. Owner-funding instructions are
+  not accepted until a fresh live quote, fresh economic approval, durable remote
+  reservation, independent source and destination receipt verification, and
+  owner-run wallet acceptance all pass. The older reverse route separately
+  requires its destination-delivery semantics to be accepted. Pilot budgets
+  cannot stop an owner from transferring outside Pilot.
 - `SUCCESS` is provider-reported unless destination evidence is independently
   verified. Unknown or missing status never proves non-execution and never
   authorizes an automatic replacement payment.
 - A NEAR function-call key allowance pays gas; it is not a token spending cap.
 - NEAR AI privacy is operator-declared metadata until its attestation and E2EE
   path receive separate acceptance. It is not wired into live chat by default.
-- Remote D1 acceptance, application of migration `0019`, a real-wallet NEP-413
-  acceptance run, funded settlement reconciliation, and a reviewed mainnet
-  execution lane remain future gates.
+- Remote D1 acceptance, application of migrations `0018`, `0019`, and `0020`,
+  a real-wallet NEP-413 acceptance run, funded settlement reconciliation, and a
+  reviewed mainnet execution lane remain future gates.
   The local D1 stand-in covers separate adapter instances and CAS contention,
   but remote migration apply, backup/rollback rehearsal, tenant isolation
   review, retention/observability, and real multi-worker tests remain required.

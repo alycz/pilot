@@ -9,6 +9,8 @@
   },
   "pnpm": {
     "overrides": {
+      "@ai-sdk/provider-utils@3.0.41>undici": "6.29.1",
+      "@ai-sdk/provider-utils@3.0.42>undici": "6.29.1",
       "express>body-parser": "2.4.0",
       "next>postcss": "8.5.18"
     }

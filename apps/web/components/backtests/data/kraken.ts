@@ -13,7 +13,10 @@ import {
   trustedDailyBarSource,
 } from "./registry";
 
-const KrakenEnvelopeSchema = z.object({ error: z.array(z.string()), result: z.record(z.unknown()) }).passthrough();
+const KrakenEnvelopeSchema = z.object({
+  error: z.array(z.string()),
+  result: z.record(z.string(), z.unknown()),
+}).passthrough();
 const KrakenPairSchema = z.object({
   altname: z.string(),
   wsname: z.string(),

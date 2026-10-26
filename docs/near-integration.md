@@ -136,16 +136,24 @@ Testnet acceptance are available.
 
 The workspace production audit removed both critical findings by upgrading
 `simple-git` to 4.0.2, and removed the Next/PostCSS and MCP/body-parser high
-findings with scoped overrides. At `ba88614`, five baseline high advisories
-remain: Undici 5.29.0 (`GHSA-vrm6-8vpv-qv8q`,
-`GHSA-v9p9-hfj2-hcw8`, `GHSA-vxpw-j846-p89q`), its Busboy 2.1.1 dependency
-(`GHSA-x8mw-p69m-v3mx`), and Zod 3.25.76
-(`GHSA-mrhx-c7xc-m3w5`). The affected Undici graph is
-`ai`/Bedrock/NEAR OpenAI-compatible -> `@ai-sdk/provider-utils` -> Undici;
-Zod 3 is direct in web, contracts, and Harbor client and is runtime-reachable.
-All five vulnerable versions were already locked at baseline `cb4f28e`; this
-branch adds consumers of those existing lines. A scoped Undici 6.29.1 trial
-passed focused runtime tests but failed Next production output tracing, so it
-was not retained. Zod requires a fixture-backed v4 migration rather than a
-cross-major override. This branch is not a production deployment
-recommendation until those findings and the acceptance gates above are closed.
+findings with scoped overrides. Five additional high advisories were inherited
+from baseline `cb4f28e`: three in Undici 5.29.0
+(`GHSA-vrm6-8vpv-qv8q`, `GHSA-v9p9-hfj2-hcw8`,
+`GHSA-vxpw-j846-p89q`), one in its Busboy 2.1.1 dependency
+(`GHSA-x8mw-p69m-v3mx`), and one in Zod 3.25.76
+(`GHSA-mrhx-c7xc-m3w5`). This branch now pins only the two affected
+`@ai-sdk/provider-utils` 3.x lines to Undici 6.29.1 and migrates the web,
+contracts, and Harbor client schemas to Zod 4.6.7. The resolved production
+graph contains one Undici version, one Zod version, and no Busboy dependency.
+
+The compatibility gate exercises connect-time DNS pinning, private-address
+denial, redirect revalidation, abort propagation, streaming, and bounded
+downloads. The production web build also fails unless the `/api/chat` output
+trace contains runtime files for and resolves exactly Undici 6.29.1. The
+fixture-backed Zod migration preserves keyed-record behavior and passes the
+contracts, Harbor client, web, agent, and full workspace suites. A fresh
+`pnpm audit --prod --audit-level=high` reports zero high or critical findings;
+11 lower-severity findings remain for separate review. These dependency checks
+do not close the provider, wallet, migration, or funded-settlement acceptance
+gates above, so this branch is still not a production deployment
+recommendation.

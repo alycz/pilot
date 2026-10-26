@@ -10,6 +10,9 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   // Dev-only badge; bottom-left belongs to the Ask Pilot button.
   devIndicators: { position: "bottom-right" },
+  outputFileTracingIncludes: {
+    "/api/chat": ["./node_modules/undici/**/*"],
+  },
   transpilePackages: ["@pilot/harbor-client"],
   async redirects() {
     return docsRedirects(docsOrigin);

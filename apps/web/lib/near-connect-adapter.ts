@@ -10,6 +10,8 @@ export const NEAR_CONNECT_REQUIRED_PACKAGES = Object.freeze([
   "@hot-labs/near-connect@0.12.0",
 ] as const);
 export const NEAR_CONNECT_MAX_WAIT_MS = 60_000;
+const NEAR_CONNECT_CSP_NONCE_PATTERN = /^[A-Za-z0-9+/_-]+={0,2}$/;
+const NEAR_CONNECT_MAX_NONCED_SCRIPTS = 128;
 
 export const PILOT_NEAR_CONNECT_WALLET_ID = "mynearwallet" as const;
 export const PILOT_NEAR_CONNECT_EXECUTOR_COMMIT =
@@ -113,6 +115,10 @@ type NearConnectRuntime = Readonly<{
 
 export type NearConnectRuntimeLoader = () => Promise<NearConnectRuntime>;
 
+type NearConnectNonceDocument = Readonly<{
+  querySelectorAll: (selector: string) => ArrayLike<Readonly<{ nonce: string }>>;
+}>;
+
 export type PilotNearConnectAdapter = Readonly<{
   signChallenge: (
     challenge: NearConnectChallenge,
@@ -127,6 +133,40 @@ const defaultRuntimeLoader: NearConnectRuntimeLoader = async () => {
     SandboxWallet: runtime.SandboxWallet,
   };
 };
+
+function exactCspNonce(value: string): string {
+  if (
+    value !== value.trim()
+    || value.length < 16
+    || value.length > 128
+    || !NEAR_CONNECT_CSP_NONCE_PATTERN.test(value)
+  ) {
+    throw new Error("The browser CSP nonce is invalid.");
+  }
+  return value;
+}
+
+/**
+ * Reuses the nonce already attached to Next's scripts. It never generates a
+ * nonce or changes CSP, and fails closed if the document exposes conflicting
+ * or malformed nonce values.
+ */
+export function resolveNearConnectCspNonce(
+  source: NearConnectNonceDocument | undefined =
+    typeof document === "undefined" ? undefined : document,
+): string | undefined {
+  if (!source) return undefined;
+  const scripts = Array.from(source.querySelectorAll("script[nonce]"));
+  if (scripts.length === 0) return undefined;
+  if (scripts.length > NEAR_CONNECT_MAX_NONCED_SCRIPTS) {
+    throw new Error("The browser CSP nonce is unavailable.");
+  }
+  const nonces = new Set(scripts.map((script) => exactCspNonce(script.nonce)));
+  if (nonces.size !== 1) {
+    throw new Error("The browser CSP nonce is ambiguous.");
+  }
+  return nonces.values().next().value;
+}
 
 export function resolveNearConnectAdapterStatus(
   featureEnabled: boolean,
@@ -143,7 +183,7 @@ export function resolveNearConnectAdapterStatus(
   });
 }
 
-function connectorOptions(): NearConnectorOptions {
+function connectorOptions(cspNonce?: string): NearConnectorOptions {
   return {
     autoConnect: false,
     network: "mainnet",
@@ -161,6 +201,7 @@ function connectorOptions(): NearConnectorOptions {
       })) as WalletManifest[],
     },
     footerBranding: null,
+    ...(cspNonce === undefined ? {} : { cspNonce: exactCspNonce(cspNonce) }),
   };
 }
 
@@ -253,6 +294,7 @@ async function boundedWalletCall<T>(
 /** Constructed only after an explicit caller action; exposes message signing only. */
 export async function createPilotNearConnectAdapter(input: Readonly<{
   enabled: boolean;
+  cspNonce?: string;
   runtimeLoader?: NearConnectRuntimeLoader;
   signal?: AbortSignal;
   timeoutMs?: number;
@@ -268,7 +310,7 @@ export async function createPilotNearConnectAdapter(input: Readonly<{
     (input.runtimeLoader ?? defaultRuntimeLoader)(),
     { signal: input.signal, timeoutMs, label: "Near Connect initialization" },
   );
-  const connector = new runtime.NearConnector(connectorOptions());
+  const connector = new runtime.NearConnector(connectorOptions(input.cspNonce));
   await boundedWalletCall(connector.whenManifestLoaded, {
     signal: input.signal,
     timeoutMs,

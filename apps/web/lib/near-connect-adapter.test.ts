@@ -6,6 +6,7 @@ import {
   PILOT_NEAR_CONNECT_MANIFEST,
   createPilotNearConnectAdapter,
   resolveNearConnectAdapterStatus,
+  resolveNearConnectCspNonce,
   type NearConnectRuntimeLoader,
 } from "./near-connect-adapter";
 
@@ -120,6 +121,7 @@ describe("Near Connect browser adapter", () => {
         mainnet: true,
       },
     });
+    expect(options).not.toHaveProperty("cspNonce");
     expect(options).not.toHaveProperty("signIn");
     expect(options.manifest.wallets).toHaveLength(1);
     expect(options.manifest.wallets[0]).toMatchObject({
@@ -152,6 +154,53 @@ describe("Near Connect browser adapter", () => {
       nonce: expect.any(Uint8Array),
     }));
     expect(fake.signInAndSignMessage).not.toHaveBeenCalled();
+  });
+
+  it("passes through one bounded CSP nonce already attached to browser scripts", async () => {
+    vi.stubGlobal("window", {});
+    const cspNonce = "Q3NwTm9uY2VGb3JQaWxvdDIwMjY";
+    const source = {
+      querySelectorAll: vi.fn(() => [
+        { nonce: cspNonce },
+        { nonce: cspNonce },
+      ]),
+    };
+    const fake = runtime();
+    await createPilotNearConnectAdapter({
+      enabled: true,
+      cspNonce: resolveNearConnectCspNonce(source),
+      runtimeLoader: fake.loader,
+    });
+
+    expect(source.querySelectorAll).toHaveBeenCalledWith("script[nonce]");
+    expect(fake.capturedOptions).toMatchObject({ cspNonce });
+  });
+
+  it("keeps an absent CSP nonce absent and rejects malformed or ambiguous values", async () => {
+    expect(resolveNearConnectCspNonce({
+      querySelectorAll: () => [],
+    })).toBeUndefined();
+    expect(() => resolveNearConnectCspNonce({
+      querySelectorAll: () => [{ nonce: "'unsafe-inline'" }],
+    })).toThrow("CSP nonce is invalid");
+    expect(() => resolveNearConnectCspNonce({
+      querySelectorAll: () => [{ nonce: "A".repeat(129) }],
+    })).toThrow("CSP nonce is invalid");
+    expect(() => resolveNearConnectCspNonce({
+      querySelectorAll: () => [
+        { nonce: "Q3NwTm9uY2VGb3JQaWxvdDIwMjY" },
+        { nonce: "RGlmZmVyZW50Tm9uY2VGb3JQaWxvdA" },
+      ],
+    })).toThrow("CSP nonce is ambiguous");
+
+    vi.stubGlobal("window", {});
+    const fake = runtime();
+    await expect(createPilotNearConnectAdapter({
+      enabled: true,
+      cspNonce: "bad nonce",
+      runtimeLoader: fake.loader,
+    })).rejects.toThrow("CSP nonce is invalid");
+    expect(fake.capturedOptions).toBeUndefined();
   });
 
   it("uses signInAndSignMessage without an access key for an unconnected exact account", async () => {

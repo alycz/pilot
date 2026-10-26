@@ -15,6 +15,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { createBrowserHarborClient } from "../../lib/harbor-browser";
 import {
   createPilotNearConnectAdapter,
+  resolveNearConnectCspNonce,
   resolveNearConnectAdapterStatus,
   type PilotNearConnectAdapter,
 } from "../../lib/near-connect-adapter";
@@ -93,6 +94,7 @@ export function NearNativeLiveOwnerFlow({ gates }: Readonly<{
     if (!adapterRef.current) {
       adapterRef.current = await createPilotNearConnectAdapter({
         enabled: true,
+        cspNonce: resolveNearConnectCspNonce(),
         signal,
       });
     }

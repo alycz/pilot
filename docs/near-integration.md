@@ -233,7 +233,14 @@ the actions.
 5. Review the browser CSP against the exact commit-pinned Near Connect executor
    and sandbox behavior. Do not use a wildcard source. Verify the executor
    fetch, sandbox iframe, popup lifecycle, and callback origin in a disposable
-   browser session before enabling the browser gate.
+   browser session before enabling the browser gate. The adapter reuses one
+   bounded nonce already attached to the document's Next.js scripts and passes
+   it to Near Connect; an absent nonce remains absent, while malformed or
+   conflicting nonce values fail closed. This pass-through does not create a
+   nonce or configure CSP. A deployment that later adopts nonce-only CSP must
+   issue the matching nonce on its own scripts and complete browser acceptance;
+   that conditional policy is not evidence that the current deployment uses
+   nonce-based CSP.
 6. Only after the server configuration is ready, enable the independent web
    gates `PILOT_NEAR_BROWSER_WALLET_ADAPTER_ENABLED`,
    `PILOT_NEAR_PRINCIPAL_BOOTSTRAP_ENABLED`,

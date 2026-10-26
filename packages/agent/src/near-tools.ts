@@ -5,7 +5,7 @@ import {
   type Near1ClickDryQuoteResponse,
   type Near1ClickStatusResponse,
   type Near1ClickToken,
-} from "@pilot/contracts";
+} from "@pilot/contracts/near";
 
 export type VerifiedNearDryQuote = Readonly<{
   response: Near1ClickDryQuoteResponse;

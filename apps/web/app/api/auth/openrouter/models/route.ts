@@ -4,7 +4,14 @@ import {
   accountModelAllowlist,
   chooseDefaultModel,
   filterToolCallingModels,
+  type PublicModel,
 } from "../../../../../lib/model-access";
+import {
+  discoverNearAiModels,
+  nearAiPublicDescriptor,
+  readNearAiServerConfig,
+  verifyNearAiConfiguredChatModel,
+} from "../../../../../lib/near-ai";
 import { readDemoModelPublicStatusAsync } from "../../../../../lib/demo-model-budget";
 import { readWalletBoundOpenRouterSession } from "../../../../../lib/openrouter-session";
 import { resolvePilotRequestAuthority } from "../../../../../lib/runtime-profile";
@@ -108,7 +115,33 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const models = filterToolCallingModels(payload, requestedMode, allowedModels);
+  let models: PublicModel[] = filterToolCallingModels(payload, requestedMode, allowedModels);
+  if (requestedMode === "oauth") {
+    const nearAi = readNearAiServerConfig();
+    if (nearAi.enabled) {
+      try {
+        const model = verifyNearAiConfiguredChatModel(
+          nearAi,
+          await discoverNearAiModels(),
+        );
+        const descriptor = nearAiPublicDescriptor(nearAi);
+        // The configured id is routed to NEAR AI, so never show an identically
+        // named OpenRouter entry with misleading provenance.
+        models = models.filter((candidate) => candidate.id !== model.id);
+        models.push({
+          id: model.id,
+          name: model.id,
+          description: "NEAR AI Cloud model with native tool support",
+          provider: "near-ai",
+          privacy: descriptor.privacy,
+        });
+        models.sort((left, right) => left.name.localeCompare(right.name));
+      } catch {
+        // Fail closed: an unavailable, stale, or non-tool-capable model is not
+        // advertised as selectable. Existing providers remain available.
+      }
+    }
+  }
   const response = NextResponse.json({
     models,
     defaultModel: models.length > 0 ? chooseDefaultModel(models) : null,

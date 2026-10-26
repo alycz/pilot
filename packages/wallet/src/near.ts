@@ -6,7 +6,7 @@ import {
   type NearApprovalBinding,
   type NearWalletConnection,
   type NearWalletExecutionPolicy,
-} from "@pilot/contracts";
+} from "@pilot/contracts/near";
 
 const HashSchema = /^[A-F0-9]{64}$/;
 const SafeOpaqueResult = /^.{1,8192}$/su;

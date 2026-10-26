@@ -173,6 +173,27 @@ describe("TrustReceipt", () => {
     expect(markup).not.toContain("alias/must-not-render");
   });
 
+  it("renders NEAR AI model provenance and fail-closed privacy disclosure", () => {
+    const markup = render({
+      model: {
+        provider: "near-ai",
+        id: "deepseek-ai/DeepSeek-V3.1",
+        privacy: {
+          tier: "third-party-confidential-tee",
+          declaredBy: "operator-configuration",
+          attestationVerified: false,
+          summary: "Inference is declared to use a third-party TEE.",
+        },
+      },
+    });
+
+    expect(markup).toContain('aria-label="NEAR AI trust receipt"');
+    expect(markup).toContain("Model · NEAR AI");
+    expect(markup).toContain("deepseek-ai/DeepSeek-V3.1");
+    expect(markup).toContain("Operator-declared privacy tier: Third-party confidential TEE.");
+    expect(markup).toContain("Runtime attestation is not verified by Pilot.");
+  });
+
   it("fails soft for absent, empty, and unknown trust states", () => {
     expect(render()).toBe("");
     expect(render(null)).toBe("");

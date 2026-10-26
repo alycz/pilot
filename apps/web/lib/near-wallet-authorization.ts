@@ -10,7 +10,7 @@ import {
   type NearPrincipalAuthorization,
   type NearWalletConnection,
   type NearWalletExecutionPolicy,
-} from "@pilot/contracts";
+} from "@pilot/contracts/near";
 import { z } from "zod";
 
 const SESSION_VERSION = "pilot-near-wallet-session-v1" as const;

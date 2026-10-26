@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { computeNearApprovalDigest, type NearApprovalBinding } from "@pilot/contracts";
+import { computeNearApprovalDigest, type NearApprovalBinding } from "@pilot/contracts/near";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {

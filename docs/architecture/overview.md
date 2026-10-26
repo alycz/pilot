@@ -40,7 +40,7 @@ Compatibility exports must remain at current module paths. Auth, quota, wallet/s
 
 ## Coupling and provenance
 
-The contract bytes currently hash to `898eea530ce49b020e4c10419ff2fb8ca3505d5de01b5981569ea18a6535b3e6`. Equal bytes do not prove equal runtime semantics: Harbor uses Zod 4.6.7 while `@pilot/contracts` uses Zod 3.25.76. Alignment needs its own fixture-backed compatibility review.
+The contract bytes currently hash to `c49b50d669aa38bcbd909518694f2053f0da6563bfa89826d3c072bfb4a46351`. The contract test compares Pilot and the vendored Harbor source directly before checking this digest. Equal bytes do not prove equal runtime semantics: Harbor uses Zod 4.6.7 while `@pilot/contracts` uses Zod 3.25.76. Alignment needs its own fixture-backed compatibility review.
 
 Protected run-kit and isolated-profile paths encode security boundaries. They remain external capabilities rather than generic setup instructions. Machine-specific paths, wallet sessions, and live account state are never reconstruction inputs.
 

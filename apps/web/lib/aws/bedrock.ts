@@ -1,5 +1,6 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { LanguageModel } from "ai";
+import type { TrustModel } from "@pilot/contracts";
 
 import {
   requireDemoModel,
@@ -8,6 +9,10 @@ import {
 
 import { readPilotAwsConfig, type PilotAwsConfig } from "./config";
 import { DEMO_OPENROUTER_MODEL_SETTINGS } from "../openrouter-free-policy";
+import {
+  createNearAiChatModel,
+  type NearAiProviderDependencies,
+} from "../near-ai-provider";
 import type { OpenRouterChatSettings } from "@openrouter/ai-sdk-provider";
 
 type ModelProvider = (
@@ -20,10 +25,7 @@ type AmazonBedrockFactory = (options: {
   region: string;
 }) => ModelProvider;
 
-export type ModelTrust = {
-  provider: "bedrock" | "bedrock-mock" | "openrouter";
-  id: string;
-};
+export type ModelTrust = TrustModel;
 
 export type ResolvedChatModel = {
   model: LanguageModel;
@@ -35,20 +37,29 @@ export type BedrockModelDependencies = {
   env?: Readonly<Record<string, string | undefined>>;
   createOpenRouter?: OpenRouterFactory;
   createAmazonBedrock?: AmazonBedrockFactory;
+  nearAi?: NearAiProviderDependencies;
 };
 
 export function modelTrustForAccess(
   access: ModelAccess,
-  config: PilotAwsConfig = readPilotAwsConfig(),
+  config?: PilotAwsConfig,
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): ModelTrust {
   if (access.provider === "openrouter") {
     return { provider: "openrouter", id: access.model };
   }
-  if (config.bedrockMode === "off") {
+  if (access.provider === "near-ai") {
+    return {
+      provider: "near-ai",
+      id: access.model,
+      privacy: access.privacy,
+    };
+  }
+  const bedrockConfig = config ?? readPilotAwsConfig(env);
+  if (bedrockConfig.bedrockMode === "off") {
     throw new Error("AWS Bedrock model access is disabled");
   }
-  if (config.bedrockMode === "mock") {
+  if (bedrockConfig.bedrockMode === "mock") {
     return {
       provider: "bedrock-mock",
       id: requireDemoModel(nonEmpty("MODEL_DEFAULT", env.MODEL_DEFAULT)),
@@ -84,7 +95,6 @@ export async function resolveChatModel(
   dependencies: BedrockModelDependencies = {},
 ): Promise<ResolvedChatModel> {
   const env = dependencies.env ?? process.env;
-  const config = dependencies.config ?? readPilotAwsConfig(env);
 
   if (access.provider === "openrouter") {
     const factory = dependencies.createOpenRouter ?? createOpenRouter;
@@ -93,9 +103,26 @@ export async function resolveChatModel(
       model: access.mode === "demo"
         ? provider(access.model, DEMO_OPENROUTER_MODEL_SETTINGS as OpenRouterChatSettings)
         : provider(access.model),
-      trust: modelTrustForAccess(access, config, env),
+      trust: modelTrustForAccess(access, dependencies.config, env),
     };
   }
+
+  if (access.provider === "near-ai") {
+    const config = {
+      enabled: true,
+      provider: "near-ai",
+      apiBase: access.apiBase,
+      apiKey: access.apiKey,
+      model: access.model,
+      privacy: access.privacy,
+    } as const;
+    return {
+      model: await createNearAiChatModel(config, dependencies.nearAi),
+      trust: modelTrustForAccess(access, dependencies.config, env),
+    };
+  }
+
+  const config = dependencies.config ?? readPilotAwsConfig(env);
 
   if (config.bedrockMode === "off") {
     throw new Error("AWS Bedrock model access is disabled");

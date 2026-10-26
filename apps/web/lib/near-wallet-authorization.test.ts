@@ -3,7 +3,7 @@ import {
   type NearApprovalBinding,
   type NearPrincipalAuthorization,
   type NearWalletConnection,
-} from "@pilot/contracts";
+} from "@pilot/contracts/near";
 import { describe, expect, it } from "vitest";
 
 import {

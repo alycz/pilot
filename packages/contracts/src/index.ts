@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-export * from "./near.js";
-
 // Shared contracts must stay dependency-free beyond zod so this source can be
 // byte-synced into @pilot/contracts. This bounded Ripple base58 shape keeps
 // model-facing watchdog fields free of arbitrary text; operation boundaries
@@ -845,12 +843,36 @@ export const CardStateSchema = z.enum([
 ]);
 export type CardState = z.infer<typeof CardStateSchema>;
 
-export const TrustModelSchema = z
+export const NearAiPrivacyDisclosureSchema = z
   .object({
-    provider: z.enum(["bedrock", "bedrock-mock", "openrouter"]),
-    id: z.string(),
+    tier: z.enum([
+      "confidential-tee",
+      "third-party-confidential-tee",
+      "incognito",
+    ]),
+    declaredBy: z.literal("operator-configuration"),
+    // This receipt schema intentionally cannot claim runtime attestation.
+    attestationVerified: z.literal(false),
+    summary: z.string().min(1).max(500),
   })
   .strict();
+export type NearAiPrivacyDisclosure = z.infer<typeof NearAiPrivacyDisclosureSchema>;
+
+export const TrustModelSchema = z.union([
+  z
+    .object({
+      provider: z.enum(["bedrock", "bedrock-mock", "openrouter"]),
+      id: z.string(),
+    })
+    .strict(),
+  z
+    .object({
+      provider: z.literal("near-ai"),
+      id: z.string(),
+      privacy: NearAiPrivacyDisclosureSchema,
+    })
+    .strict(),
+]);
 export type TrustModel = z.infer<typeof TrustModelSchema>;
 
 export const CardTrustSchema = z

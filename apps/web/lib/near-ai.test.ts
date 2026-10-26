@@ -5,6 +5,7 @@ import {
   nearAiOpenAiCompatibleOptions,
   nearAiPublicDescriptor,
   readNearAiServerConfig,
+  verifyNearAiConfiguredChatModel,
   verifyNearAiConfiguredModel,
 } from "./near-ai";
 
@@ -77,6 +78,7 @@ describe("NEAR AI model discovery", () => {
     const config = readNearAiServerConfig(enabled);
     if (!config.enabled) throw new Error("expected enabled configuration");
     expect(verifyNearAiConfiguredModel(config, models).id).toBe("z-ai/example-model");
+    expect(verifyNearAiConfiguredChatModel(config, models).id).toBe("z-ai/example-model");
   });
 
   it("rejects unavailable configured models and bounded-response failures", async () => {
@@ -88,6 +90,12 @@ describe("NEAR AI model discovery", () => {
       supportedSamplingParameters: [],
       ready: false,
     }])).toThrow("not ready");
+    expect(() => verifyNearAiConfiguredChatModel(config, [{
+      id: config.model,
+      supportedFeatures: ["structured_outputs"],
+      supportedSamplingParameters: [],
+      ready: true,
+    }])).toThrow("native tool support");
     await expect(discoverNearAiModels({
       maxResponseBytes: 1_024,
       fetch: vi.fn(async () => new Response("x".repeat(1_025), {

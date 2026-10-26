@@ -9,6 +9,11 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./near": {
+      "types": "./src/near.ts",
+      "import": "./src/near.ts",
+      "default": "./src/near.ts"
     }
   },
   "scripts": {

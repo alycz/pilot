@@ -1,7 +1,7 @@
 import {
   Near1ClickAssetIdSchema,
   type Near1ClickAssetId,
-} from "@pilot/contracts";
+} from "@pilot/contracts/near";
 
 export const OFFICIAL_NEAR_RPC_ENDPOINTS = Object.freeze({
   mainnet: "https://rpc.mainnet.near.org",

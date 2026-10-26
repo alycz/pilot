@@ -2,7 +2,7 @@ import {
   NearApprovalBindingSchema,
   computeNearApprovalDigest,
   type NearApprovalBinding,
-} from "@pilot/contracts";
+} from "@pilot/contracts/near";
 
 export type NearApprovalReadiness =
   | "ready"

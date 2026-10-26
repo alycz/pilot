@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   computeNearApprovalDigest,
   type NearApprovalBinding,
-} from "@pilot/contracts";
+} from "@pilot/contracts/near";
 import { reviewNearIntentsApproval } from "./near-approval";
 
 function binding(

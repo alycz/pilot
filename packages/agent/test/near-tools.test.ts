@@ -2,7 +2,7 @@ import type {
   Near1ClickDryQuoteRequest,
   Near1ClickDryQuoteResponse,
   Near1ClickToken,
-} from "@pilot/contracts";
+} from "@pilot/contracts/near";
 import { describe, expect, it, vi } from "vitest";
 
 import { discoverNearEarn, readNearAccount } from "../src/near-tools";

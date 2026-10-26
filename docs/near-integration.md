@@ -21,19 +21,32 @@ as a claim that every catalogued venue is executable.
   deadline. The digest uses an explicit `pilot.near-intents.approval.v2`
   domain separator.
 - Server-side wallet authorization contracts bind one authenticated Pilot
-  principal to one independently verified NEAR account and network in a
-  short-lived, HMAC-attested session. Cross-principal, cross-account, expired,
-  and wallet-change cases fail closed. No route currently issues this session
-  or proves wallet control, so it is an integration boundary rather than a
-  live login claim.
+  principal to one NEAR account and network in a short-lived,
+  authenticated-encrypted authorization artifact. Cross-principal,
+  cross-account, expired, and wallet-change cases fail closed. No route
+  currently verifies wallet control or issues a NEAR session, so this is an
+  integration boundary rather than a live login claim.
 - `@pilot/near-attempt-store` provides a single-process internal-test store
   with exact replay/conflict handling, atomic per-principal/per-asset budget
   reservation, compare-and-swap revisions, durable reconciliation evidence,
   and crash/restart fixtures. Unknown outcomes continue counting against the
   budget and can never authorize automatic resubmission. The local file
   adapter is explicitly not a hosted or multi-replica database.
+- Harbor now also contains a review-only D1 persistence adapter and byte-identical
+  canonical/Free-QuickJS `0018_near_attempt_store.sql` migrations. Hosted
+  counters are scoped by tenant, principal, network, and asset; atomic amounts
+  remain canonical decimal text and are updated with exact Worker `BigInt` plus
+  D1 value/revision CAS triggers. Wallet changes cannot create a fresh budget
+  bucket. The migrations are hash-pinned but have not been applied, and no
+  route currently instantiates the adapter.
 - A provider-neutral NEAR wallet facade and review card exist with signing and
   execution disabled by default. They contain no submit or broadcast method.
+- Same-origin NEP-413 challenge-only routes bind an exact sealed server
+  principal authorization, account, network, recipient, 32-byte nonce, and
+  expiry. Proof submission currently returns `503` and creates no session:
+  the web package has no declared Borsh/Base58/NEAR signature and bounded RPC
+  full-access-key verifier or durable replay consumer. Signature possession
+  without the account-key check is never treated as wallet control.
 - `/demo/near-intents`, linked from the existing Integrations menu, provides an
   explicitly configured live read-only path for token inventory and verified
   dry quotes plus a visibly separate fixture-only approval/status walkthrough.
@@ -45,10 +58,16 @@ as a claim that every catalogued venue is executable.
   wallet and external Testnet acceptance lane are separately integrated. The
   package root does not evaluate `chainsig.js`; the audited runtime is reachable
   only through the explicit `/official` subpath.
-- Optional NEAR AI configuration, live model-catalog discovery, fixed-origin
-  read-only NEAR RPC, and an Earn discovery flow are implemented. Earn uses the
-  standard tokens -> dry quote -> optional existing-settlement status path; it
-  has no invented deposit endpoint.
+- The NEAR AI OpenAI-compatible chat adapter is installed and wired behind
+  `NEAR_AI_ENABLED=1`, and remains default-off. Chat resolves only the exact
+  configured model after the public catalog reports it ready with native
+  `tools` support. The existing OpenRouter demo path is unchanged; NEAR AI
+  account selection currently reuses the wallet-bound OpenRouter OAuth session.
+  Privacy receipts are derived from operator configuration, never model output,
+  and always report runtime attestation as unverified. Live model-catalog
+  discovery, fixed-origin read-only NEAR RPC, and an Earn discovery flow are
+  also implemented. Earn uses the standard tokens -> dry quote -> optional
+  existing-settlement status path; it has no invented deposit endpoint.
 
 ## Not accepted or enabled
 
@@ -62,16 +81,15 @@ as a claim that every catalogued venue is executable.
 - A NEAR function-call key allowance pays gas; it is not a token spending cap.
 - NEAR AI privacy is operator-declared metadata until its attestation and E2EE
   path receive separate acceptance. It is not wired into live chat by default.
-- Hosted durable executable-attempt storage, funded settlement reconciliation,
-  wallet-control proof, and a reviewed mainnet acceptance lane remain future
-  gates. A hosted adapter needs a reviewed transactional migration with unique
-  idempotency constraints, serializable/CAS reservations, tenant isolation,
-  backup/rollback, and multi-worker tests; no hosted migration was applied.
-- NEAR AI catalog/configuration is present, but the OpenAI-compatible runtime
-  adapter is not installed or connected to chat. The requested exact adapter
-  dependency installation was denied by the execution environment, so the
-  runtime path remains unavailable instead of silently falling back to another
-  provider. No model completion was attempted.
+- Remote D1 acceptance, funded settlement reconciliation, wallet-control proof
+  verification, and a reviewed mainnet acceptance lane remain future gates.
+  The local D1 stand-in covers separate adapter instances and CAS contention,
+  but remote migration apply, backup/rollback rehearsal, tenant isolation
+  review, retention/observability, and real multi-worker tests remain required.
+- The NEAR AI chat path remains default-off. No model completion was attempted;
+  a separately authorized live acceptance run must verify the configured API
+  key, model access, tool behavior, billing boundary, and provider privacy or
+  attestation evidence before production claims are made.
 - IronHub is not integrated. Its current artifacts target the IronClaw WIT/WASM
   runtime and include broader write-capable surfaces than this slice needs.
   Shade Agents is deprecated and intentionally excluded.
@@ -106,3 +124,10 @@ production advisories after that refresh. The optional `chainsig.js` 1.1.16
 tree still contains known transitive advisories and remains isolated behind the
 explicit, disabled `/official` import until upstream patches and external
 Testnet acceptance are available.
+
+The workspace production audit removed both critical findings by upgrading
+`simple-git` to 4.0.2, and removed the Next/PostCSS and MCP/body-parser high
+findings with scoped overrides. Five high findings remain in the existing Zod
+3 and AI SDK/Undici 5 dependency lines. Their fixes require reviewed major-line
+migrations rather than cross-major overrides, so this branch is not a hosted
+preview or production deployment recommendation.

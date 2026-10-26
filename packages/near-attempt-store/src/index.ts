@@ -21,7 +21,7 @@ import {
   type NearIdempotencyBinding,
   type NearPrincipalAuthorization,
   type NearReconciliationEvidence,
-} from "@pilot/contracts";
+} from "@pilot/contracts/near";
 
 export const NEAR_ATTEMPT_STORE_SCHEMA_VERSION = 1 as const;
 

@@ -209,3 +209,15 @@ export function verifyNearAiConfiguredModel(
   return model;
 }
 
+/** Pilot chat requires native tool calling; prompt-emulated tools are not accepted. */
+export function verifyNearAiConfiguredChatModel(
+  config: Extract<NearAiServerConfig, { enabled: true }>,
+  models: readonly NearAiCatalogModel[],
+): NearAiCatalogModel {
+  const model = verifyNearAiConfiguredModel(config, models);
+  if (!model.supportedFeatures.includes("tools")) {
+    throw new Error("The configured NEAR AI model does not advertise native tool support");
+  }
+  return model;
+}
+

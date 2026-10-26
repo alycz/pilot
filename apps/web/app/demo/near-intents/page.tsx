@@ -1,46 +1,41 @@
 import type { Metadata } from "next";
+import { createHash } from "node:crypto";
 
 import { NearIntentsFixtureDemo, NearIntentsLivePreview } from "@/components/near";
 import { LandingBrand, LandingNav } from "@/components/landing/landing-nav";
-import { computeNearApprovalDigest, type NearApprovalBinding } from "@pilot/contracts";
-import { reviewNearIntentsApproval } from "@/lib/near-approval";
+import type { NearApprovalReview } from "@/lib/near-approval";
 
 export const metadata: Metadata = {
   title: "NEAR Intents fixture | Pilot",
   description: "Review Pilot's fixture-only NEAR Intents discovery and approval path.",
 };
 
-const fixtureBinding: NearApprovalBinding = {
-  version: "pilot-near-1click-approval-v2",
-  principal_id: "fixture-principal",
-  account_id: "fixture-recipient.near",
-  network: "near:mainnet",
-  idempotency_version: "pilot-near-idempotency-v1",
-  idempotency_key: "fixture-near-intents-review",
-  policy_digest: "A".repeat(64),
-  quote_id: "local_fixture_near_intents_demo",
-  quote_hash: "B".repeat(44),
-  provider_signature_verified: true,
-  origin_asset: "nep141:wrap.near",
-  destination_asset: "nep141:usdt.tether-token.near",
-  amount_in: "1000000000000000000000000",
-  min_amount_out: "990000",
-  recipient: "fixture-recipient.near",
-  refund_to: "fixture-refund.near",
-  deposit_address: "fixture-provider-deposit-address",
-  deposit_memo: "fixture-routing-memo",
-  approval_expires_at: "2099-01-02T00:00:00.000Z",
-  provider_deadline_at: "2099-01-03T00:00:00.000Z",
-};
+const fixtureRows = Object.freeze([
+  { label: "Principal", value: "fixture-principal", exact: true },
+  { label: "Wallet account", value: "fixture-recipient.near", exact: true },
+  { label: "Network", value: "near:mainnet", exact: true },
+  { label: "Input asset ID", value: "nep141:wrap.near", exact: true },
+  { label: "Input atomic amount", value: "1000000000000000000000000", exact: true },
+  { label: "Output asset ID", value: "nep141:usdt.tether-token.near", exact: true },
+  { label: "Minimum output atomic amount", value: "990000", exact: true },
+  { label: "Recipient", value: "fixture-recipient.near", exact: true },
+  { label: "Refund address", value: "fixture-refund.near", exact: true },
+  { label: "Fixture quote ID", value: "local_fixture_near_intents_demo", exact: true },
+] as const);
+
+const fixtureReview: NearApprovalReview = Object.freeze({
+  readiness: "signing-disabled",
+  canSign: false,
+  notice: "NEAR execution signing is disabled. This preview is local fixture data, not a verified executable quote.",
+  rows: fixtureRows,
+  approvalDigest: createHash("sha256")
+    .update("pilot.near-intents.fixture-preview.v1\0")
+    .update(JSON.stringify(fixtureRows))
+    .digest("hex")
+    .toUpperCase(),
+});
 
 export default async function NearIntentsDemoPage() {
-  const review = await reviewNearIntentsApproval({
-    binding: fixtureBinding,
-    approvalDigest: await computeNearApprovalDigest(fixtureBinding),
-    signingEnabled: false,
-    now: Date.parse("2098-01-01T00:00:00.000Z"),
-  });
-
   return (
     <div className="min-h-dvh bg-background text-foreground">
       <LandingNav current="near-intents" />
@@ -55,7 +50,7 @@ export default async function NearIntentsDemoPage() {
               <div>
                 <p className="label-mono">Separate local evidence</p>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">The walkthrough below never replaces the provider-connected result above. Use it only to inspect Pilot&apos;s disabled approval and status states.</p>
-                <div className="mt-4"><NearIntentsFixtureDemo review={review} /></div>
+                <div className="mt-4"><NearIntentsFixtureDemo review={fixtureReview} /></div>
               </div>
             </div>
           </div>

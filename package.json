@@ -7,6 +7,12 @@
   "engines": {
     "node": "24.14.0"
   },
+  "pnpm": {
+    "overrides": {
+      "express>body-parser": "2.4.0",
+      "next>postcss": "8.5.18"
+    }
+  },
   "scripts": {
     "dev": "pnpm --filter web dev",
     "dev:isolated": "node scripts/dev-pilot-isolated-v1.mjs",

@@ -4077,6 +4077,19 @@ describe("POST /api/chat", () => {
     }
   });
 
+  it("uses provider-neutral language for NEAR AI stream errors", () => {
+    for (const [error, expected] of [
+      [{ status: 403 }, "configured model provider rejected server access"],
+      [{ status: 404 }, "selected model is unavailable from the configured provider"],
+      [{ status: 429 }, "configured model provider rate-limited this request"],
+      [new Error("provider failure"), "configured model provider couldn't finish this response"],
+    ] as const) {
+      const message = streamErrorMessage(error, false, "near-ai");
+      expect(message).toContain(expected);
+      expect(message).not.toContain("OpenRouter");
+    }
+  });
+
   it("enforces the fallback fixed-window demo limit", () => {
     let now = 1_000;
     const limiter = new FixedWindowRateLimiter(1, 10_000, () => now);

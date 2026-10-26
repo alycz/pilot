@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   friendlyBedrockModelName,
   modelChoiceGroups,
+  nearAiModelPrivacyLabel,
 } from "./model-picker";
 
 const openRouterModels = [
@@ -49,5 +50,28 @@ describe("modelChoiceGroups", () => {
 
   it("derives a friendly name without exposing configuration data beyond the model id", () => {
     expect(friendlyBedrockModelName("us.amazon.nova-lite-v1:0")).toBe("Amazon Nova Lite V1 0");
+  });
+
+  it("preserves and separates NEAR AI provider and privacy metadata", () => {
+    const nearAi = {
+      id: "deepseek-ai/DeepSeek-V3.1",
+      name: "DeepSeek V3.1",
+      description: "NEAR AI Cloud model with native tool support",
+      provider: "near-ai" as const,
+      privacy: {
+        tier: "confidential-tee" as const,
+        declaredBy: "operator-configuration" as const,
+        attestationVerified: false as const,
+        summary: "Inference is declared to use NEAR AI's own TEE fleet.",
+      },
+    };
+
+    expect(modelChoiceGroups([...openRouterModels, nearAi])).toEqual([
+      { id: "openrouter", label: "OpenRouter", models: openRouterModels },
+      { id: "near-ai", label: "NEAR AI", models: [nearAi] },
+    ]);
+    expect(nearAiModelPrivacyLabel(nearAi.privacy)).toBe(
+      "Confidential TEE · operator-declared · attestation not verified",
+    );
   });
 });

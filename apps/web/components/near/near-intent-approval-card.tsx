@@ -90,7 +90,9 @@ export function NearIntentApprovalCard({
             </p>
             <p className="mt-1 break-all font-mono">{review.approvalDigest}</p>
             <p className="mt-2 text-muted-foreground">
-              The digest commits to the displayed principal. Server wallet-session policy separately verifies that principal against the connected wallet account.
+              {provenance === "fixture"
+                ? "This local preview digest commits only to the displayed fixture rows. It is not a provider signature or executable approval."
+                : "The digest commits to the displayed principal. Server wallet-session policy separately verifies that principal against the connected wallet account."}
             </p>
           </div>
         ) : null}

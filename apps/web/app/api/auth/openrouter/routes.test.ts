@@ -827,6 +827,10 @@ describe("model and session routes", () => {
     delete process.env.DEMO_OPENROUTER_PAID_ADDONS_DISABLED;
     delete process.env.HARBOR_URL;
     delete process.env.HARBOR_API_KEY;
+    delete process.env.NEAR_AI_ENABLED;
+    delete process.env.NEAR_AI_API_KEY;
+    delete process.env.NEAR_AI_MODEL;
+    delete process.env.NEAR_AI_PRIVACY_TIER;
     rmSync(demoStateDirectory, { recursive: true, force: true });
   });
 
@@ -892,6 +896,70 @@ describe("model and session routes", () => {
       payload: { models: expect.any(Array) },
     });
     expect(oauthPayload.models).toHaveLength(2);
+  });
+
+  it("advertises only a ready tool-capable configured NEAR AI model without its key", async () => {
+    process.env.NEAR_AI_ENABLED = "1";
+    process.env.NEAR_AI_API_KEY = "server-only-near-ai-key";
+    process.env.NEAR_AI_MODEL = "z-ai/example-model";
+    process.env.NEAR_AI_PRIVACY_TIER = "incognito";
+    const wallet = walletFixture();
+    const binding = walletModelBinding(request("https://pilot.example/bind", {
+      cookies: { [WALLET_SESSION_COOKIE]: wallet.cookie },
+    }), wallet.session)!;
+    const oauthCookie = sealOpenRouterSession(createOpenRouterSession({
+      mode: "oauth",
+      model: "provider/paid-tools",
+      apiKey: "sk-or-test-only-key",
+    }, binding), SECRET);
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url;
+      if (url === "https://cloud-api.near.ai/v1/models") {
+        return Response.json({
+          data: [{
+            id: "z-ai/example-model",
+            supported_features: ["tools"],
+            supported_sampling_parameters: ["temperature"],
+            is_ready: true,
+          }],
+        });
+      }
+      return Response.json({
+        data: [{
+          id: "provider/paid-tools",
+          name: "Paid Tools",
+          supported_parameters: ["tools"],
+        }],
+      });
+    }));
+
+    const response = await models(request(
+      "https://pilot.example/api/auth/openrouter/models?mode=oauth",
+      {
+        cookies: {
+          [WALLET_SESSION_COOKIE]: wallet.cookie,
+          [OPENROUTER_SESSION_COOKIE]: oauthCookie,
+        },
+      },
+    ));
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.models).toContainEqual(expect.objectContaining({
+      id: "z-ai/example-model",
+      provider: "near-ai",
+      privacy: {
+        tier: "incognito",
+        declaredBy: "operator-configuration",
+        attestationVerified: false,
+        summary: expect.stringContaining("upstream model runs outside"),
+      },
+    }));
+    expect(JSON.stringify(payload)).not.toContain("server-only-near-ai-key");
   });
 
   it("persists demo selection but refuses a paid demo model", async () => {

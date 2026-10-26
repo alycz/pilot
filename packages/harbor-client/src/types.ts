@@ -9,12 +9,6 @@ import {
   MandateConstraintsSchema,
   MandateSchema,
   MerchantSchema,
-  Near1ClickAssetIdSchema,
-  Near1ClickBlockchainSchema,
-  Near1ClickDryQuoteResponseSchema,
-  Near1ClickQuoteHashSchema,
-  Near1ClickStatusResponseSchema,
-  Near1ClickTokenListSchema,
   NetworkSchema,
   PolicySchema,
   StrategyAuditEventSchema,
@@ -38,10 +32,6 @@ import type {
   ExecResult,
   Mandate,
   Merchant,
-  Near1ClickBlockchain,
-  Near1ClickDryQuoteResponse,
-  Near1ClickStatusResponse,
-  Near1ClickToken,
   Network,
   Policy,
   Strategy,
@@ -57,6 +47,18 @@ import type {
   Venue,
   ExecutionCapability,
 } from "@pilot/contracts";
+import {
+  Near1ClickAssetIdSchema,
+  Near1ClickBlockchainSchema,
+  Near1ClickDryQuoteResponseSchema,
+  Near1ClickQuoteHashSchema,
+  Near1ClickStatusResponseSchema,
+  Near1ClickTokenListSchema,
+  type Near1ClickBlockchain,
+  type Near1ClickDryQuoteResponse,
+  type Near1ClickStatusResponse,
+  type Near1ClickToken,
+} from "@pilot/contracts/near";
 import { z } from "zod";
 import { isValidClassicAddress } from "xrpl";
 import {

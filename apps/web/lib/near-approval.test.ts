@@ -10,9 +10,11 @@ function binding(
   input: Partial<NearApprovalBinding> = {},
 ): NearApprovalBinding {
   return {
-    version: "pilot-near-1click-approval-v1",
+    version: "pilot-near-1click-approval-v2",
     principal_id: "principal-near-review",
+    account_id: "alice.near",
     network: "near:mainnet",
+    idempotency_version: "pilot-near-idempotency-v1",
     idempotency_key: "attempt-near-review",
     policy_digest: "A".repeat(64),
     quote_id: "quote-near-review",
@@ -45,6 +47,11 @@ describe("NEAR approval review model", () => {
     expect(review.rows).toContainEqual({
       label: "Principal",
       value: "principal-near-review",
+      exact: true,
+    });
+    expect(review.rows).toContainEqual({
+      label: "Wallet account",
+      value: "alice.near",
       exact: true,
     });
     expect(review.rows.find((row) => row.label.startsWith("Provider deposit memo")))

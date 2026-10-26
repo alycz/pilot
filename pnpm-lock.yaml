@@ -271,6 +271,12 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@24.19.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.15)
 
+  packages/near-attempt-store:
+    dependencies:
+      '@pilot/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+
   packages/near-chain-signatures:
     dependencies:
       chainsig.js:

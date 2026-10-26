@@ -1,4 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("chainsig.js", () => {
+  throw new Error("the safe root entry must not load chainsig.js");
+});
 
 import * as api from "../src/index.js";
 
@@ -9,7 +13,6 @@ describe("public API", () => {
       "bindReviewedXrpPayment",
       "classifyNearSignatureStatus",
       "createNearXrpChainSignaturesAdapter",
-      "createOfficialNearXrpTestnetAdapter",
       "formatXrpSignatureRequest",
     ]);
   });

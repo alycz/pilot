@@ -56,35 +56,23 @@ reviewed field.
 
 ## Integration sketch
 
-Construct the official objects outside this package and pass only the XRP
-adapter's narrow structural surface:
+The dependency-heavy official adapter is an explicit opt-in subpath. Importing
+the package root does not load `chainsig.js` or its multichain dependency tree:
 
 ```ts
-import { chainAdapters, contracts } from "chainsig.js";
 import {
-  createNearXrpChainSignaturesAdapter,
-  NEAR_CHAIN_SIGNATURES_TESTNET,
-} from "@pilot/near-chain-signatures";
+  createOfficialNearXrpTestnetAdapter,
+} from "@pilot/near-chain-signatures/official";
 
-const adapter = createNearXrpChainSignaturesAdapter({
-  createOfficialXrp: (pinned) => {
-    const contract = new contracts.near.ChainSignatureContract({
-      networkId: pinned.nearNetwork,
-      contractId: pinned.contractId,
-    });
-    return new chainAdapters.xrp.XRP({
-      rpcUrl: pinned.xrpRpcUrl,
-      contract,
-    });
-  },
-});
+const adapter = createOfficialNearXrpTestnetAdapter();
 ```
 
-The package also exports `createOfficialNearXrpTestnetAdapter`, which implements
-this trusted factory with the exact `chainsig.js` 1.1.16 dependency and the
-package's pinned values. It deliberately narrows the official adapter to the
-reviewed preparation/finalization methods and does not expose generic signing or
-broadcast methods.
+The `./official` subpath implements the trusted factory with the exact
+`chainsig.js` 1.1.16 dependency and the package's pinned values. It deliberately
+narrows the official adapter to the reviewed preparation/finalization methods
+and does not expose generic signing or broadcast methods. Keep this subpath out
+of runtime bundles until the separate Chain Signatures execution gate is
+reviewed and enabled.
 
 The dependency and factory wiring do not make this a live/testnet-accepted
 signing path. Owner-wallet integration and external Testnet acceptance remain

@@ -66,9 +66,11 @@ const executableQuote = {
 };
 
 const approval: NearApprovalBinding = {
-  version: "pilot-near-1click-approval-v1",
+  version: "pilot-near-1click-approval-v2",
   principal_id: "principal-1",
+  account_id: "alice.near",
   network: "near:mainnet",
+  idempotency_version: "pilot-near-idempotency-v1",
   idempotency_key: "attempt-1",
   policy_digest: "A".repeat(64),
   quote_id: header.correlationId,
@@ -190,6 +192,7 @@ describe("NEAR approval and replay integrity", () => {
     const digest = await computeNearApprovalDigest(NearApprovalBindingSchema.parse(approval));
     const mutations: Array<[string, NearApprovalBinding]> = [
       ["principal", { ...approval, principal_id: "principal-2" }],
+      ["account", { ...approval, account_id: "mallory.near" }],
       ["idempotency", { ...approval, idempotency_key: "attempt-2" }],
       ["policy", { ...approval, policy_digest: "C".repeat(64) }],
       ["quote id", { ...approval, quote_id: "correlation-456" }],
@@ -214,16 +217,40 @@ describe("NEAR approval and replay integrity", () => {
       ...approval,
       provider_signature_verified: false,
     }).success).toBe(false);
+    expect(NearApprovalBindingSchema.safeParse({
+      ...approval,
+      idempotency_version: "pilot-near-idempotency-v2",
+    }).success).toBe(false);
   });
 
   it("keeps an unknown outcome non-retryable until reconciliation", async () => {
     const attempt = NearExecutionAttemptSchema.parse({
+      version: "pilot-near-execution-attempt-v1",
       attempt_id: "attempt-1",
       principal_id: approval.principal_id,
+      account_id: approval.account_id,
+      network: "near:mainnet",
+      idempotency_version: approval.idempotency_version,
       idempotency_key: approval.idempotency_key,
+      idempotency_request_digest: "D".repeat(64),
+      reservation_id: "reservation-1",
       approval_digest: await computeNearApprovalDigest(approval),
       quote_id: approval.quote_id,
       state: "unknown",
+      reconciliation: {
+        version: "pilot-near-reconciliation-v1",
+        outcome: "unknown",
+        attempt_id: "attempt-1",
+        principal_id: approval.principal_id,
+        account_id: approval.account_id,
+        network: "near:mainnet",
+        checked_at: "2026-11-02T11:59:00.000Z",
+        deposit_address: approval.deposit_address,
+        deposit_memo: approval.deposit_memo,
+        reason: "not_found",
+        safe_to_resubmit: false,
+      },
+      created_at: "2026-11-02T11:58:00.000Z",
       updated_at: "2026-11-02T11:59:00.000Z",
       unknown_since: "2026-11-02T11:59:00.000Z",
     });

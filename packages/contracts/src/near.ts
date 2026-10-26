@@ -27,6 +27,16 @@ export const Near1ClickQuoteHashSchema = z
   .regex(/^[1-9A-HJ-NP-Za-km-z]+$/);
 export type Near1ClickQuoteHash = z.infer<typeof Near1ClickQuoteHashSchema>;
 
+export const NearAccountIdSchema = z
+  .string()
+  .min(2)
+  .max(64)
+  .regex(/^[a-z0-9._-]+$/);
+export type NearAccountId = z.infer<typeof NearAccountIdSchema>;
+
+export const NearIdempotencyVersionSchema = z.literal("pilot-near-idempotency-v1");
+export type NearIdempotencyVersion = z.infer<typeof NearIdempotencyVersionSchema>;
+
 /**
  * 1Click asset identifiers are opaque provider identifiers, not ticker symbols.
  * Callers must select the exact current value returned by GET /v0/tokens.
@@ -237,11 +247,57 @@ export const Near1ClickStatusResponseSchema = z
   .strict();
 export type Near1ClickStatusResponse = z.infer<typeof Near1ClickStatusResponseSchema>;
 
+export const NearAuthorizedOperationSchema = z.enum([
+  "near.intents.tokens",
+  /** The current Harbor operation is contractually dry-only. */
+  "near.intents.quote",
+  "near.intents.status",
+  "near.intents.approval.review",
+]);
+export type NearAuthorizedOperation = z.infer<typeof NearAuthorizedOperationSchema>;
+
+export const NearPrincipalAuthorizationSchema = z
+  .object({
+    version: z.literal("pilot-near-principal-authorization-v1"),
+    authorization_id: SafeIdentifierSchema,
+    principal_id: SafeIdentifierSchema,
+    account_id: NearAccountIdSchema,
+    network: z.literal("near:mainnet"),
+    operations: z.array(NearAuthorizedOperationSchema).min(1).max(4)
+      .refine((operations) => new Set(operations).size === operations.length, {
+        message: "authorized operations must be unique",
+      }),
+    issued_at: DateTimeSchema,
+    expires_at: DateTimeSchema,
+  })
+  .strict()
+  .refine((authorization) =>
+    Date.parse(authorization.expires_at) > Date.parse(authorization.issued_at), {
+    message: "principal authorization must expire after issuance",
+    path: ["expires_at"],
+  });
+export type NearPrincipalAuthorization = z.infer<typeof NearPrincipalAuthorizationSchema>;
+
+export const NearIdempotencyBindingSchema = z
+  .object({
+    version: NearIdempotencyVersionSchema,
+    principal_id: SafeIdentifierSchema,
+    account_id: NearAccountIdSchema,
+    network: z.literal("near:mainnet"),
+    idempotency_key: SafeIdentifierSchema,
+    request_digest: Sha256DigestSchema,
+    created_at: DateTimeSchema,
+  })
+  .strict();
+export type NearIdempotencyBinding = z.infer<typeof NearIdempotencyBindingSchema>;
+
 export const NearApprovalBindingSchema = z
   .object({
-    version: z.literal("pilot-near-1click-approval-v1"),
+    version: z.literal("pilot-near-1click-approval-v2"),
     principal_id: SafeIdentifierSchema,
+    account_id: NearAccountIdSchema,
     network: z.literal("near:mainnet"),
+    idempotency_version: NearIdempotencyVersionSchema,
     idempotency_key: SafeIdentifierSchema,
     policy_digest: Sha256DigestSchema,
     quote_id: SafeIdentifierSchema,
@@ -280,6 +336,9 @@ export const NearApprovalBindingSchema = z
   });
 export type NearApprovalBinding = z.infer<typeof NearApprovalBindingSchema>;
 
+/** Explicit domain separation keeps this digest distinct from other canonical payload hashes. */
+export const NEAR_APPROVAL_DIGEST_DOMAIN = "pilot.near-intents.approval.v2" as const;
+
 function canonicalJson(value: unknown): string {
   if (value === null || typeof value === "boolean" || typeof value === "string") {
     return JSON.stringify(value);
@@ -304,11 +363,255 @@ export function canonicalNearApprovalJson(value: NearApprovalBinding): string {
 export async function computeNearApprovalDigest(value: NearApprovalBinding): Promise<string> {
   const digest = await globalThis.crypto.subtle.digest(
     "SHA-256",
-    new TextEncoder().encode(canonicalNearApprovalJson(value)),
+    new TextEncoder().encode(
+      `${NEAR_APPROVAL_DIGEST_DOMAIN}\0${canonicalNearApprovalJson(value)}`,
+    ),
   );
   return Array.from(new Uint8Array(digest), (byte) =>
     byte.toString(16).padStart(2, "0")).join("").toUpperCase();
 }
+
+export const NearBudgetReservationStateSchema = z.enum([
+  "reserved",
+  "committed",
+  "outcome_unknown",
+  "released",
+]);
+export type NearBudgetReservationState = z.infer<typeof NearBudgetReservationStateSchema>;
+
+export const NearBudgetReleaseReasonSchema = z.enum([
+  "cancelled_before_dispatch",
+  "provider_refunded",
+  "provider_failed_after_reconciliation",
+]);
+export type NearBudgetReleaseReason = z.infer<typeof NearBudgetReleaseReasonSchema>;
+
+const NearBudgetReservationBaseSchema = z.object({
+  version: z.literal("pilot-near-budget-reservation-v1"),
+  reservation_id: SafeIdentifierSchema,
+  principal_id: SafeIdentifierSchema,
+  account_id: NearAccountIdSchema,
+  network: z.literal("near:mainnet"),
+  idempotency_version: NearIdempotencyVersionSchema,
+  idempotency_key: SafeIdentifierSchema,
+  request_digest: Sha256DigestSchema,
+  policy_digest: Sha256DigestSchema,
+  asset_id: Near1ClickAssetIdSchema,
+  amount_atomic: AtomicAmountSchema,
+  /** Monotonic compare-and-swap revision for durable reservation updates. */
+  revision: z.number().int().positive(),
+  created_at: DateTimeSchema,
+  updated_at: DateTimeSchema,
+});
+
+export const NearBudgetReservationSchema = z
+  .discriminatedUnion("state", [
+    NearBudgetReservationBaseSchema.extend({
+      state: z.literal("reserved"),
+      counts_against_budget: z.literal(true),
+    }).strict(),
+    NearBudgetReservationBaseSchema.extend({
+      state: z.literal("committed"),
+      counts_against_budget: z.literal(true),
+      committed_at: DateTimeSchema,
+    }).strict(),
+    NearBudgetReservationBaseSchema.extend({
+      state: z.literal("outcome_unknown"),
+      counts_against_budget: z.literal(true),
+      unknown_since: DateTimeSchema,
+    }).strict(),
+    NearBudgetReservationBaseSchema.extend({
+      state: z.literal("released"),
+      counts_against_budget: z.literal(false),
+      released_at: DateTimeSchema,
+      release_reason: NearBudgetReleaseReasonSchema,
+    }).strict(),
+  ])
+  .superRefine((reservation, context) => {
+    if (Date.parse(reservation.updated_at) < Date.parse(reservation.created_at)) {
+      context.addIssue({
+        code: "custom",
+        path: ["updated_at"],
+        message: "reservation cannot be updated before creation",
+      });
+    }
+  });
+export type NearBudgetReservation = z.infer<typeof NearBudgetReservationSchema>;
+
+export const NearReconciliationUnknownReasonSchema = z.enum([
+  "timeout",
+  "transport_error",
+  "not_found",
+  "invalid_response",
+  "unavailable",
+]);
+export type NearReconciliationUnknownReason = z.infer<typeof NearReconciliationUnknownReasonSchema>;
+
+const Near1ClickPendingStatusSchema = z.enum([
+  "KNOWN_DEPOSIT_TX",
+  "PENDING_DEPOSIT",
+  "INCOMPLETE_DEPOSIT",
+  "PROCESSING",
+]);
+const Near1ClickTerminalStatusSchema = z.enum(["SUCCESS", "REFUNDED", "FAILED"]);
+const NearReconciliationEvidenceBaseSchema = z.object({
+  version: z.literal("pilot-near-reconciliation-v1"),
+  attempt_id: SafeIdentifierSchema,
+  principal_id: SafeIdentifierSchema,
+  account_id: NearAccountIdSchema,
+  network: z.literal("near:mainnet"),
+  checked_at: DateTimeSchema,
+  deposit_address: ProviderStringSchema,
+  deposit_memo: ProviderStringSchema.optional(),
+  evidence_digest: Sha256DigestSchema.optional(),
+  /** Provider uncertainty never proves that a second submission is safe. */
+  safe_to_resubmit: z.literal(false),
+});
+
+export const NearReconciliationEvidenceSchema = z.discriminatedUnion("outcome", [
+  NearReconciliationEvidenceBaseSchema.extend({
+    outcome: z.literal("pending"),
+    provider_status: Near1ClickPendingStatusSchema,
+  }).strict(),
+  NearReconciliationEvidenceBaseSchema.extend({
+    outcome: z.literal("terminal"),
+    provider_status: Near1ClickTerminalStatusSchema,
+  }).strict(),
+  NearReconciliationEvidenceBaseSchema.extend({
+    outcome: z.literal("unknown"),
+    reason: NearReconciliationUnknownReasonSchema,
+  }).strict(),
+]);
+export type NearReconciliationEvidence = z.infer<typeof NearReconciliationEvidenceSchema>;
+
+/**
+ * Persistence adapters must atomically compare expected_state/revision before
+ * storing next. Parsing validates the transition but does not implement CAS.
+ */
+export const NearBudgetReservationTransitionSchema = z
+  .object({
+    version: z.literal("pilot-near-budget-reservation-transition-v1"),
+    reservation_id: SafeIdentifierSchema,
+    principal_id: SafeIdentifierSchema,
+    account_id: NearAccountIdSchema,
+    network: z.literal("near:mainnet"),
+    expected_state: NearBudgetReservationStateSchema,
+    expected_revision: z.number().int().nonnegative(),
+    next: NearBudgetReservationSchema,
+    reconciliation: NearReconciliationEvidenceSchema.optional(),
+  })
+  .strict()
+  .superRefine((transition, context) => {
+    const identityMatches = transition.next.reservation_id === transition.reservation_id
+      && transition.next.principal_id === transition.principal_id
+      && transition.next.account_id === transition.account_id
+      && transition.next.network === transition.network;
+    if (!identityMatches) {
+      context.addIssue({
+        code: "custom",
+        path: ["next"],
+        message: "reservation transition must preserve principal, account, network, and reservation id",
+      });
+    }
+    if (transition.next.revision !== transition.expected_revision + 1) {
+      context.addIssue({
+        code: "custom",
+        path: ["next", "revision"],
+        message: "reservation transition must increment the expected revision exactly once",
+      });
+    }
+
+    const allowedNextStates: Record<NearBudgetReservationState, readonly NearBudgetReservationState[]> = {
+      reserved: ["committed", "outcome_unknown", "released"],
+      // Once an observed deposit or terminal success commits budget, later
+      // contradictory provider observations must be investigated without
+      // releasing or reusing that budget.
+      committed: [],
+      outcome_unknown: ["committed", "outcome_unknown", "released"],
+      released: [],
+    };
+    if (!allowedNextStates[transition.expected_state].includes(transition.next.state)) {
+      context.addIssue({
+        code: "custom",
+        path: ["next", "state"],
+        message: `invalid reservation transition from ${transition.expected_state} to ${transition.next.state}`,
+      });
+    }
+
+    const reconciliationIdentityMatches = !transition.reconciliation
+      || (
+        transition.reconciliation.principal_id === transition.principal_id
+        && transition.reconciliation.account_id === transition.account_id
+        && transition.reconciliation.network === transition.network
+      );
+    if (!reconciliationIdentityMatches) {
+      context.addIssue({
+        code: "custom",
+        path: ["reconciliation"],
+        message: "reservation reconciliation must match principal, account, and network",
+      });
+    }
+
+    if (
+      transition.next.state === "outcome_unknown"
+      && transition.reconciliation?.outcome !== "unknown"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["reconciliation"],
+        message: "an unknown reservation requires explicit unknown reconciliation evidence",
+      });
+    }
+    if (transition.next.state === "committed") {
+      const hasTerminalSuccess = transition.reconciliation?.outcome === "terminal"
+        && transition.reconciliation.provider_status === "SUCCESS";
+      const hasObservedDeposit = transition.reconciliation?.outcome === "pending"
+        && ["KNOWN_DEPOSIT_TX", "INCOMPLETE_DEPOSIT", "PROCESSING"]
+          .includes(transition.reconciliation.provider_status);
+      if (!hasTerminalSuccess && !hasObservedDeposit) {
+        context.addIssue({
+          code: "custom",
+          path: ["reconciliation"],
+          message: "committing a reservation requires observed-deposit or terminal-success evidence",
+        });
+      }
+      if (transition.expected_state === "outcome_unknown" && !hasTerminalSuccess) {
+        context.addIssue({
+          code: "custom",
+          path: ["reconciliation"],
+          message: "an unknown reservation becomes committed only after terminal-success reconciliation",
+        });
+      }
+    }
+    if (transition.next.state === "released") {
+      if (
+        transition.next.release_reason === "cancelled_before_dispatch"
+        && (transition.expected_state !== "reserved" || transition.reconciliation !== undefined)
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["next", "release_reason"],
+          message: "pre-dispatch cancellation can release only a reserved, unreconciled reservation",
+        });
+      }
+      const requiredTerminalStatus = transition.next.release_reason === "provider_refunded"
+        ? "REFUNDED"
+        : transition.next.release_reason === "provider_failed_after_reconciliation"
+          ? "FAILED"
+          : undefined;
+      if (requiredTerminalStatus && (
+        transition.reconciliation?.outcome !== "terminal"
+        || transition.reconciliation.provider_status !== requiredTerminalStatus
+      )) {
+        context.addIssue({
+          code: "custom",
+          path: ["reconciliation"],
+          message: `${transition.next.release_reason} requires matching terminal reconciliation evidence`,
+        });
+      }
+    }
+  });
+export type NearBudgetReservationTransition = z.infer<typeof NearBudgetReservationTransitionSchema>;
 
 export const NearExecutionAttemptStateSchema = z.enum([
   "quoted",
@@ -326,18 +629,33 @@ export type NearExecutionAttemptState = z.infer<typeof NearExecutionAttemptState
 
 export const NearExecutionAttemptSchema = z
   .object({
+    version: z.literal("pilot-near-execution-attempt-v1"),
     attempt_id: SafeIdentifierSchema,
     principal_id: SafeIdentifierSchema,
+    account_id: NearAccountIdSchema,
+    network: z.literal("near:mainnet"),
+    idempotency_version: NearIdempotencyVersionSchema,
     idempotency_key: SafeIdentifierSchema,
+    idempotency_request_digest: Sha256DigestSchema,
+    reservation_id: SafeIdentifierSchema,
     approval_digest: Sha256DigestSchema,
     quote_id: SafeIdentifierSchema,
     state: NearExecutionAttemptStateSchema,
     provider_status: Near1ClickProviderStatusSchema.optional(),
+    reconciliation: NearReconciliationEvidenceSchema.optional(),
+    created_at: DateTimeSchema,
     updated_at: DateTimeSchema,
     unknown_since: DateTimeSchema.optional(),
   })
   .strict()
   .superRefine((attempt, context) => {
+    if (Date.parse(attempt.updated_at) < Date.parse(attempt.created_at)) {
+      context.addIssue({
+        code: "custom",
+        path: ["updated_at"],
+        message: "attempt cannot be updated before creation",
+      });
+    }
     if ((attempt.state === "unknown") !== (attempt.unknown_since !== undefined)) {
       context.addIssue({
         code: "custom",
@@ -358,6 +676,47 @@ export const NearExecutionAttemptSchema = z
         path: ["provider_status"],
         message: `terminal ${attempt.state} requires provider status ${terminalStatus}`,
       });
+    }
+    if (attempt.state === "unknown" && attempt.reconciliation?.outcome !== "unknown") {
+      context.addIssue({
+        code: "custom",
+        path: ["reconciliation"],
+        message: "unknown attempts require explicit unknown reconciliation evidence",
+      });
+    }
+    if (terminalStatus && (
+      attempt.reconciliation?.outcome !== "terminal"
+      || attempt.reconciliation.provider_status !== terminalStatus
+    )) {
+      context.addIssue({
+        code: "custom",
+        path: ["reconciliation"],
+        message: `terminal ${attempt.state} requires matching terminal reconciliation evidence`,
+      });
+    }
+    if (attempt.reconciliation) {
+      const identityMatches = attempt.reconciliation.attempt_id === attempt.attempt_id
+        && attempt.reconciliation.principal_id === attempt.principal_id
+        && attempt.reconciliation.account_id === attempt.account_id
+        && attempt.reconciliation.network === attempt.network;
+      if (!identityMatches) {
+        context.addIssue({
+          code: "custom",
+          path: ["reconciliation"],
+          message: "reconciliation evidence must match attempt principal, account, and network",
+        });
+      }
+      if (
+        "provider_status" in attempt.reconciliation
+        && attempt.provider_status !== undefined
+        && attempt.reconciliation.provider_status !== attempt.provider_status
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["provider_status"],
+          message: "attempt and reconciliation provider statuses must match",
+        });
+      }
     }
   });
 export type NearExecutionAttempt = z.infer<typeof NearExecutionAttemptSchema>;
@@ -382,7 +741,7 @@ export const NearWalletConnectionSchema = z
   .object({
     connection_id: SafeIdentifierSchema,
     provider_id: SafeIdentifierSchema,
-    account_id: z.string().min(2).max(64).regex(/^[a-z0-9._-]+$/),
+    account_id: NearAccountIdSchema,
     network: z.enum(["near:mainnet", "near:testnet"]),
     connected_at: DateTimeSchema,
     capabilities: z.object({

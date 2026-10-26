@@ -1,5 +1,4 @@
 export { createNearXrpChainSignaturesAdapter } from "./adapter.js";
-export { createOfficialNearXrpTestnetAdapter } from "./official.js";
 export { bindReviewedXrpPayment, formatXrpSignatureRequest } from "./request.js";
 export { classifyNearSignatureStatus } from "./status.js";
 export { NEAR_CHAIN_SIGNATURES_TESTNET } from "./types.js";

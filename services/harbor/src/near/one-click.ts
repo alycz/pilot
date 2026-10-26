@@ -8,6 +8,8 @@ import { z } from "zod";
 const ONE_CLICK_ORIGIN = "https://1click.chaindefuser.com";
 const DEFAULT_TIMEOUT_MS = 8_000;
 const DEFAULT_MAX_RESPONSE_BYTES = 1_048_576;
+const DEFAULT_MAX_JSON_DEPTH = 64;
+const DEFAULT_MAX_JSON_NODES = 100_000;
 
 const PrintableTextSchema = z.string().trim().min(1).max(512)
   .regex(/^[\x21-\x7e]+$/, "must contain only visible ASCII characters");
@@ -171,7 +173,7 @@ export class OneClickClientError extends Error {
   constructor(
     readonly code: "EXECUTION_DISABLED" | "HTTP_ERROR" | "INVALID_RESPONSE" |
       "INVALID_SIGNATURE" | "REQUEST_MISMATCH" | "RESPONSE_TOO_LARGE" | "TIMEOUT" |
-      "UNKNOWN_OUTCOME",
+      "UNKNOWN_OUTCOME" | "RESPONSE_TOO_COMPLEX",
     message: string,
   ) {
     super(message);
@@ -187,6 +189,54 @@ function integerOption(value: number | undefined, fallback: number, label: strin
   const resolved = value ?? fallback;
   if (!Number.isSafeInteger(resolved) || resolved <= 0) throw new RangeError(`${label} must be a positive safe integer`);
   return resolved;
+}
+
+/**
+ * Bound work performed after JSON.parse but before recursive provider
+ * canonicalization or schema validation. JSON values cannot contain cycles,
+ * so an explicit stack provides deterministic limits without risking the JS
+ * call stack on attacker-controlled nesting.
+ */
+function assertBoundedJsonComplexity(value: unknown): void {
+  const pending: Array<{ value: unknown; depth: number }> = [{ value, depth: 0 }];
+  let discoveredNodes = 1;
+
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current) break;
+    if (current.depth > DEFAULT_MAX_JSON_DEPTH) {
+      throw new OneClickClientError(
+        "RESPONSE_TOO_COMPLEX",
+        "NEAR Intents response exceeded the configured JSON depth bound",
+      );
+    }
+
+    let children: unknown[];
+    if (Array.isArray(current.value)) {
+      children = current.value;
+    } else if (current.value !== null && typeof current.value === "object") {
+      children = Object.values(current.value as Record<string, unknown>);
+    } else {
+      continue;
+    }
+
+    if (children.length > 0 && current.depth >= DEFAULT_MAX_JSON_DEPTH) {
+      throw new OneClickClientError(
+        "RESPONSE_TOO_COMPLEX",
+        "NEAR Intents response exceeded the configured JSON depth bound",
+      );
+    }
+    if (children.length > DEFAULT_MAX_JSON_NODES - discoveredNodes) {
+      throw new OneClickClientError(
+        "RESPONSE_TOO_COMPLEX",
+        "NEAR Intents response exceeded the configured JSON node bound",
+      );
+    }
+    discoveredNodes += children.length;
+    for (const child of children) {
+      pending.push({ value: child, depth: current.depth + 1 });
+    }
+  }
 }
 
 async function readBoundedJson(response: Response, maxBytes: number): Promise<unknown> {
@@ -221,11 +271,14 @@ async function readBoundedJson(response: Response, maxBytes: number): Promise<un
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
+  let parsed: unknown;
   try {
-    return JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes));
+    parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes));
   } catch {
     throw new OneClickClientError("INVALID_RESPONSE", "NEAR Intents returned invalid JSON");
   }
+  assertBoundedJsonComplexity(parsed);
+  return parsed;
 }
 
 function assertQuoteMatchesRequest(response: OneClickQuoteResponse, request: OneClickQuoteRequest): void {

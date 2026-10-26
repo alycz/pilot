@@ -51,6 +51,10 @@ function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   });
 }
 
+function rawJsonResponse(body: string): Response {
+  return new Response(body, { headers: { "content-type": "application/json" } });
+}
+
 describe("NEAR Intents 1Click client", () => {
   it("uses the pinned endpoint, rejects redirects, and verifies dry quotes before returning them", async () => {
     const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -202,6 +206,38 @@ describe("NEAR Intents 1Click client", () => {
 
     await expect(client.tokens()).rejects.toMatchObject({
       code: "TIMEOUT",
+    });
+  });
+
+  it("rejects deeply nested quote and status JSON before signature canonicalization", async () => {
+    const deeplyNestedJson = `${"[".repeat(66)}0${"]".repeat(66)}`;
+    const verifier = vi.fn(() => true);
+    const quoteClient = createOneClickClient({
+      fetch: async () => rawJsonResponse(deeplyNestedJson),
+      verifyQuoteSignature: verifier,
+    });
+    const statusClient = createOneClickClient({
+      fetch: async () => rawJsonResponse(deeplyNestedJson),
+      verifyQuoteSignature: verifier,
+    });
+
+    await expect(quoteClient.quote(request)).rejects.toMatchObject({
+      code: "RESPONSE_TOO_COMPLEX",
+    });
+    await expect(statusClient.status({ depositAddress: "deposit.near" })).rejects.toMatchObject({
+      code: "RESPONSE_TOO_COMPLEX",
+    });
+    expect(verifier).not.toHaveBeenCalled();
+  });
+
+  it("rejects excessive token JSON nodes before schema validation", async () => {
+    const tooManyNodesJson = `[${"0,".repeat(100_000)}0]`;
+    const client = createOneClickClient({
+      fetch: async () => rawJsonResponse(tooManyNodesJson),
+    });
+
+    await expect(client.tokens()).rejects.toMatchObject({
+      code: "RESPONSE_TOO_COMPLEX",
     });
   });
 

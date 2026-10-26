@@ -16,9 +16,11 @@ function envelope(
   input: Partial<NearIntentsApprovalEnvelope> = {},
 ): NearIntentsApprovalEnvelope {
   return {
-    version: "pilot-near-1click-approval-v1",
+    version: "pilot-near-1click-approval-v2",
     principal_id: "principal-near-0001",
+    account_id: "alice.near",
     network: "near:mainnet",
+    idempotency_version: "pilot-near-idempotency-v1",
     idempotency_key: "intent-attempt-0001",
     policy_digest: "A".repeat(64),
     quote_id: "quote-0001",
@@ -78,6 +80,7 @@ describe("NEAR Intents approval binding", () => {
 
   it.each([
     ["amount", { amount_in: "1000001" }],
+    ["wallet account", { account_id: "mallory.near" }],
     ["input asset", { origin_asset: "nep141:different.example" }],
     ["output asset", { destination_asset: "nep141:different.example" }],
     ["recipient", { recipient: "mallory.near" }],
@@ -143,6 +146,20 @@ describe("guarded NEAR wallet facade", () => {
     });
     await wallet.connect("near:testnet");
     const reviewed = envelope();
+    await expect(wallet.signApproval({
+      envelope: reviewed,
+      approvalDigest: await digestNearIntentsApproval(reviewed),
+    })).rejects.toMatchObject({ code: "NEAR_SIGNATURE_SCOPE_MISMATCH" });
+    expect(walletAdapter.signApproval).not.toHaveBeenCalled();
+  });
+
+  it("does not sign another wallet account's approval", async () => {
+    const walletAdapter = adapter();
+    const wallet = createNearWallet(walletAdapter, {
+      policy: { mode: "owner-approval", mainnet_execution_enabled: true },
+    });
+    await wallet.connect("near:mainnet");
+    const reviewed = envelope({ account_id: "mallory.near" });
     await expect(wallet.signApproval({
       envelope: reviewed,
       approvalDigest: await digestNearIntentsApproval(reviewed),

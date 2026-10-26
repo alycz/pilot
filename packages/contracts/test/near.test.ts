@@ -1,15 +1,22 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canonicalNearApprovalJson,
   computeNearApprovalDigest,
+  NEAR_APPROVAL_DIGEST_DOMAIN,
   Near1ClickDryQuoteRequestSchema,
   Near1ClickDryQuoteResponseSchema,
   Near1ClickExecutableQuoteResponseSchema,
   Near1ClickProviderStatusSchema,
   Near1ClickTokenSchema,
   NearApprovalBindingSchema,
+  NearBudgetReservationSchema,
+  NearBudgetReservationTransitionSchema,
   NearExecutionAttemptSchema,
   NearExecutionReplayDecisionSchema,
+  NearIdempotencyBindingSchema,
+  NearPrincipalAuthorizationSchema,
+  NearReconciliationEvidenceSchema,
   NearWalletExecutionPolicySchema,
   type NearApprovalBinding,
 } from "../src/near";
@@ -43,9 +50,11 @@ const responseHeader = {
 };
 
 const approval: NearApprovalBinding = {
-  version: "pilot-near-1click-approval-v1",
+  version: "pilot-near-1click-approval-v2",
   principal_id: "principal-1",
+  account_id: "alice.near",
   network: "near:mainnet",
+  idempotency_version: "pilot-near-idempotency-v1",
   idempotency_key: "attempt-1",
   policy_digest: "A".repeat(64),
   quote_id: "quote-123",
@@ -140,9 +149,26 @@ describe("NEAR approval and replay binding", () => {
   it("binds every field and deposit memo presence into a stable digest", async () => {
     const digest = await computeNearApprovalDigest(approval);
     expect(digest).toMatch(/^[A-F0-9]{64}$/);
+    const domainSeparated = await globalThis.crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(
+        `${NEAR_APPROVAL_DIGEST_DOMAIN}\0${canonicalNearApprovalJson(approval)}`,
+      ),
+    );
+    expect(digest).toBe(Array.from(new Uint8Array(domainSeparated), (byte) =>
+      byte.toString(16).padStart(2, "0")).join("").toUpperCase());
     expect(await computeNearApprovalDigest({ ...approval })).toBe(digest);
+    expect(await computeNearApprovalDigest({ ...approval, account_id: "bob.near" })).not.toBe(digest);
     expect(await computeNearApprovalDigest({ ...approval, recipient: "bob.near" })).not.toBe(digest);
     expect(await computeNearApprovalDigest({ ...approval, deposit_memo: "12345" })).not.toBe(digest);
+    expect(NearApprovalBindingSchema.safeParse({
+      ...approval,
+      version: "pilot-near-1click-approval-v1",
+    }).success).toBe(false);
+    expect(NearApprovalBindingSchema.safeParse({
+      ...approval,
+      idempotency_version: "pilot-near-idempotency-v2",
+    }).success).toBe(false);
   });
 
   it("expires Pilot approval no later than the provider refund deadline", () => {
@@ -154,18 +180,37 @@ describe("NEAR approval and replay binding", () => {
 
   it("requires durable uncertainty evidence and exposes no retry action", async () => {
     const base = {
+      version: "pilot-near-execution-attempt-v1" as const,
       attempt_id: "attempt-1",
       principal_id: "principal-1",
+      account_id: "alice.near",
+      network: "near:mainnet" as const,
+      idempotency_version: "pilot-near-idempotency-v1" as const,
       idempotency_key: "attempt-1",
+      idempotency_request_digest: "B".repeat(64),
+      reservation_id: "reservation-1",
       approval_digest: await computeNearApprovalDigest(approval),
       quote_id: "quote-123",
       state: "unknown" as const,
+      created_at: "2026-11-02T11:58:00.000Z",
       updated_at: "2026-11-02T11:59:00.000Z",
     };
     expect(NearExecutionAttemptSchema.safeParse(base).success).toBe(false);
     const attempt = NearExecutionAttemptSchema.parse({
       ...base,
       unknown_since: "2026-11-02T11:59:00.000Z",
+      reconciliation: {
+        version: "pilot-near-reconciliation-v1",
+        outcome: "unknown",
+        attempt_id: "attempt-1",
+        principal_id: "principal-1",
+        account_id: "alice.near",
+        network: "near:mainnet",
+        checked_at: "2026-11-02T11:59:00.000Z",
+        deposit_address: "deposit.near",
+        reason: "not_found",
+        safe_to_resubmit: false,
+      },
     });
     expect(NearExecutionReplayDecisionSchema.parse({
       action: "blocked_unknown",
@@ -174,6 +219,282 @@ describe("NEAR approval and replay binding", () => {
     }).action).toBe("blocked_unknown");
     expect(NearExecutionReplayDecisionSchema.options.every((option) =>
       option.safeParse({ action: "retry", attempt }).success === false)).toBe(true);
+    expect(NearExecutionAttemptSchema.safeParse({
+      ...attempt,
+      reconciliation: {
+        ...attempt.reconciliation,
+        account_id: "mallory.near",
+      },
+    }).success).toBe(false);
+  });
+
+  it("binds principal authorization and idempotency to one account", () => {
+    expect(NearPrincipalAuthorizationSchema.safeParse({
+      version: "pilot-near-principal-authorization-v1",
+      authorization_id: "authorization-1",
+      principal_id: "principal-1",
+      account_id: "alice.near",
+      network: "near:mainnet",
+      operations: ["near.intents.tokens", "near.intents.quote"],
+      issued_at: "2026-11-02T11:00:00.000Z",
+      expires_at: "2026-11-02T12:00:00.000Z",
+    }).success).toBe(true);
+    expect(NearPrincipalAuthorizationSchema.safeParse({
+      version: "pilot-near-principal-authorization-v1",
+      authorization_id: "authorization-1",
+      principal_id: "principal-1",
+      account_id: "alice.near",
+      network: "near:mainnet",
+      operations: ["near.intents.tokens", "near.intents.tokens"],
+      issued_at: "2026-11-02T11:00:00.000Z",
+      expires_at: "2026-11-02T12:00:00.000Z",
+    }).success).toBe(false);
+    expect(NearPrincipalAuthorizationSchema.safeParse({
+      version: "pilot-near-principal-authorization-v1",
+      authorization_id: "authorization-1",
+      principal_id: "principal-1",
+      account_id: "alice.near",
+      network: "near:mainnet",
+      operations: ["near.intents.quote"],
+      issued_at: "2026-11-02T12:00:00.000Z",
+      expires_at: "2026-11-02T11:00:00.000Z",
+    }).success).toBe(false);
+    expect(NearIdempotencyBindingSchema.safeParse({
+      version: "pilot-near-idempotency-v1",
+      principal_id: "principal-1",
+      account_id: "alice.near",
+      network: "near:mainnet",
+      idempotency_key: "attempt-1",
+      request_digest: "B".repeat(64),
+      created_at: "2026-11-02T11:58:00.000Z",
+    }).success).toBe(true);
+  });
+
+  it("holds an atomic budget reservation while outcome is unknown", () => {
+    const base = {
+      version: "pilot-near-budget-reservation-v1" as const,
+      reservation_id: "reservation-1",
+      principal_id: "principal-1",
+      account_id: "alice.near",
+      network: "near:mainnet" as const,
+      idempotency_version: "pilot-near-idempotency-v1" as const,
+      idempotency_key: "attempt-1",
+      request_digest: "B".repeat(64),
+      policy_digest: "A".repeat(64),
+      asset_id: "nep141:wrap.near",
+      amount_atomic: "1000000000000000000000000",
+      revision: 2,
+      created_at: "2026-11-02T11:58:00.000Z",
+      updated_at: "2026-11-02T11:59:00.000Z",
+    };
+    const unknownReservation = NearBudgetReservationSchema.parse({
+      ...base,
+      state: "outcome_unknown",
+      counts_against_budget: true,
+      unknown_since: "2026-11-02T11:59:00.000Z",
+    });
+    expect(unknownReservation.counts_against_budget).toBe(true);
+    expect(NearBudgetReservationTransitionSchema.safeParse({
+      version: "pilot-near-budget-reservation-transition-v1",
+      reservation_id: base.reservation_id,
+      principal_id: base.principal_id,
+      account_id: base.account_id,
+      network: base.network,
+      expected_state: "committed",
+      expected_revision: 1,
+      next: unknownReservation,
+      reconciliation: {
+        version: "pilot-near-reconciliation-v1",
+        outcome: "unknown",
+        attempt_id: "attempt-1",
+        principal_id: base.principal_id,
+        account_id: base.account_id,
+        network: base.network,
+        checked_at: base.updated_at,
+        deposit_address: "deposit.near",
+        reason: "timeout",
+        safe_to_resubmit: false,
+      },
+    }).success).toBe(false);
+    expect(NearBudgetReservationTransitionSchema.safeParse({
+      version: "pilot-near-budget-reservation-transition-v1",
+      reservation_id: base.reservation_id,
+      principal_id: base.principal_id,
+      account_id: base.account_id,
+      network: base.network,
+      expected_state: "committed",
+      expected_revision: 2,
+      next: unknownReservation,
+      reconciliation: {
+        version: "pilot-near-reconciliation-v1",
+        outcome: "unknown",
+        attempt_id: "attempt-1",
+        principal_id: base.principal_id,
+        account_id: base.account_id,
+        network: base.network,
+        checked_at: base.updated_at,
+        deposit_address: "deposit.near",
+        reason: "timeout",
+        safe_to_resubmit: false,
+      },
+    }).success).toBe(false);
+    expect(NearBudgetReservationTransitionSchema.safeParse({
+      version: "pilot-near-budget-reservation-transition-v1",
+      reservation_id: base.reservation_id,
+      principal_id: base.principal_id,
+      account_id: base.account_id,
+      network: base.network,
+      expected_state: "outcome_unknown",
+      expected_revision: 1,
+      next: {
+        ...base,
+        state: "released",
+        counts_against_budget: false,
+        released_at: "2026-11-02T12:01:00.000Z",
+        release_reason: "provider_refunded",
+      },
+    }).success).toBe(false);
+    expect(NearBudgetReservationSchema.safeParse({
+      ...base,
+      state: "outcome_unknown",
+      counts_against_budget: false,
+      unknown_since: "2026-11-02T11:59:00.000Z",
+    }).success).toBe(false);
+    expect(NearBudgetReservationSchema.safeParse({
+      ...base,
+      state: "released",
+      counts_against_budget: true,
+      released_at: "2026-11-02T12:01:00.000Z",
+      release_reason: "provider_refunded",
+    }).success).toBe(false);
+  });
+
+  it("commits an unknown reservation only after terminal SUCCESS reconciliation", () => {
+    const committedReservation = {
+      version: "pilot-near-budget-reservation-v1" as const,
+      reservation_id: "reservation-1",
+      principal_id: "principal-1",
+      account_id: "alice.near",
+      network: "near:mainnet" as const,
+      idempotency_version: "pilot-near-idempotency-v1" as const,
+      idempotency_key: "attempt-1",
+      request_digest: "B".repeat(64),
+      policy_digest: "A".repeat(64),
+      asset_id: "nep141:wrap.near",
+      amount_atomic: "1000000000000000000000000",
+      revision: 3,
+      created_at: "2026-11-02T11:58:00.000Z",
+      updated_at: "2026-11-02T12:01:00.000Z",
+      state: "committed" as const,
+      counts_against_budget: true as const,
+      committed_at: "2026-11-02T12:01:00.000Z",
+    };
+    const transition = {
+      version: "pilot-near-budget-reservation-transition-v1" as const,
+      reservation_id: "reservation-1",
+      principal_id: "principal-1",
+      account_id: "alice.near",
+      network: "near:mainnet" as const,
+      expected_state: "outcome_unknown" as const,
+      expected_revision: 2,
+      next: committedReservation,
+      reconciliation: {
+        version: "pilot-near-reconciliation-v1" as const,
+        outcome: "terminal" as const,
+        attempt_id: "attempt-1",
+        principal_id: "principal-1",
+        account_id: "alice.near",
+        network: "near:mainnet" as const,
+        checked_at: "2026-11-02T12:01:00.000Z",
+        deposit_address: "deposit.near",
+        provider_status: "SUCCESS" as const,
+        safe_to_resubmit: false as const,
+      },
+    };
+    expect(NearBudgetReservationTransitionSchema.safeParse(transition).success).toBe(true);
+    expect(NearBudgetReservationTransitionSchema.safeParse({
+      ...transition,
+      reconciliation: {
+        ...transition.reconciliation,
+        outcome: "pending",
+        provider_status: "PROCESSING",
+      },
+    }).success).toBe(false);
+    expect(NearBudgetReservationTransitionSchema.safeParse({
+      ...transition,
+      reconciliation: {
+        ...transition.reconciliation,
+        provider_status: "REFUNDED",
+      },
+    }).success).toBe(false);
+    expect(NearBudgetReservationTransitionSchema.safeParse({
+      ...transition,
+      expected_state: "reserved",
+      reconciliation: undefined,
+    }).success).toBe(false);
+  });
+
+  it("treats a provider not-found result as explicit non-retryable uncertainty", () => {
+    expect(NearReconciliationEvidenceSchema.parse({
+      version: "pilot-near-reconciliation-v1",
+      outcome: "unknown",
+      attempt_id: "attempt-1",
+      principal_id: "principal-1",
+      account_id: "alice.near",
+      network: "near:mainnet",
+      checked_at: "2026-11-02T11:59:00.000Z",
+      deposit_address: "deposit.near",
+      reason: "not_found",
+      safe_to_resubmit: false,
+    }).safe_to_resubmit).toBe(false);
+    expect(NearReconciliationEvidenceSchema.safeParse({
+      version: "pilot-near-reconciliation-v1",
+      outcome: "unknown",
+      attempt_id: "attempt-1",
+      principal_id: "principal-1",
+      account_id: "alice.near",
+      network: "near:mainnet",
+      checked_at: "2026-11-02T11:59:00.000Z",
+      deposit_address: "deposit.near",
+      reason: "not_found",
+      safe_to_resubmit: true,
+    }).success).toBe(false);
+  });
+
+  it("requires matching terminal reconciliation before closing an attempt", async () => {
+    const base = {
+      version: "pilot-near-execution-attempt-v1",
+      attempt_id: "attempt-1",
+      principal_id: "principal-1",
+      account_id: "alice.near",
+      network: "near:mainnet",
+      idempotency_version: "pilot-near-idempotency-v1",
+      idempotency_key: "attempt-1",
+      idempotency_request_digest: "B".repeat(64),
+      reservation_id: "reservation-1",
+      approval_digest: await computeNearApprovalDigest(approval),
+      quote_id: "quote-123",
+      state: "settled",
+      provider_status: "SUCCESS",
+      created_at: "2026-11-02T11:58:00.000Z",
+      updated_at: "2026-11-02T12:01:00.000Z",
+    };
+    expect(NearExecutionAttemptSchema.safeParse(base).success).toBe(false);
+    expect(NearExecutionAttemptSchema.safeParse({
+      ...base,
+      reconciliation: {
+        version: "pilot-near-reconciliation-v1",
+        outcome: "terminal",
+        attempt_id: "attempt-1",
+        principal_id: "principal-1",
+        account_id: "alice.near",
+        network: "near:mainnet",
+        checked_at: "2026-11-02T12:01:00.000Z",
+        deposit_address: "deposit.near",
+        provider_status: "SUCCESS",
+        safe_to_resubmit: false,
+      },
+    }).success).toBe(true);
   });
 
   it("keeps mainnet wallet execution off unless owner approval is explicit", () => {

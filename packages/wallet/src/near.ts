@@ -177,11 +177,12 @@ export function createNearWallet(
       });
       if (
         connected.network !== "near:mainnet" ||
+        envelope.account_id !== connected.account_id ||
         connected.capabilities.sign_message !== true
       ) {
         throw new NearWalletError(
           "NEAR_SIGNATURE_SCOPE_MISMATCH",
-          "This NEAR Intents approval requires a mainnet message-signing wallet session.",
+          "This NEAR Intents approval requires its exact mainnet account and a message-signing wallet session.",
         );
       }
       const result = await adapter.signApproval({

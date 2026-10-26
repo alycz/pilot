@@ -30,6 +30,7 @@ export type NearApprovalReview = Readonly<{
 function rows(binding: NearApprovalBinding): readonly NearApprovalReviewRow[] {
   return Object.freeze([
     { label: "Principal", value: binding.principal_id, exact: true },
+    { label: "Wallet account", value: binding.account_id, exact: true },
     { label: "Network", value: binding.network, exact: true },
     { label: "Input asset ID", value: binding.origin_asset, exact: true },
     { label: "Input atomic amount", value: binding.amount_in, exact: true },
@@ -52,6 +53,7 @@ function rows(binding: NearApprovalBinding): readonly NearApprovalReviewRow[] {
     { label: "Verified quote ID", value: binding.quote_id, exact: true },
     { label: "Verified quote hash", value: binding.quote_hash, exact: true },
     { label: "Policy digest", value: binding.policy_digest, exact: true },
+    { label: "Idempotency version", value: binding.idempotency_version, exact: true },
     { label: "Idempotency key", value: binding.idempotency_key, exact: true },
   ]);
 }

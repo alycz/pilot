@@ -11,9 +11,11 @@ export const metadata: Metadata = {
 };
 
 const fixtureBinding: NearApprovalBinding = {
-  version: "pilot-near-1click-approval-v1",
+  version: "pilot-near-1click-approval-v2",
   principal_id: "fixture-principal",
+  account_id: "fixture-recipient.near",
   network: "near:mainnet",
+  idempotency_version: "pilot-near-idempotency-v1",
   idempotency_key: "fixture-near-intents-review",
   policy_digest: "A".repeat(64),
   quote_id: "local_fixture_near_intents_demo",

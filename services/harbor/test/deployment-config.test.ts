@@ -131,6 +131,7 @@ describe("Free/QuickJS deployment configuration", () => {
 			"0010_ap4m_channel_purchase.sql",
 			"0017_hosted_pilot_state.sql",
 			"0018_near_attempt_store.sql",
+			"0019_near_wallet_proof_replay.sql",
 		]);
 		expect(FREE_QUICKJS_MIGRATIONS.some((name) => /^001[1-6]_/.test(name))).toBe(false);
 		await expect(validateIsolatedMigrationProfile(serviceRoot, "free-quickjs"))

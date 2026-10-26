@@ -52,6 +52,29 @@ export class D1HostedStateStore {
 			throw conflict("Wallet proof expiry is stale or outside the accepted clock window");
 		}
 		try {
+			if (input.namespace === "near-wallet-auth") {
+				const results = await this.database.batch([
+					this.#clockStatement(principal, now),
+					this.database.prepare("DELETE FROM pilot_near_wallet_proof_consumptions WHERE principal = ? AND expires_at_ms <= ?").bind(principal, now),
+					this.database.prepare(`
+						INSERT INTO pilot_near_wallet_proof_consumptions
+							(principal, scope_id, nonce_digest, expires_at_ms, created_at_ms)
+						SELECT ?, ?, ?, ?, ?
+						WHERE EXISTS (SELECT 1 FROM pilot_hosted_state_clock WHERE principal = ? AND observed_at_ms = ?)
+						AND (SELECT COUNT(*) FROM pilot_near_wallet_proof_consumptions WHERE principal = ?) < ?
+						ON CONFLICT DO NOTHING
+					`).bind(principal, input.scopeId, input.nonceDigest, input.expiresAtMs,
+						now, principal, now, principal, HOSTED_STATE_MAX_ROWS),
+				]);
+				if (changes(results[0]) === 0) throw unavailable("Hosted state clock moved backwards");
+				if (changes(results[2]) === 1) return { consumed: true };
+				const duplicate = await this.database.prepare(`
+					SELECT 1 AS found FROM pilot_near_wallet_proof_consumptions
+					WHERE principal = ? AND scope_id = ? AND nonce_digest = ?
+				`).bind(principal, input.scopeId, input.nonceDigest).first<{ found: number }>();
+				if (duplicate?.found === 1) return { consumed: false };
+				throw unavailable("Hosted NEAR wallet-proof capacity is unavailable");
+			}
 			const results = await this.database.batch([
 				this.#clockStatement(principal, now),
 				this.database.prepare("DELETE FROM pilot_wallet_proof_consumptions WHERE principal = ? AND expires_at_ms <= ?").bind(principal, now),

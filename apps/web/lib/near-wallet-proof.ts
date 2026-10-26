@@ -12,6 +12,7 @@ import {
 } from "@pilot/contracts/near";
 import { z } from "zod";
 
+import { NearNep413VerifierError } from "./near-nep413-verifier";
 import { readCookie } from "./openrouter-session";
 
 export const NEAR_PRINCIPAL_AUTHORIZATION_COOKIE =
@@ -390,6 +391,9 @@ export type NearWalletProofReplayConsumer = Readonly<{
   consume(input: Readonly<{
     principalId: string;
     accountId: string;
+    network: "near:mainnet";
+    authorizationId: string;
+    recipient: string;
     nonce: string;
     expiresAt: number;
     now: number;
@@ -413,6 +417,7 @@ export async function verifyNearWalletControlProof(input: Readonly<{
   verifier?: NearNep413FullAccessKeyVerifier;
   replayConsumer?: NearWalletProofReplayConsumer;
   now?: number;
+  clock?: () => number;
 }>): Promise<VerifiedNearWalletControl> {
   const environment = input.environment ?? process.env;
   const challenge = NearWalletControlChallengeSchema.safeParse(
@@ -424,7 +429,8 @@ export async function verifyNearWalletControlProof(input: Readonly<{
       "The NEAR wallet-control challenge is invalid.",
     );
   }
-  const now = input.now ?? Date.now();
+  const clock = input.clock ?? Date.now;
+  const now = input.now ?? clock();
   if (!Number.isSafeInteger(now) || now < 0 || challenge.data.expires_at_ms <= now) {
     throw new NearWalletProofError(
       "CHALLENGE_EXPIRED",
@@ -521,6 +527,17 @@ export async function verifyNearWalletControlProof(input: Readonly<{
     });
   } catch (error) {
     if (error instanceof NearWalletProofError) throw error;
+    if (
+      error instanceof NearNep413VerifierError &&
+      (error.code === "INPUT_INVALID" ||
+        error.code === "SIGNATURE_INVALID" ||
+        error.code === "FULL_ACCESS_KEY_REQUIRED")
+    ) {
+      throw new NearWalletProofError(
+        "PROOF_INVALID",
+        "The NEAR wallet proof did not verify for the exact full-access key.",
+      );
+    }
     throw new NearWalletProofError(
       "VERIFIER_UNAVAILABLE",
       "NEP-413 full-access-key verification is unavailable.",
@@ -542,6 +559,9 @@ export async function verifyNearWalletControlProof(input: Readonly<{
     consumed = await input.replayConsumer.consume({
       principalId: currentAuthorization.data.principal_id,
       accountId: currentAuthorization.data.account_id,
+      network: currentAuthorization.data.network,
+      authorizationId: currentAuthorization.data.authorization_id,
+      recipient: challenge.data.recipient,
       nonce: challenge.data.nonce,
       expiresAt: challenge.data.expires_at_ms,
       now,
@@ -555,7 +575,7 @@ export async function verifyNearWalletControlProof(input: Readonly<{
   if (!consumed) {
     throw new NearWalletProofError("PROOF_REPLAYED", "The NEAR wallet proof was already used.");
   }
-  if (Date.now() >= challenge.data.expires_at_ms) {
+  if (clock() >= challenge.data.expires_at_ms) {
     throw new NearWalletProofError(
       "CHALLENGE_EXPIRED",
       "The NEAR wallet-control challenge expired during verification.",

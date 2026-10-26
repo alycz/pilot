@@ -20,7 +20,7 @@ const hex64 = z.string().regex(/^[0-9a-f]{64}$/u);
 const policyVersion = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u);
 
 export const walletProofConsumeSchema = z.object({
-	version: z.literal(1), namespace: z.enum(["chat", "wallet-auth"]),
+	version: z.literal(1), namespace: z.enum(["chat", "wallet-auth", "near-wallet-auth"]),
 	scopeId: hex64, nonceDigest: hex64,
 	expiresAtMs: z.number().int().positive().safe(),
 }).strict();

@@ -1,6 +1,7 @@
 import type { NearPrincipalAuthorization } from "@pilot/contracts/near";
 import { describe, expect, it, vi } from "vitest";
 
+import { NearNep413VerifierError } from "./near-nep413-verifier";
 import {
   NearWalletProofError,
   issueNearWalletProofChallenge,
@@ -148,6 +149,55 @@ describe("NEAR wallet-control proof boundary", () => {
     });
     await expect(verifyNearWalletControlProof(input)).rejects.toMatchObject({
       code: "PROOF_REPLAYED",
+    });
+  });
+
+  it("reports a cryptographically invalid or non-full-access proof as invalid", async () => {
+    const { current, runtime, challenge } = issued();
+    for (const code of [
+      "SIGNATURE_INVALID",
+      "FULL_ACCESS_KEY_REQUIRED",
+    ] as const) {
+      await expect(verifyNearWalletControlProof({
+        challengeCookie: challenge.cookie,
+        currentAuthorization: current,
+        proof: proof(),
+        runtime,
+        environment: ENVIRONMENT,
+        verifier: {
+          async verify() {
+            throw new NearNep413VerifierError(code, "rejected");
+          },
+        },
+        replayConsumer: replayConsumer(),
+        now: NOW,
+      })).rejects.toMatchObject({ code: "PROOF_INVALID" });
+    }
+  });
+
+  it("binds durable replay consumption to the exact authorization and rechecks expiry", async () => {
+    const { current, runtime, challenge } = issued();
+    const consume = vi.fn().mockResolvedValue(true);
+    await expect(verifyNearWalletControlProof({
+      challengeCookie: challenge.cookie,
+      currentAuthorization: current,
+      proof: proof(),
+      runtime,
+      environment: ENVIRONMENT,
+      verifier: verifier(),
+      replayConsumer: { consume },
+      now: NOW,
+      clock: () => challenge.expiresAt,
+    })).rejects.toMatchObject({ code: "CHALLENGE_EXPIRED" });
+    expect(consume).toHaveBeenCalledWith({
+      principalId: "principal-alice",
+      accountId: "alice.near",
+      network: "near:mainnet",
+      authorizationId: "authorization-principal-alice",
+      recipient: "pilot.near",
+      nonce: challenge.signMessage.nonce,
+      expiresAt: challenge.expiresAt,
+      now: NOW,
     });
   });
 

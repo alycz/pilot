@@ -48,6 +48,7 @@ export const FREE_QUICKJS_MIGRATIONS = Object.freeze([
 	"0010_ap4m_channel_purchase.sql",
 	"0017_hosted_pilot_state.sql",
 	"0018_near_attempt_store.sql",
+	"0019_near_wallet_proof_replay.sql",
 ]);
 
 const PROFILES = Object.freeze({
@@ -70,6 +71,7 @@ const PROFILES = Object.freeze({
 			"0010_ap4m_channel_purchase.sql": "4c27d6cfe254e993eeb4d392ad42196b43bde941da71b9aef1bc07e665e30e91",
 			"0017_hosted_pilot_state.sql": "c5f0b77b231e40138fe17b3cb07690182b0da2519956ecf46e3844de31c3562b",
 			"0018_near_attempt_store.sql": "2460a259b348ad1d563bd34f7887f1292b65cd668325e5708e61d2cdf4ae82e8",
+			"0019_near_wallet_proof_replay.sql": "9239e61697ed8bc4c109151563408f97a5c862a5f7c836e82bc4f753f62c9c4e",
 		}),
 	}),
 	"trading-isolated-v1": Object.freeze({

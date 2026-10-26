@@ -7,6 +7,7 @@ import {
   readNearPrincipalAuthorization,
   resolveNearWalletProofRuntime,
 } from "../../../../../lib/near-wallet-proof";
+import { isHarborHostedStateConfigured } from "../../../../../lib/harbor-hosted-state-client";
 import { resolvePilotRequestAuthority } from "../../../../../lib/runtime-profile";
 
 export const runtime = "nodejs";
@@ -58,7 +59,8 @@ export function POST(request: NextRequest): NextResponse {
       provider: runtimeConfiguration.provider,
       expires_at: new Date(challenge.expiresAt).toISOString(),
       sign_message: challenge.signMessage,
-      verification_available: false,
+      verification_available: runtimeConfiguration.mode === "verify" &&
+        isHarborHostedStateConfigured(process.env),
       execution_enabled: false,
     });
     response.cookies.set(

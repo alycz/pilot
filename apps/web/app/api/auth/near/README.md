@@ -1,17 +1,23 @@
 # NEAR wallet-control boundary
 
-These routes are a **challenge-only integration boundary**, not a live NEP-413
-login. `POST /api/auth/near/challenge` can issue a sealed, short-lived challenge
-only when an upstream server has already supplied a sealed principal-to-account
-authorization and the explicit runtime flags are enabled.
+These routes are a default-off **wallet-control proof boundary**, not a general
+login or transaction-signing flow. `POST /api/auth/near/challenge` can issue a
+sealed, short-lived challenge only when an upstream server has already supplied
+a sealed principal-to-account authorization and the explicit runtime flags are
+enabled.
 
-`POST /api/auth/near/session` currently rejects every proof with `503` and never
-issues a wallet session. The web package does not declare the Borsh, Base58,
-NEAR key-verification, and bounded RPC dependencies needed to verify the exact
-NEP-413 payload and confirm that the submitted key is a full-access key for the
-named account. Signature possession without that account-key check is not wallet
-control.
+In `verify` mode, `POST /api/auth/near/session` reconstructs the exact NEP-413
+tagged Borsh payload (with no callback URL), verifies its SHA-256/Ed25519
+signature, and queries the fixed NEAR mainnet RPC for the exact account/key with
+`finality: final`. Only an exact `FullAccess` permission is accepted. The proof
+is then consumed once through Harbor's dedicated, atomic D1-backed
+`near-wallet-auth` namespace. The opaque replay scope binds the Pilot principal,
+NEAR account, network, authorization ID, and recipient; only a nonce digest is
+sent to Harbor.
 
-Execution and transaction signing remain disabled. Enabling a live flow requires
-a reviewed verifier plus durable replay-consumption wiring; challenge issuance
-alone does not satisfy either requirement.
+Proof verification requires migration `0019_near_wallet_proof_replay.sql` and
+the separately authenticated hosted-state route. Missing configuration, RPC,
+or replay storage fails closed. `challenge-only` mode still rejects proof
+submission. A successful proof clears the challenge and returns a one-response
+wallet-control confirmation; it does not issue a reusable NEAR login cookie.
+Execution and transaction signing remain disabled.

@@ -15,6 +15,7 @@ import { D1HostedStateStore } from "../src/hosted-state/store";
 
 const D1_ID = "77777777-7777-4777-8777-777777777777";
 const PRINCIPAL = "pilot-web";
+const PRINCIPAL_B = "pilot-web-b";
 const ACCOUNT = "a".repeat(64);
 const ACCOUNT_B = "b".repeat(64);
 const SESSION = "c".repeat(64);
@@ -25,10 +26,16 @@ const CONTENT_B = "2".repeat(64);
 const REQUEST_A = "123e4567-e89b-42d3-a456-426614174000";
 const REQUEST_B = "223e4567-e89b-42d3-a456-426614174000";
 const NOW = Date.UTC(2026, 9, 25, 8, 15, 0);
-const MIGRATION = readFileSync(
-	new URL("../migrations/0017_hosted_pilot_state.sql", import.meta.url),
-	"utf8",
-).replaceAll(/--[^\n]*(?:\n|$)/gu, " ").replaceAll(/\s*\n\s*/gu, " ");
+const MIGRATION = [
+	readFileSync(
+		new URL("../migrations/0017_hosted_pilot_state.sql", import.meta.url),
+		"utf8",
+	),
+	readFileSync(
+		new URL("../migrations/0019_near_wallet_proof_replay.sql", import.meta.url),
+		"utf8",
+	),
+].join("\n").replaceAll(/--[^\n]*(?:\n|$)/gu, " ").replaceAll(/\s*\n\s*/gu, " ");
 
 function environment(
 	overrides: Readonly<Record<string, string | undefined>> = {},
@@ -138,6 +145,30 @@ describe("D1 hosted Pilot state", () => {
 			scope_id: ACCOUNT,
 			nonce_digest: NONCE,
 		}]);
+	});
+
+	it("atomically consumes NEAR wallet proofs across workers and isolates principals", async () => {
+		const left = new D1HostedStateStore(database, config(), { now: () => NOW });
+		const right = new D1HostedStateStore(database, config(), { now: () => NOW });
+		const nearProof = proofInput({ namespace: "near-wallet-auth" });
+		const [first, second] = await Promise.all([
+			left.consumeWalletProof(PRINCIPAL, nearProof),
+			right.consumeWalletProof(PRINCIPAL, nearProof),
+		]);
+		expect([first.consumed, second.consumed].sort()).toEqual([false, true]);
+		await expect(left.consumeWalletProof(PRINCIPAL_B, nearProof))
+			.resolves.toEqual({ consumed: true });
+		const rows = await database.prepare(`
+			SELECT principal, scope_id, nonce_digest
+			FROM pilot_near_wallet_proof_consumptions
+			ORDER BY principal
+		`).all();
+		expect(rows.results).toEqual([
+			{ principal: PRINCIPAL, scope_id: ACCOUNT,
+				nonce_digest: NONCE },
+			{ principal: PRINCIPAL_B, scope_id: ACCOUNT,
+				nonce_digest: NONCE },
+		]);
 	});
 
 	it("rejects stale/far-future proofs and fences a backwards Harbor clock", async () => {

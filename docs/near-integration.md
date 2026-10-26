@@ -41,12 +41,20 @@ as a claim that every catalogued venue is executable.
   route currently instantiates the adapter.
 - A provider-neutral NEAR wallet facade and review card exist with signing and
   execution disabled by default. They contain no submit or broadcast method.
-- Same-origin NEP-413 challenge-only routes bind an exact sealed server
-  principal authorization, account, network, recipient, 32-byte nonce, and
-  expiry. Proof submission currently returns `503` and creates no session:
-  the web package has no declared Borsh/Base58/NEAR signature and bounded RPC
-  full-access-key verifier or durable replay consumer. Signature possession
-  without the account-key check is never treated as wallet control.
+- Same-origin NEP-413 routes bind an exact sealed server principal
+  authorization, account, mainnet network, recipient, 32-byte nonce, and
+  expiry. In explicit `verify` mode, Pilot reconstructs the exact tagged Borsh
+  payload with callback URL absent, verifies SHA-256/Ed25519 locally, and uses a
+  fixed, bounded NEAR mainnet RPC query to require that the exact account/key has
+  `FullAccess`. A dedicated Harbor D1 replay store then atomically consumes an
+  opaque scope bound to principal, account, network, authorization ID, and
+  recipient. Missing RPC or replay storage fails closed; no signature alone is
+  treated as wallet control.
+- Canonical/Free-QuickJS `0019_near_wallet_proof_replay.sql` migrations add the
+  dedicated replay table without modifying the already hash-pinned `0017`
+  migration. The migration is review-only and has not been applied. A successful
+  proof clears its challenge and returns a wallet-control confirmation, but does
+  not mint a reusable NEAR login cookie or enable execution.
 - `/demo/near-intents`, linked from the existing Integrations menu, provides an
   explicitly configured live read-only path for token inventory and verified
   dry quotes plus a visibly separate fixture-only approval/status walkthrough.
@@ -81,8 +89,9 @@ as a claim that every catalogued venue is executable.
 - A NEAR function-call key allowance pays gas; it is not a token spending cap.
 - NEAR AI privacy is operator-declared metadata until its attestation and E2EE
   path receive separate acceptance. It is not wired into live chat by default.
-- Remote D1 acceptance, funded settlement reconciliation, wallet-control proof
-  verification, and a reviewed mainnet acceptance lane remain future gates.
+- Remote D1 acceptance, application of migration `0019`, a real-wallet NEP-413
+  acceptance run, funded settlement reconciliation, and a reviewed mainnet
+  execution lane remain future gates.
   The local D1 stand-in covers separate adapter instances and CAS contention,
   but remote migration apply, backup/rollback rehearsal, tenant isolation
   review, retention/observability, and real multi-worker tests remain required.
@@ -127,7 +136,16 @@ Testnet acceptance are available.
 
 The workspace production audit removed both critical findings by upgrading
 `simple-git` to 4.0.2, and removed the Next/PostCSS and MCP/body-parser high
-findings with scoped overrides. Five high findings remain in the existing Zod
-3 and AI SDK/Undici 5 dependency lines. Their fixes require reviewed major-line
-migrations rather than cross-major overrides, so this branch is not a hosted
-preview or production deployment recommendation.
+findings with scoped overrides. At `ba88614`, five baseline high advisories
+remain: Undici 5.29.0 (`GHSA-vrm6-8vpv-qv8q`,
+`GHSA-v9p9-hfj2-hcw8`, `GHSA-vxpw-j846-p89q`), its Busboy 2.1.1 dependency
+(`GHSA-x8mw-p69m-v3mx`), and Zod 3.25.76
+(`GHSA-mrhx-c7xc-m3w5`). The affected Undici graph is
+`ai`/Bedrock/NEAR OpenAI-compatible -> `@ai-sdk/provider-utils` -> Undici;
+Zod 3 is direct in web, contracts, and Harbor client and is runtime-reachable.
+All five vulnerable versions were already locked at baseline `cb4f28e`; this
+branch adds consumers of those existing lines. A scoped Undici 6.29.1 trial
+passed focused runtime tests but failed Next production output tracing, so it
+was not retained. Zod requires a fixture-backed v4 migration rather than a
+cross-major override. This branch is not a production deployment
+recommendation until those findings and the acceptance gates above are closed.

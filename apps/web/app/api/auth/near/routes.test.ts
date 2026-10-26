@@ -1,6 +1,6 @@
 import type { NearPrincipalAuthorization } from "@pilot/contracts/near";
 import { NextRequest } from "next/server";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   NEAR_PRINCIPAL_AUTHORIZATION_COOKIE,
@@ -8,6 +8,7 @@ import {
   sealNearPrincipalAuthorization,
 } from "../../../../lib/near-wallet-proof";
 import { POST as issueChallenge } from "./challenge/route";
+import { createNearSessionHandler } from "../../../../lib/near-session-handler";
 import { POST as createSession } from "./session/route";
 
 const ENVIRONMENT_KEYS = [
@@ -140,6 +141,49 @@ describe("NEAR wallet-control routes", () => {
       error: "NEP-413 full-access-key verification is unavailable.",
     });
     expect(response.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("accepts an exact proof only after verifier and durable replay consumption", async () => {
+    process.env.PILOT_NEAR_WALLET_PROOF_MODE = "verify";
+    const principal = sealNearPrincipalAuthorization(authorization());
+    const challenge = issueChallenge(request("/api/auth/near/challenge", {
+      cookies: { [NEAR_PRINCIPAL_AUTHORIZATION_COOKIE]: principal },
+    }));
+    const consume = vi.fn().mockResolvedValue(true);
+    const handler = createNearSessionHandler({
+      environment: process.env,
+      verifier: {
+        async verify(input) {
+          return {
+            accountId: input.accountId,
+            publicKey: input.publicKey,
+            signatureValid: true,
+            fullAccessKeyVerified: true,
+          };
+        },
+      },
+      replayConsumerFactory: () => ({ consume }),
+    });
+
+    const response = await handler(request("/api/auth/near/session", {
+      cookies: {
+        [NEAR_PRINCIPAL_AUTHORIZATION_COOKIE]: principal,
+        [NEAR_WALLET_CHALLENGE_COOKIE]:
+          challenge.cookies.get(NEAR_WALLET_CHALLENGE_COOKIE)?.value ?? "",
+      },
+      body: proof(),
+    }));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      authenticated: true,
+      wallet_control_verified: true,
+      account_id: "alice.near",
+      network: "near:mainnet",
+      execution_enabled: false,
+    });
+    expect(consume).toHaveBeenCalledOnce();
+    expect(response.cookies.get(NEAR_WALLET_CHALLENGE_COOKIE)?.value).toBe("");
   });
 
   it("denies cross-principal challenge reuse before verifier availability", async () => {

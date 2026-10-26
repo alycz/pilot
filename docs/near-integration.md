@@ -196,6 +196,79 @@ All credentials stay server-side. See `.env.example` and
 The browser cannot select provider origins, inject credentials, or turn on
 execution.
 
+### Reviewed hosted activation checklist
+
+The checked-in route is runnable only after each category below is reviewed in
+order. Checking in this list does not authorize an operator to perform any of
+the actions.
+
+**Non-secret deployment configuration**
+
+1. Pin the reviewed application commit and keep `MAINNET_EXECUTION=false`.
+2. Configure the canonical Pilot origin and Harbor URL. Configure the exact
+   native route profile as `near-native-to-arbitrum-usdc-v1`; do not add a
+   caller-selectable provider or RPC origin.
+3. Keep the NEAR and Arbitrum RPC origins at the two code-pinned mainnet
+   origins unless a separate code review changes the allowlist.
+4. Select one immutable tenant, approval-gateway principal, policy digest, and
+   native-NEAR atomic budget. Wallet changes must not create a new budget
+   bucket.
+5. Review the browser CSP against the exact commit-pinned Near Connect executor
+   and sandbox behavior. Do not use a wildcard source. Verify the executor
+   fetch, sandbox iframe, popup lifecycle, and callback origin in a disposable
+   browser session before enabling the browser gate.
+6. Only after the server configuration is ready, enable the independent web
+   gates `PILOT_NEAR_BROWSER_WALLET_ADAPTER_ENABLED`,
+   `PILOT_NEAR_PRINCIPAL_BOOTSTRAP_ENABLED`,
+   `PILOT_NEAR_INTENTS_EXECUTABLE_REVIEW_ENABLED`, and
+   `PILOT_NEAR_OWNER_FUNDED_APPROVAL_ENABLED` together. Separately enable the
+   Harbor review, provider-post, status, reserve, and reconcile gates. A public
+   flag never substitutes for a Harbor authorization check.
+
+**Credential, access, and state changes**
+
+1. Review D1 backup/rollback and apply canonical migrations `0018`, `0019`,
+   and `0020` in order. Confirm migration parity, tenant isolation, CAS
+   contention, retention, and remote replay behavior before enabling traffic.
+2. Provision distinct least-privilege Pilot-to-Harbor operation and hosted-state
+   principals. Set `HARBOR_API_KEY`, `PILOT_HOSTED_STATE_API_KEY`, the matching
+   `HARBOR_API_KEYS` entries, and any required D1/KEK bindings through the
+   deployment secret store, never browser configuration.
+3. Set a fresh high-entropy `SESSION_SECRET`, the exact NEP-413 recipient, and
+   `PILOT_NEAR_WALLET_PROOF_MODE=verify`. Rotating the session secret invalidates
+   existing authorizations and must be handled as an explicit rollout.
+4. Add the server-only 1Click partner credential. Confirm provider and RPC
+   egress policy, timeouts, body limits, redirect denial, and secret redaction.
+5. Exercise read-only health, token-catalog, dry-quote, and remote-state probes
+   before permitting an executable quote. Do not silently fall back to fixture
+   data when any dependency is unavailable.
+
+**Owner and financial acceptance**
+
+1. With a disposable mainnet NEAR account and no funding action, verify the
+   pinned executor, MyNearWallet popup/callback/close lifecycle, NEP-413 payload
+   encoding, account/key ownership, cancellation, and replay denial. This step
+   requires an owner wallet signature even though it moves no funds; fixtures
+   cannot prove it.
+2. Under separate authorization, request one fresh executable quote and review
+   every economic and routing field. The earlier dry quote cannot authorize it.
+3. Create the distinct economic approval and durable reservation, then verify
+   cross-principal, wallet-change, expiry, idempotency-conflict, and concurrent
+   budget denial against the hosted store.
+4. A funded acceptance requires another explicit owner decision. The owner
+   manually sends the exact native-NEAR amount to the exact quoted deposit
+   account without a memo. Pilot never signs or broadcasts this transfer.
+5. Verify finalized source evidence, signed provider status, and independent
+   canonical-USDC delivery evidence. Provider `SUCCESS` alone is not final
+   evidence. Provider `REFUNDED` remains held and cannot release budget until
+   refund discovery and independent NEAR refund receipt verification are
+   implemented and accepted.
+
+The fixture browser lane can prove default-off rendering, responsive layout,
+absence of wallet/provider calls, and fail-closed controls. It cannot validate
+the real executor fetch, wallet popup, signature encoding, deployed CSP, route
+liquidity, or settlement.
+
 ## Read-only acceptance evidence
 
 On 2026-10-26, without credentials, the official token endpoint returned HTTP

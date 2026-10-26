@@ -23,9 +23,10 @@ as a claim that every catalogued venue is executable.
 - Server-side wallet authorization contracts bind one authenticated Pilot
   principal to one NEAR account and network in a short-lived,
   authenticated-encrypted authorization artifact. Cross-principal,
-  cross-account, expired, and wallet-change cases fail closed. No route
-  currently verifies wallet control or issues a NEAR session, so this is an
-  integration boundary rather than a live login claim.
+  cross-account, expired, and wallet-change cases fail closed. The default-off
+  NEP-413 route can verify one wallet-control proof after hosted replay
+  consumption, but it does not issue a reusable NEAR session, so this remains
+  an integration boundary rather than a live login claim.
 - `@pilot/near-attempt-store` provides a single-process internal-test store
   with exact replay/conflict handling, atomic per-principal/per-asset budget
   reservation, compare-and-swap revisions, durable reconciliation evidence,

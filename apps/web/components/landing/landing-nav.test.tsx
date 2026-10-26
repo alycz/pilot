@@ -17,10 +17,10 @@ describe("landing integrations navigation", () => {
     expect(markup).toContain("aria-controls=");
   });
 
-  it("contains four stable shareable destinations", () => {
-    expect(integrationLinks).toHaveLength(4);
+  it("contains the stable integration explainers and bounded NEAR fixture destination", () => {
+    expect(integrationLinks).toHaveLength(5);
     for (const link of integrationLinks) {
-      expect(link.href).toMatch(/^\/integrations\/[a-z-]+$/);
+      expect(link.href).toMatch(/^\/(?:integrations|demo)\/[a-z-]+$/);
       expect(link.label.length).toBeGreaterThan(2);
       expect(link.detail.length).toBeGreaterThan(2);
     }

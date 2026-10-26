@@ -9,6 +9,12 @@ import {
   MandateConstraintsSchema,
   MandateSchema,
   MerchantSchema,
+  Near1ClickAssetIdSchema,
+  Near1ClickBlockchainSchema,
+  Near1ClickDryQuoteResponseSchema,
+  Near1ClickQuoteHashSchema,
+  Near1ClickStatusResponseSchema,
+  Near1ClickTokenListSchema,
   NetworkSchema,
   PolicySchema,
   StrategyAuditEventSchema,
@@ -32,6 +38,10 @@ import type {
   ExecResult,
   Mandate,
   Merchant,
+  Near1ClickBlockchain,
+  Near1ClickDryQuoteResponse,
+  Near1ClickStatusResponse,
+  Near1ClickToken,
   Network,
   Policy,
   Strategy,
@@ -112,6 +122,42 @@ export interface VenueComparisonResult {
   side: "sell" | "buy";
   routes: VenueRouteQuote[];
 }
+
+export type NearIntentsTokensResult = {
+  provider: "near-intents-1click";
+  execution_enabled: false;
+  count: number;
+  tokens: Near1ClickToken[];
+} & ({ source: "live"; live: true } | { source: "fixture"; live: false });
+
+export type NearIntentsDryQuoteResult = {
+  provider: "near-intents-1click";
+  mode: "dry";
+  execution_enabled: false;
+  quote: Near1ClickDryQuoteResponse;
+} & (
+  | {
+      source: "live";
+      signature_verified: true;
+      /** Official provider hash: Base58-encoded SHA-256 message hash. */
+      quote_hash: string;
+    }
+  | {
+      source: "fixture";
+      signature_verified: false;
+      /** Local evidence identifier only; never provider authorization. */
+      local_fixture_id: string;
+    }
+);
+
+export type NearIntentsStatusResult = {
+  provider: "near-intents-1click";
+  execution_enabled: false;
+  status: Near1ClickStatusResponse;
+} & (
+  | { source: "live"; signature_verified: true }
+  | { source: "fixture"; signature_verified: false }
+);
 
 export interface AccountInfoResult {
   account_data: JsonObject;
@@ -731,6 +777,37 @@ export interface HarborOperationMap {
     };
     result: VenueComparisonResult;
   };
+  "near.intents.tokens": {
+    args: {
+      blockchain?: Near1ClickBlockchain;
+      symbol?: string;
+      include_ondo?: boolean;
+      limit?: number;
+    };
+    result: NearIntentsTokensResult;
+  };
+  "near.intents.quote": {
+    args: {
+      dry?: true;
+      origin_asset_id: string;
+      destination_asset_id: string;
+      amount: string;
+      slippage_bps: number;
+      deposit_type: "ORIGIN_CHAIN";
+      recipient: string;
+      recipient_type: "DESTINATION_CHAIN";
+      refund_to: string;
+      refund_type: "ORIGIN_CHAIN";
+      /** 1Click refund-start deadline, not Pilot approval freshness. */
+      refund_deadline: string;
+      quote_waiting_time_ms?: number;
+    };
+    result: NearIntentsDryQuoteResult;
+  };
+  "near.intents.status": {
+    args: { deposit_address: string; deposit_memo?: string };
+    result: NearIntentsStatusResult;
+  };
   "ledger.account.info": {
     args: AccountArgs & { ledger_hash?: string; ledger_index?: LedgerIndex; queue?: boolean; signer_lists?: boolean };
     result: AccountInfoResult;
@@ -1129,6 +1206,10 @@ export type ArgsFor<K extends HarborOpName> = HarborOperationMap[K]["args"];
 export type ResultFor<K extends HarborOpName> = HarborOperationMap[K]["result"];
 
 const NonEmptyStringSchema = z.string().trim().min(1);
+const NearVisibleTextSchema = z.string().trim().min(1).max(512)
+  .regex(/^[\x21-\x7e]+$/, "must contain only visible ASCII characters");
+const NearAtomicAmountSchema = z.string().max(128)
+  .regex(/^[1-9]\d*$/, "must be a positive atomic-unit integer string");
 const TransactionHashSchema = z.string().regex(/^[A-Fa-f0-9]{64}$/);
 const LedgerHashSchema = TransactionHashSchema;
 const ExecutionNetworkSchema = z.enum(["testnet", "devnet"]);
@@ -1524,6 +1605,40 @@ export const HarborArgsSchemas = {
       buy: AssetSchema,
       amount: PositiveDecimalStringSchema,
       side: z.enum(["sell", "buy"]),
+    })
+    .strict(),
+  "near.intents.tokens": z
+    .object({
+      blockchain: Near1ClickBlockchainSchema.optional(),
+      symbol: z.string().trim().min(1).max(32).optional(),
+      include_ondo: z.boolean().optional(),
+      limit: z.number().int().min(1).max(500).optional(),
+    })
+    .strict(),
+  "near.intents.quote": z
+    .object({
+      dry: z.literal(true).default(true),
+      origin_asset_id: Near1ClickAssetIdSchema,
+      destination_asset_id: Near1ClickAssetIdSchema,
+      amount: NearAtomicAmountSchema,
+      slippage_bps: z.number().int().min(0).max(10_000),
+      deposit_type: z.literal("ORIGIN_CHAIN"),
+      recipient: NearVisibleTextSchema,
+      recipient_type: z.literal("DESTINATION_CHAIN"),
+      refund_to: NearVisibleTextSchema,
+      refund_type: z.literal("ORIGIN_CHAIN"),
+      refund_deadline: z.string().datetime({ offset: true }),
+      quote_waiting_time_ms: z.number().int().min(0).max(30_000).optional(),
+    })
+    .strict()
+    .refine((request) => request.origin_asset_id !== request.destination_asset_id, {
+      path: ["destination_asset_id"],
+      message: "origin and destination assets must differ",
+    }),
+  "near.intents.status": z
+    .object({
+      deposit_address: NearVisibleTextSchema,
+      deposit_memo: NearVisibleTextSchema.optional(),
     })
     .strict(),
   "ledger.account.info": z
@@ -2261,6 +2376,63 @@ const VenueComparisonResultSchema = z.object({
   side: z.enum(["sell", "buy"]),
   routes: z.array(VenueRouteQuoteSchema),
 }).strict();
+const NearIntentsTokensResultBaseSchema = z.object({
+  provider: z.literal("near-intents-1click"),
+  execution_enabled: z.literal(false),
+  count: z.number().int().min(0).max(500),
+  tokens: Near1ClickTokenListSchema,
+}).strict();
+const NearIntentsTokensResultSchema = z.discriminatedUnion("source", [
+  NearIntentsTokensResultBaseSchema.extend({
+    source: z.literal("live"),
+    live: z.literal(true),
+  }).strict(),
+  NearIntentsTokensResultBaseSchema.extend({
+    source: z.literal("fixture"),
+    live: z.literal(false),
+  }).strict(),
+]).superRefine((result, context) => {
+  if (result.count !== result.tokens.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["count"],
+      message: "token count must match the returned token list",
+    });
+  }
+});
+const NearIntentsDryQuoteResultBaseSchema = z.object({
+  provider: z.literal("near-intents-1click"),
+  mode: z.literal("dry"),
+  execution_enabled: z.literal(false),
+  quote: Near1ClickDryQuoteResponseSchema,
+}).strict();
+const NearIntentsDryQuoteResultSchema = z.discriminatedUnion("source", [
+  NearIntentsDryQuoteResultBaseSchema.extend({
+    source: z.literal("live"),
+    signature_verified: z.literal(true),
+    quote_hash: Near1ClickQuoteHashSchema,
+  }).strict(),
+  NearIntentsDryQuoteResultBaseSchema.extend({
+    source: z.literal("fixture"),
+    signature_verified: z.literal(false),
+    local_fixture_id: z.string().regex(/^near-fixture-[a-z0-9-]{1,96}$/),
+  }).strict(),
+]);
+const NearIntentsStatusResultBaseSchema = z.object({
+  provider: z.literal("near-intents-1click"),
+  execution_enabled: z.literal(false),
+  status: Near1ClickStatusResponseSchema,
+}).strict();
+const NearIntentsStatusResultSchema = z.discriminatedUnion("source", [
+  NearIntentsStatusResultBaseSchema.extend({
+    source: z.literal("live"),
+    signature_verified: z.literal(true),
+  }).strict(),
+  NearIntentsStatusResultBaseSchema.extend({
+    source: z.literal("fixture"),
+    signature_verified: z.literal(false),
+  }).strict(),
+]);
 const AccountInfoResultSchema = z.object({
   account_data: JsonObjectSchema,
   ledger_current_index: z.number().int().nonnegative().optional(),
@@ -2650,6 +2822,9 @@ export const HarborResultSchemas = {
   "venues.list": z.array(VenueSchema),
   "venues.get": VenueSchema,
   "venues.compare": VenueComparisonResultSchema,
+  "near.intents.tokens": NearIntentsTokensResultSchema,
+  "near.intents.quote": NearIntentsDryQuoteResultSchema,
+  "near.intents.status": NearIntentsStatusResultSchema,
   "ledger.account.info": AccountInfoResultSchema,
   "ledger.account.lines": AccountLinesResultSchema,
   "ledger.account.objects": AccountObjectsResultSchema,

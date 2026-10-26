@@ -81,6 +81,20 @@ export const UNTRUSTED_FIELD_RULES: Readonly<
   "mastercard.page": [{ kind: "mastercard-content", path: ["**"] }],
   "mastercard.search": [{ kind: "mastercard-content", path: ["**"] }],
   "mastercard.services": [{ kind: "mastercard-content", path: ["**"] }],
+  "near.intents.quote": [
+    { kind: "provider", path: ["quote", "correlationId"] },
+  ],
+  "near.intents.status": [
+    { kind: "provider", path: ["status", "correlationId"] },
+    { kind: "provider", path: ["status", "quoteResponse", "correlationId"] },
+    { kind: "provider", path: ["status", "swapDetails", "refundReason"] },
+    { kind: "uri", path: ["status", "swapDetails", "originChainTxHashes", "*", "explorerUrl"] },
+    { kind: "uri", path: ["status", "swapDetails", "destinationChainTxHashes", "*", "explorerUrl"] },
+  ],
+  "near.intents.tokens": [
+    { kind: "token-name", path: ["tokens", "*", "symbol"] },
+    { kind: "provider", path: ["tokens", "*", "coingeckoId"] },
+  ],
   "perps.markets": [
     { kind: "market-coin", path: ["markets", "*", "coin"] },
     { kind: "margin-mode", path: ["markets", "*", "marginMode"] },
@@ -189,6 +203,12 @@ export const OP_SCREENING_CLASSIFICATION: Readonly<
   "mastercard.services": "untrusted",
   "merchants.get": "trusted",
   "merchants.list": "trusted",
+  // These are live provider reads. Strict schemas retain protocol identifiers
+  // and numbers, while the small set of provider-authored display fields is
+  // explicitly screened above before model use.
+  "near.intents.quote": "untrusted",
+  "near.intents.status": "untrusted",
+  "near.intents.tokens": "untrusted",
   "onboarding.readiness": "structured",
   "perps.markets": "untrusted",
   "policy.get": "trusted",

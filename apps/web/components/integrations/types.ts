@@ -1,4 +1,5 @@
 export type IntegrationSlug = "mastercard" | "aws" | "quicknode" | "ledger";
+export type IntegrationLinkSlug = IntegrationSlug | "near-intents";
 
 export type IntegrationTone = "success" | "approval" | "blocked" | "degraded";
 

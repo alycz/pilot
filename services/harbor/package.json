@@ -40,6 +40,7 @@
 		"cf-typegen:free:check": "wrangler types worker-configuration.free-quickjs.d.ts --config wrangler.free-quickjs.jsonc --env-interface FreeQuickJsEnv --include-runtime false --check"
 	},
 	"dependencies": {
+		"@defuse-protocol/one-click-sdk-typescript": "0.1.26",
 		"@modelcontextprotocol/sdk": "^1.32.1",
 		"@noble/curves": "^2.4.0",
 		"aws4fetch": "^1.0.20",

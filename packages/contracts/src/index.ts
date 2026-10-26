@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export * from "./near.js";
+
 // Shared contracts must stay dependency-free beyond zod so this source can be
 // byte-synced into @pilot/contracts. This bounded Ripple base58 shape keeps
 // model-facing watchdog fields free of arbitrary text; operation boundaries

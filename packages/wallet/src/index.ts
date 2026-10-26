@@ -41,6 +41,22 @@ export type {
 } from "./types.js";
 
 export {
+  NearIntentsApprovalEnvelopeSchema,
+  NearWalletError,
+  createNearWallet,
+  digestNearIntentsApproval,
+  verifyNearIntentsApproval,
+  type NearIntentsApprovalEnvelope,
+  type NearWallet,
+  type NearWalletAdapter,
+  type NearWalletApprovalRequest,
+  type NearWalletApprovalSignature,
+  type NearWalletErrorCode,
+  type NearWalletNetwork,
+  type NearWalletSession,
+} from "./near.js";
+
+export {
   ledgerSigningMode,
   type LedgerSigningMode,
 } from "./ledger/clear-sign.js";

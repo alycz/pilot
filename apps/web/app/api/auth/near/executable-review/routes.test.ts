@@ -541,6 +541,86 @@ describe("NEAR executable-review proof routes", () => {
     ));
     expect(denied.status).toBe(403);
     expect(reconcile).toHaveBeenCalledOnce();
+
+    const impersonated = structuredClone(approvalBody.reconciliation_context);
+    impersonated.approval.payload.principal_id = "principal-bob";
+    impersonated.approval.payload.reservation.principal_id = "principal-bob";
+    impersonated.approval.account_control.principal_id = "principal-bob";
+    const impersonation = await handler(request(
+      "/api/auth/near/owner-funded/reconcile",
+      {
+        reconciliation_context: impersonated,
+        stage: "settlement",
+        transition_id: "settlement-impersonation-1",
+        expected_entry_revision: 2,
+      },
+      { [NEAR_PRINCIPAL_AUTHORIZATION_COOKIE]: principal },
+    ));
+    expect(impersonation.status).toBe(403);
+
+    const callerSelectedPrincipal = await handler(request(
+      "/api/auth/near/owner-funded/reconcile",
+      {
+        reconciliation_context: approvalBody.reconciliation_context,
+        stage: "settlement",
+        transition_id: "settlement-caller-principal-1",
+        expected_entry_revision: 2,
+        principal_id: "principal-bob",
+      },
+      { [NEAR_PRINCIPAL_AUTHORIZATION_COOKIE]: principal },
+    ));
+    expect(callerSelectedPrincipal.status).toBe(400);
+    expect(reconcile).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["lying", "2"],
+  ] as const)("bounds a streamed reconciliation request with %s Content-Length", async (
+    _label,
+    declared,
+  ) => {
+    const authorization = nearExecutableReviewAuthorization({
+      operations: [
+        "near.intents.approval.review",
+        "near.intents.executable-quote.review",
+        "near.intents.status",
+        "near.intents.owner-funded.reserve",
+        "near.intents.owner-funded.reconcile",
+      ],
+    });
+    const principal = sealNearPrincipalAuthorization(authorization, ENVIRONMENT);
+    const reconcile = vi.fn();
+    const handler = createNearOwnerFundedReconcileHandler({
+      environment: ENVIRONMENT,
+      clock: () => NOW + 3,
+      reconcileClient: { op: reconcile },
+    });
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const chunk = new Uint8Array(128 * 1_024).fill(65);
+        controller.enqueue(chunk);
+        controller.enqueue(chunk);
+        controller.enqueue(Uint8Array.of(65));
+        controller.close();
+      },
+    });
+    const headers = new Headers({
+      "content-type": "application/json",
+      host: "pilot.example",
+      origin: "https://pilot.example",
+      cookie: `${NEAR_PRINCIPAL_AUTHORIZATION_COOKIE}=${encodeURIComponent(principal)}`,
+    });
+    if (declared !== undefined) headers.set("content-length", declared);
+    const oversized = new NextRequest(
+      "https://pilot.example/api/auth/near/owner-funded/reconcile",
+      { method: "POST", headers, body, duplex: "half" },
+    );
+
+    const response = await handler(oversized);
+
+    expect(response.status).toBe(400);
+    expect(reconcile).not.toHaveBeenCalled();
   });
 
   it("rejects replay, mutation, cross-principal use, expiry, and missing config", async () => {

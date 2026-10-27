@@ -89,10 +89,12 @@ as a claim that every catalogued venue is executable.
 - These six operations are present in Harbor's normal generated registry and
   MCP search catalog. The deployed Free/QuickJS profile permits only their
   exact names through authenticated REST; it still denies every other REST
-  operation and does not register generic MCP `execute`. Models receive only
-  token discovery, dry quote, and status reads. Executable review, durable
-  reserve, and reconciliation remain owner-controlled server operations and
-  are never model tools.
+  operation and does not register generic MCP `execute`. The production agent
+  harness instead registers one narrow REST-backed `near_intents_read` tool
+  whose strict union can express only token discovery, a `dry: true` quote, or
+  exact status lookup. It cannot carry an arbitrary operation name or caller-
+  selected principal. Executable review, durable reserve, and reconciliation
+  remain owner-controlled server operations and are never model tools.
 - Harbor authenticates one configured approval-gateway API-key principal at
   the transport boundary, but D1 attempt, replay, and budget rows are scoped by
   the distinct opaque user principal bound into the server-created approval.

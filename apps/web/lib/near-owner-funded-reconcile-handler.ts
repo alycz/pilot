@@ -90,11 +90,37 @@ async function boundedJson(request: NextRequest): Promise<unknown> {
   ) {
     throw new Error("invalid-body");
   }
-  const body = await request.text();
-  if (Buffer.byteLength(body, "utf8") > MAX_BODY_BYTES) {
-    throw new Error("invalid-body");
+  if (!request.body) throw new Error("invalid-body");
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      total += next.value.byteLength;
+      if (total > MAX_BODY_BYTES) {
+        try {
+          await reader.cancel();
+        } catch {
+          // Cancellation is best-effort; the deterministic byte bound wins.
+        }
+        throw new Error("invalid-body");
+      }
+      chunks.push(next.value);
+    }
+  } finally {
+    reader.releaseLock();
   }
-  return JSON.parse(body) as unknown;
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return JSON.parse(
+    new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+  ) as unknown;
 }
 
 function activeAuthorization(

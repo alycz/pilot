@@ -258,6 +258,28 @@ describe("native NEAR live same-origin client", () => {
     await expect(invalid.bootstrap("alice.near")).rejects.toThrow("strict validation");
   });
 
+  it.each([
+    ["missing", undefined],
+    ["lying", "2"],
+  ] as const)("bounds a streamed response with %s Content-Length", async (_label, declared) => {
+    const chunk = new Uint8Array(128 * 1_024).fill(65);
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(chunk);
+        controller.enqueue(chunk);
+        controller.enqueue(Uint8Array.of(65));
+        controller.close();
+      },
+    });
+    const client = createNearNativeLiveClient(vi.fn(async () => new Response(body, {
+      headers: declared === undefined ? {} : { "content-length": declared },
+    })) as typeof fetch);
+
+    await expect(client.bootstrap("alice.near")).rejects.toThrow(
+      "response was too large",
+    );
+  });
+
   it("aborts on caller cancellation and bounds every POST timeout", async () => {
     const pendingFetch = vi.fn((_input: RequestInfo | URL, init?: RequestInit) =>
       new Promise<Response>((_resolve, reject) => {

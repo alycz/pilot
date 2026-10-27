@@ -1,6 +1,6 @@
 import { DEFAULT_POLICY } from "@pilot/contracts";
 import { createHarborRestClient } from "@pilot/harbor-client";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createAgentTools, executeProposedIntent } from "../src/tools.js";
 
@@ -464,6 +464,67 @@ describe("executeProposedIntent", () => {
 });
 
 describe("createAgentTools Harbor boundary", () => {
+  it("exposes exactly three REST-backed NEAR reads when MCP execute is absent", async () => {
+    const op = vi.fn(async (name: string) => ({
+      ok: true as const,
+      data: { operation: name },
+      asOf: "2026-10-27T00:00:00.000Z",
+      asOfBasis: "fixture",
+    }));
+    const tools = createAgentTools({
+      account: {
+        main_account: "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe",
+        budget_account: account,
+      },
+      network: "testnet",
+      harborRest: { op },
+      harborMcp: { tools: {}, close: async () => undefined },
+    }) as Record<string, any>;
+    const read = tools.near_intents_read.execute as (input: unknown) => Promise<unknown>;
+
+    await read({
+      operation: "near.intents.tokens",
+      args: { blockchain: "near", limit: 25 },
+    });
+    await read({
+      operation: "near.intents.quote",
+      args: {
+        dry: true,
+        origin_asset_id: "nep141:wrap.near",
+        destination_asset_id:
+          "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near",
+        amount: "1000000000000000000000000",
+        slippage_bps: 75,
+        deposit_type: "ORIGIN_CHAIN",
+        recipient: `0x${"4".repeat(40)}`,
+        recipient_type: "DESTINATION_CHAIN",
+        refund_to: "alice.near",
+        refund_type: "ORIGIN_CHAIN",
+        refund_deadline: "2098-01-01T00:30:00.000Z",
+      },
+    });
+    await read({
+      operation: "near.intents.status",
+      args: { deposit_address: "provider-deposit.near" },
+    });
+
+    expect(op.mock.calls.map(([name]) => name)).toEqual([
+      "near.intents.tokens",
+      "near.intents.quote",
+      "near.intents.status",
+    ]);
+    expect(tools).not.toHaveProperty("harbor_execute");
+    await expect(read({
+      operation: "near.intents.owner-funded.reserve",
+      args: {},
+    })).rejects.toThrow();
+    await expect(read({
+      operation: "near.intents.status",
+      args: { deposit_address: "provider-deposit.near", principal_id: "attacker" },
+    })).rejects.toThrow();
+    expect(op).toHaveBeenCalledTimes(3);
+  });
+
   it("exposes only canonical read-only Harbor execution", async () => {
     const calls: string[] = [];
     const tools = createAgentTools({

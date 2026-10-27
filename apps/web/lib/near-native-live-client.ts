@@ -19,6 +19,51 @@ const SignMessageBindingSchema = z.object({
   recipient: AccountIdSchema,
 });
 
+class NearNativeLiveResponseTooLargeError extends Error {}
+
+async function readBoundedResponseText(response: Response): Promise<string> {
+  const declared = response.headers.get("content-length");
+  if (
+    declared !== null &&
+    (!/^(?:0|[1-9][0-9]*)$/.test(declared) || Number(declared) > MAX_RESPONSE_BYTES)
+  ) {
+    throw new NearNativeLiveResponseTooLargeError(
+      "The NEAR authorization response was too large.",
+    );
+  }
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      total += next.value.byteLength;
+      if (total > MAX_RESPONSE_BYTES) {
+        try {
+          await reader.cancel();
+        } catch {
+          // Cancellation is best-effort; the deterministic byte bound wins.
+        }
+        throw new NearNativeLiveResponseTooLargeError(
+          "The NEAR authorization response was too large.",
+        );
+      }
+      chunks.push(next.value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+}
+
 export const NearBootstrapResponseSchema = z.object({
   preauthorized: z.literal(true),
   account_id: AccountIdSchema,
@@ -148,22 +193,16 @@ async function post<T>(
       }
       throw cause;
     }
-    const declared = response.headers.get("content-length");
-    if (declared && Number(declared) > MAX_RESPONSE_BYTES) {
-      throw new Error("The NEAR authorization response was too large.");
-    }
     let text: string;
     try {
-      text = await response.text();
+      text = await readBoundedResponseText(response);
     } catch (cause) {
+      if (cause instanceof NearNativeLiveResponseTooLargeError) throw cause;
       if (timedOut) throw new Error("The NEAR authorization request timed out.");
       if (controller.signal.aborted) {
         throw new DOMException("The NEAR authorization request was cancelled.", "AbortError");
       }
       throw cause;
-    }
-    if (new TextEncoder().encode(text).byteLength > MAX_RESPONSE_BYTES) {
-      throw new Error("The NEAR authorization response was too large.");
     }
     let value: unknown;
     try {

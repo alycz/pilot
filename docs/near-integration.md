@@ -86,6 +86,21 @@ as a claim that every catalogued venue is executable.
   `REFUNDED` also remains held because trusted refund discovery and receipt
   verification are not implemented; the operation cannot release on status
   alone. No stage constructs, signs, funds, broadcasts, or retries a transfer.
+- These six operations are present in Harbor's normal generated registry and
+  MCP search catalog. The deployed Free/QuickJS profile permits only their
+  exact names through authenticated REST; it still denies every other REST
+  operation and does not register generic MCP `execute`. Models receive only
+  token discovery, dry quote, and status reads. Executable review, durable
+  reserve, and reconciliation remain owner-controlled server operations and
+  are never model tools.
+- Pilot's specialized same-origin owner route returns the exact admitted
+  reserve context after durable reservation and accepts source/provider/
+  destination reconciliation only through
+  `/api/auth/near/owner-funded/reconcile`. That route binds the current sealed
+  NEAR principal/account to the original approval, forwards request
+  cancellation, and always preserves `safe_to_resubmit: false`. The generic
+  browser Harbor proxy explicitly denies reserve and reconcile, so it cannot
+  bypass the fresh proof/economic approval path.
 - Harbor contains a review-only D1 persistence adapter and byte-identical
   canonical/Free-QuickJS migrations `0018_near_attempt_store.sql`,
   `0019_near_wallet_proof_replay.sql`, and
@@ -99,7 +114,7 @@ as a claim that every catalogued venue is executable.
   atomic amounts remain canonical decimal text and are updated with exact
   Worker `BigInt` plus D1 value/revision CAS triggers. Wallet changes cannot
   create a fresh budget bucket. All three migrations are checked in for review
-  and have not been applied by this work.
+  and remain independently default-off after schema application.
 - A provider-neutral NEAR wallet facade and review card exist with signing and
   execution disabled by default. They contain no submit or broadcast method.
 - Same-origin NEP-413 routes bind an exact sealed server principal
@@ -116,7 +131,8 @@ as a claim that every catalogued venue is executable.
   approval-review-only claim for one asserted NEAR mainnet account. Only after
   the exact NEP-413 proof and durable nonce consumption succeed does the server
   upgrade it to a 15-minute authorization limited to approval review,
-  executable-quote review, read-only status, and reservation. Changing or
+  executable-quote review, read-only status, reservation, and reconciliation.
+  Changing or
   renewing the Pilot wallet session invalidates it; the authorization never
   grants an access key or transaction capability.
 - Canonical/Free-QuickJS `0019_near_wallet_proof_replay.sql` adds the dedicated
@@ -147,8 +163,13 @@ as a claim that every catalogued venue is executable.
 - The NEAR AI OpenAI-compatible chat adapter is installed and wired behind
   `NEAR_AI_ENABLED=1`, and remains default-off. Chat resolves only the exact
   configured model after the public catalog reports it ready with native
-  `tools` support. The existing OpenRouter demo path is unchanged; NEAR AI
-  account selection currently reuses the wallet-bound OpenRouter OAuth session.
+  `tools` support. The existing OpenRouter demo path is unchanged. NEAR AI has
+  its own explicit wallet-bound session mode and catalog endpoint; that sealed
+  session contains no provider credential and does not require OpenRouter
+  OAuth. OpenRouter remains the implicit account-model default. A malformed optional
+  NEAR AI configuration cannot take down or replace ordinary OpenRouter model
+  access, while an explicitly selected NEAR AI model fails as unavailable
+  instead of silently falling back to an identically named OpenRouter model.
   Privacy receipts are derived from operator configuration, never model output,
   and always report runtime attestation as unverified. Live model-catalog
   discovery, fixed-origin read-only NEAR RPC, and an Earn discovery flow are
@@ -192,8 +213,9 @@ as a claim that every catalogued venue is executable.
 - A NEAR function-call key allowance pays gas; it is not a token spending cap.
 - NEAR AI privacy is operator-declared metadata until its attestation and E2EE
   path receive separate acceptance. It is not wired into live chat by default.
-- Remote D1 acceptance, application of migrations `0018`, `0019`, and `0020`,
-  a real-wallet NEP-413 acceptance run, funded settlement reconciliation, and a
+- Remote D1 schema parity for migrations `0018`, `0019`, and `0020` has been
+  checked separately from feature activation. A real-wallet NEP-413 acceptance
+  run, funded settlement reconciliation, and a
   reviewed mainnet execution lane remain future gates.
   The local D1 stand-in covers separate adapter instances and CAS contention,
   but remote migration apply, backup/rollback rehearsal, tenant isolation

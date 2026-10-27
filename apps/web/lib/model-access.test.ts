@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import {
   BedrockDailyTurnLimitError,
+  chooseDefaultModel,
   filterToolCallingModels,
   getModelAccess,
   resetBedrockTurnBucketsForTest,
@@ -28,7 +29,10 @@ const ACCOUNT = "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59";
 let stateDirectory: string;
 
 function modelRequest(
-  session: { mode: "demo"; model: string } | { mode: "oauth"; model: string; apiKey: string },
+  session:
+    | { mode: "demo"; model: string }
+    | { mode: "oauth"; model: string; apiKey: string }
+    | { mode: "near-ai"; provider: "near-ai"; model: string },
   account = ACCOUNT,
 ): Request {
   const wallet: WalletSession = {
@@ -145,16 +149,16 @@ describe("getModelAccess", () => {
     });
   });
 
-  it("routes only the explicitly configured account model to NEAR AI", () => {
+  it("routes an explicit wallet-bound NEAR AI session without an OpenRouter credential", () => {
     process.env.NEAR_AI_ENABLED = "1";
     process.env.NEAR_AI_API_KEY = "server-only-near-ai-key";
     process.env.NEAR_AI_MODEL = "z-ai/example-model";
     process.env.NEAR_AI_PRIVACY_TIER = "third-party-confidential-tee";
 
     const access = getModelAccess(modelRequest({
-      mode: "oauth",
+      mode: "near-ai",
+      provider: "near-ai",
       model: "z-ai/example-model",
-      apiKey: "user-owned-openrouter-key",
     }));
 
     expect(access).toMatchObject({
@@ -162,14 +166,19 @@ describe("getModelAccess", () => {
       apiKey: "server-only-near-ai-key",
       apiBase: "https://cloud-api.near.ai/v1",
       model: "z-ai/example-model",
-      mode: "oauth",
+      mode: "near-ai",
       privacy: {
         tier: "third-party-confidential-tee",
         declaredBy: "operator-configuration",
         attestationVerified: false,
       },
     });
-    expect(JSON.stringify(access)).not.toContain("user-owned-openrouter-key");
+    expect(JSON.stringify(access)).not.toContain("openrouter");
+    expect(() => getModelAccess(modelRequest({
+      mode: "oauth",
+      model: "z-ai/example-model",
+      apiKey: "user-owned-openrouter-key",
+    }))).toThrow("through the NEAR AI provider");
   });
 
   it("keeps NEAR AI default-off and fails closed for malformed enabled configuration", () => {
@@ -182,7 +191,29 @@ describe("getModelAccess", () => {
     process.env.NEAR_AI_ENABLED = "1";
     process.env.NEAR_AI_MODEL = "z-ai/example-model";
     process.env.NEAR_AI_PRIVACY_TIER = "confidential-tee";
-    expect(() => requireAccountModel("z-ai/example-model")).toThrow("NEAR_AI_API_KEY");
+    expect(() => requireAccountModel("z-ai/example-model")).toThrow(
+      "selected NEAR AI provider is unavailable",
+    );
+    expect(getModelAccess(modelRequest({
+      mode: "oauth",
+      model: "provider/account-model",
+      apiKey: "user-owned-openrouter-key",
+    }))).toMatchObject({
+      provider: "openrouter",
+      model: "provider/account-model",
+      apiKey: "user-owned-openrouter-key",
+    });
+  });
+
+  it("never selects NEAR AI as the implicit default", () => {
+    process.env.MODEL_DEFAULT = "z-ai/example-model";
+    expect(chooseDefaultModel([
+      { id: "z-ai/example-model", name: "NEAR", provider: "near-ai" },
+      { id: "provider/account-model", name: "OpenRouter" },
+    ])).toBe("provider/account-model");
+    expect(chooseDefaultModel([
+      { id: "z-ai/example-model", name: "NEAR", provider: "near-ai" },
+    ])).toBeNull();
   });
 
   it.each(["off", "mock", "aws"] as const)(

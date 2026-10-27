@@ -42,6 +42,18 @@ describe("OpenRouter session encryption", () => {
     expect(openOpenRouterSession(encrypted, SECRET, NOW)).toEqual(session);
   });
 
+  it("round-trips an explicit wallet-bound NEAR AI session without any provider credential", () => {
+    const session = createOpenRouterSession({
+      mode: "near-ai" as const,
+      provider: "near-ai" as const,
+      model: "z-ai/example-model",
+    }, wallet, NOW);
+    const encrypted = sealOpenRouterSession(session, SECRET);
+
+    expect(openOpenRouterSession(encrypted, SECRET, NOW)).toEqual(session);
+    expect(JSON.stringify(session)).not.toContain("apiKey");
+  });
+
   it("rejects tampered ciphertext and the wrong secret", () => {
     const encrypted = sealOpenRouterSession(
       createOpenRouterSession(

@@ -8,7 +8,8 @@ import { readDemoModelConfig } from "./demo-model-budget";
 import { readWalletSession } from "./wallet-session";
 import { isExactZeroPriceCatalogModel } from "./openrouter-free-policy";
 import {
-  readNearAiServerConfig,
+  inspectNearAiServerConfig,
+  NearAiUnavailableError,
   type NearAiPrivacyDisclosure,
   type NearAiServerConfig,
 } from "./near-ai";
@@ -37,7 +38,7 @@ export type ModelAccess =
       apiKey: string;
       apiBase: Extract<NearAiServerConfig, { enabled: true }>["apiBase"];
       model: string;
-      mode: "oauth";
+      mode: "near-ai";
       privacy: NearAiPrivacyDisclosure;
       wallet: WalletModelBinding;
     };
@@ -135,12 +136,16 @@ function configuredIds(value: string | undefined): string[] {
 export function accountModelAllowlist(
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): readonly string[] {
-  const nearAi = readNearAiServerConfig(environment);
+  const nearAi = inspectNearAiServerConfig(environment);
   const models = new Set<string>([
     requireValidModelId(environment.MODEL_DEFAULT),
     ...configuredIds(environment.OPENROUTER_ALLOWED_MODELS),
     ...configuredIds(environment.BEDROCK_MODELS),
-    ...(nearAi.enabled ? [requireValidModelId(nearAi.model)] : []),
+    ...(nearAi.state === "enabled"
+      ? [requireValidModelId(nearAi.config.model)]
+      : nearAi.state === "invalid" && nearAi.modelHint
+        ? [requireValidModelId(nearAi.modelHint)]
+        : []),
   ]);
   return [...models];
 }
@@ -152,6 +157,44 @@ export function requireAccountModel(
   const model = requireValidModelId(value);
   if (!accountModelAllowlist(environment).includes(model)) {
     throw new Error("The selected account model is not in Pilot's server allowlist");
+  }
+  const nearAi = inspectNearAiServerConfig(environment);
+  if (nearAi.state === "invalid" && nearAi.modelHint === model) {
+    throw new NearAiUnavailableError();
+  }
+  return model;
+}
+
+/** OpenRouter/Bedrock account selection excludes ids owned by explicit NEAR AI. */
+export function requireOpenRouterAccountModel(
+  value: unknown,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): string {
+  const model = requireValidModelId(value);
+  const nearAi = inspectNearAiServerConfig(environment);
+  if (nearAi.state !== "disabled" && nearAi.modelHint === model) {
+    throw new Error("Select this model through the NEAR AI provider");
+  }
+  const allowed = new Set([
+    requireValidModelId(environment.MODEL_DEFAULT),
+    ...configuredIds(environment.OPENROUTER_ALLOWED_MODELS),
+    ...configuredIds(environment.BEDROCK_MODELS),
+  ]);
+  if (!allowed.has(model)) {
+    throw new Error("The selected account model is not in Pilot's server allowlist");
+  }
+  return model;
+}
+
+/** Require an explicitly selected, fully configured server-side NEAR AI model. */
+export function requireNearAiModel(
+  value: unknown,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): string {
+  const model = requireValidModelId(value);
+  const nearAi = inspectNearAiServerConfig(environment);
+  if (nearAi.state !== "enabled" || nearAi.config.model !== model) {
+    throw new NearAiUnavailableError();
   }
   return model;
 }
@@ -166,7 +209,8 @@ export function resolveSessionModel(session: OpenRouterSession | null): string {
     }
     return model;
   }
-  return requireAccountModel(session.model);
+  if (session.mode === "near-ai") return requireNearAiModel(session.model);
+  return requireOpenRouterAccountModel(session.model);
 }
 
 /**
@@ -179,21 +223,24 @@ export function getModelAccess(request: Request): ModelAccess {
   if (!session) throw new Error("A wallet-bound model session is required");
   const model = resolveSessionModel(session);
 
+  if (session.mode === "near-ai") {
+    const nearAi = inspectNearAiServerConfig();
+    if (nearAi.state !== "enabled" || nearAi.config.model !== model) {
+      throw new NearAiUnavailableError();
+    }
+    return {
+      provider: "near-ai",
+      apiKey: nearAi.config.apiKey,
+      apiBase: nearAi.config.apiBase,
+      model,
+      mode: "near-ai",
+      privacy: nearAi.config.privacy,
+      wallet: session.wallet,
+    };
+  }
+
   if (session.mode === "oauth") {
     if (!session.apiKey) throw new Error("OpenRouter session is disconnected");
-
-    const nearAi = readNearAiServerConfig();
-    if (nearAi.enabled && nearAi.model === model) {
-      return {
-        provider: "near-ai",
-        apiKey: nearAi.apiKey,
-        apiBase: nearAi.apiBase,
-        model,
-        mode: "oauth",
-        privacy: nearAi.privacy,
-        wallet: session.wallet,
-      };
-    }
 
     const aws = readPilotAwsConfig();
     if (
@@ -270,9 +317,10 @@ export function filterToolCallingModels(
   return models.sort((left, right) => left.name.localeCompare(right.name));
 }
 
-export function chooseDefaultModel(models: PublicModel[]): string {
+export function chooseDefaultModel(models: PublicModel[]): string | null {
   const configured = getDefaultModel();
-  return models.some((model) => model.id === configured)
+  const openRouterModels = models.filter((model) => model.provider !== "near-ai");
+  return openRouterModels.some((model) => model.id === configured)
     ? configured
-    : (models[0]?.id ?? configured);
+    : (openRouterModels[0]?.id ?? null);
 }

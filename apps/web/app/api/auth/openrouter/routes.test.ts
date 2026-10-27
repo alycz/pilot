@@ -904,14 +904,6 @@ describe("model and session routes", () => {
     process.env.NEAR_AI_MODEL = "z-ai/example-model";
     process.env.NEAR_AI_PRIVACY_TIER = "incognito";
     const wallet = walletFixture();
-    const binding = walletModelBinding(request("https://pilot.example/bind", {
-      cookies: { [WALLET_SESSION_COOKIE]: wallet.cookie },
-    }), wallet.session)!;
-    const oauthCookie = sealOpenRouterSession(createOpenRouterSession({
-      mode: "oauth",
-      model: "provider/paid-tools",
-      apiKey: "sk-or-test-only-key",
-    }, binding), SECRET);
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
       const url = typeof input === "string"
         ? input
@@ -938,11 +930,10 @@ describe("model and session routes", () => {
     }));
 
     const response = await models(request(
-      "https://pilot.example/api/auth/openrouter/models?mode=oauth",
+      "https://pilot.example/api/auth/openrouter/models?mode=near-ai",
       {
         cookies: {
           [WALLET_SESSION_COOKIE]: wallet.cookie,
-          [OPENROUTER_SESSION_COOKIE]: oauthCookie,
         },
       },
     ));
@@ -960,6 +951,122 @@ describe("model and session routes", () => {
       },
     }));
     expect(JSON.stringify(payload)).not.toContain("server-only-near-ai-key");
+
+    const selected = await updateSession(request(
+      "https://pilot.example/api/auth/openrouter/session",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          mode: "near-ai",
+          provider: "near-ai",
+          model: "z-ai/example-model",
+        }),
+        headers: { "Content-Type": "application/json", Origin: "https://pilot.example" },
+        cookies: { [WALLET_SESSION_COOKIE]: wallet.cookie },
+      },
+    ));
+    expect(selected.status).toBe(200);
+    expect(await selected.json()).toMatchObject({
+      mode: "near-ai",
+      provider: "near-ai",
+      model: "z-ai/example-model",
+      selected: true,
+    });
+    const persisted = openOpenRouterSession(
+      selected.cookies.get(OPENROUTER_SESSION_COOKIE)?.value,
+      SECRET,
+    );
+    expect(persisted).toMatchObject({
+      mode: "near-ai",
+      provider: "near-ai",
+      model: "z-ai/example-model",
+    });
+    expect(persisted).not.toHaveProperty("apiKey");
+
+    const status = await getSession(request(
+      "https://pilot.example/api/auth/openrouter/session",
+      {
+        cookies: {
+          [WALLET_SESSION_COOKIE]: wallet.cookie,
+          [OPENROUTER_SESSION_COOKIE]: selected.cookies.get(OPENROUTER_SESSION_COOKIE)!.value,
+        },
+      },
+    ));
+    expect(status.status).toBe(200);
+    expect(await status.json()).toMatchObject({
+      mode: "near-ai",
+      provider: "near-ai",
+      model: "z-ai/example-model",
+      selected: true,
+      connected: false,
+    });
+  });
+
+  it("keeps OpenRouter available and rejects explicit NEAR AI selection when NEAR AI config is invalid", async () => {
+    process.env.NEAR_AI_ENABLED = "1";
+    process.env.NEAR_AI_MODEL = "z-ai/example-model";
+    process.env.NEAR_AI_PRIVACY_TIER = "incognito";
+    const wallet = walletFixture();
+    const binding = walletModelBinding(request("https://pilot.example/bind", {
+      cookies: { [WALLET_SESSION_COOKIE]: wallet.cookie },
+    }), wallet.session)!;
+    const oauthCookie = sealOpenRouterSession(createOpenRouterSession({
+      mode: "oauth",
+      model: "provider/paid-tools",
+      apiKey: "sk-or-test-only-key",
+    }, binding), SECRET);
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      data: [
+        {
+          id: "provider/paid-tools",
+          name: "Paid Tools",
+          supported_parameters: ["tools"],
+        },
+        {
+          id: "z-ai/example-model",
+          name: "Colliding OpenRouter model",
+          supported_parameters: ["tools"],
+        },
+      ],
+    })));
+
+    const listed = await models(request(
+      "https://pilot.example/api/auth/openrouter/models?mode=oauth",
+      {
+        cookies: {
+          [WALLET_SESSION_COOKIE]: wallet.cookie,
+          [OPENROUTER_SESSION_COOKIE]: oauthCookie,
+        },
+      },
+    ));
+    const listedPayload = await listed.json();
+    expect(listed.status).toBe(200);
+    expect(listedPayload.models).toEqual([
+      expect.objectContaining({ id: "provider/paid-tools" }),
+    ]);
+    expect(listedPayload.defaultModel).toBe("provider/paid-tools");
+
+    const selected = await updateSession(request(
+      "https://pilot.example/api/auth/openrouter/session",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          mode: "near-ai",
+          provider: "near-ai",
+          model: "z-ai/example-model",
+        }),
+        headers: { "Content-Type": "application/json", Origin: "https://pilot.example" },
+        cookies: {
+          [WALLET_SESSION_COOKIE]: wallet.cookie,
+        },
+      },
+    ));
+    await expect(selected.json()).resolves.toMatchObject({
+      code: "NEAR_AI_UNAVAILABLE",
+      error: expect.stringContaining("NEAR AI provider is unavailable"),
+    });
+    expect(selected.status).toBe(503);
+    expect(selected.cookies.get(OPENROUTER_SESSION_COOKIE)).toBeUndefined();
   });
 
   it("persists demo selection but refuses a paid demo model", async () => {

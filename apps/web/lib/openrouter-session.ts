@@ -70,7 +70,8 @@ type TimedOpenRouterSession = {
 
 export type OpenRouterSession =
   | (TimedOpenRouterSession & { mode: "demo" })
-  | (TimedOpenRouterSession & { mode: "oauth"; apiKey: string });
+  | (TimedOpenRouterSession & { mode: "oauth"; apiKey: string })
+  | (TimedOpenRouterSession & { mode: "near-ai"; provider: "near-ai" });
 
 export type PendingOpenRouterSession = {
   version: 2;
@@ -122,7 +123,7 @@ function isOpenRouterSession(value: unknown, now = Date.now()): value is OpenRou
   const candidate = value as Record<string, unknown>;
   if (
     candidate.version !== SESSION_VERSION ||
-    (candidate.mode !== "demo" && candidate.mode !== "oauth") ||
+    (candidate.mode !== "demo" && candidate.mode !== "oauth" && candidate.mode !== "near-ai") ||
     typeof candidate.model !== "string" ||
     typeof candidate.issuedAt !== "number" ||
     !Number.isSafeInteger(candidate.issuedAt) ||
@@ -137,12 +138,14 @@ function isOpenRouterSession(value: unknown, now = Date.now()): value is OpenRou
     return false;
   }
 
-  return candidate.mode === "demo" || (
-    typeof candidate.apiKey === "string" &&
+  if (candidate.mode === "demo") return true;
+  if (candidate.mode === "near-ai") {
+    return candidate.provider === "near-ai" && candidate.apiKey === undefined;
+  }
+  return typeof candidate.apiKey === "string" &&
     candidate.apiKey.trim().length >= 16 &&
     candidate.apiKey.trim().length <= 512 &&
-    !/[\u0000-\u001f\u007f]/.test(candidate.apiKey)
-  );
+    !/[\u0000-\u001f\u007f]/.test(candidate.apiKey);
 }
 
 export function getSessionSecret(): string {
@@ -276,7 +279,10 @@ export function matchesWalletModelBinding(
 }
 
 export function createOpenRouterSession(
-  input: { mode: "demo"; model: string } | { mode: "oauth"; model: string; apiKey: string },
+  input:
+    | { mode: "demo"; model: string }
+    | { mode: "oauth"; model: string; apiKey: string }
+    | { mode: "near-ai"; provider: "near-ai"; model: string },
   wallet: WalletModelBinding,
   now = Date.now(),
 ): OpenRouterSession {

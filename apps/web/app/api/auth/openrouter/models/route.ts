@@ -8,8 +8,9 @@ import {
 } from "../../../../../lib/model-access";
 import {
   discoverNearAiModels,
+  inspectNearAiServerConfig,
+  NearAiUnavailableError,
   nearAiPublicDescriptor,
-  readNearAiServerConfig,
   verifyNearAiConfiguredChatModel,
 } from "../../../../../lib/near-ai";
 import { readDemoModelPublicStatusAsync } from "../../../../../lib/demo-model-budget";
@@ -46,8 +47,42 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
   }
   const requestedMode = request.nextUrl.searchParams.get("mode") ?? "demo";
-  if (requestedMode !== "demo" && requestedMode !== "oauth") {
-    return NextResponse.json({ error: "mode must be demo or oauth" }, { status: 400 });
+  if (requestedMode !== "demo" && requestedMode !== "oauth" && requestedMode !== "near-ai") {
+    return NextResponse.json({ error: "mode must be demo, oauth, or near-ai" }, { status: 400 });
+  }
+
+  if (requestedMode === "near-ai") {
+    const nearAi = inspectNearAiServerConfig();
+    if (nearAi.state !== "enabled") {
+      return NextResponse.json(
+        { error: "The selected NEAR AI provider is unavailable", code: "NEAR_AI_UNAVAILABLE" },
+        { status: 503, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+    try {
+      const model = verifyNearAiConfiguredChatModel(
+        nearAi.config,
+        await discoverNearAiModels({ signal: request.signal }),
+      );
+      const descriptor = nearAiPublicDescriptor(nearAi.config);
+      return NextResponse.json({
+        models: [{
+          id: model.id,
+          name: model.id,
+          description: "NEAR AI Cloud model with native tool support",
+          provider: "near-ai",
+          privacy: descriptor.privacy,
+        } satisfies PublicModel],
+        defaultModel: model.id,
+      }, { headers: { "Cache-Control": "no-store" } });
+    } catch (error) {
+      if (request.signal.aborted) throw error;
+      const unavailable = new NearAiUnavailableError();
+      return NextResponse.json(
+        { error: unavailable.message, code: unavailable.code },
+        { status: unavailable.status, headers: { "Cache-Control": "no-store" } },
+      );
+    }
   }
 
   let allowedModels: readonly string[];
@@ -116,35 +151,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   let models: PublicModel[] = filterToolCallingModels(payload, requestedMode, allowedModels);
-  if (requestedMode === "oauth") {
-    const nearAi = readNearAiServerConfig();
-    if (nearAi.enabled) {
-      try {
-        const model = verifyNearAiConfiguredChatModel(
-          nearAi,
-          await discoverNearAiModels(),
-        );
-        const descriptor = nearAiPublicDescriptor(nearAi);
-        // The configured id is routed to NEAR AI, so never show an identically
-        // named OpenRouter entry with misleading provenance.
-        models = models.filter((candidate) => candidate.id !== model.id);
-        models.push({
-          id: model.id,
-          name: model.id,
-          description: "NEAR AI Cloud model with native tool support",
-          provider: "near-ai",
-          privacy: descriptor.privacy,
-        });
-        models.sort((left, right) => left.name.localeCompare(right.name));
-      } catch {
-        // Fail closed: an unavailable, stale, or non-tool-capable model is not
-        // advertised as selectable. Existing providers remain available.
-      }
-    }
+  const nearAi = inspectNearAiServerConfig();
+  // A configured NEAR AI id is provider-owned even while its optional
+  // configuration is unavailable. Never advertise an identically named
+  // OpenRouter entry as a silent cross-provider fallback.
+  if (nearAi.state !== "disabled" && nearAi.modelHint) {
+    models = models.filter((candidate) => candidate.id !== nearAi.modelHint);
   }
   const response = NextResponse.json({
     models,
-    defaultModel: models.length > 0 ? chooseDefaultModel(models) : null,
+    defaultModel: chooseDefaultModel(models),
     ...(demoStatus ? { demo: demoStatus } : {}),
   });
   // Demo integrity may trip between requests; never cache an availability

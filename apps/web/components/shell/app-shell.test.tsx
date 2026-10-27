@@ -77,4 +77,25 @@ describe("model settings persistence", () => {
       }),
     );
   });
+
+  it("persists NEAR AI with an explicit provider instead of an OpenRouter-shaped request", async () => {
+    const fetcher = vi.fn(async () => Response.json({ mode: "near-ai" }));
+
+    await persistModelSelection(
+      fetcher as typeof fetch,
+      "z-ai/example-model",
+      "near-ai",
+    );
+    expect(fetcher).toHaveBeenCalledWith(
+      "/api/auth/openrouter/session",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          mode: "near-ai",
+          provider: "near-ai",
+          model: "z-ai/example-model",
+        }),
+      }),
+    );
+  });
 });

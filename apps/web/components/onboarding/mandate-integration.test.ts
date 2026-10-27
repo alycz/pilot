@@ -12,7 +12,9 @@ describe("MP3 onboarding integration", () => {
   it("keeps the AWS model picker gated by the existing OAuth state", () => {
     expect(source).toContain("<ModelPicker");
     expect(source).toContain('bedrockMode: oauthConnected ? bedrockMode : "off"');
-    expect(source).toContain("oauthConnected ? continueOpenRouter : startDemo");
+    expect(source).toContain("oauthConnected\n      ? continueOpenRouter\n      : startDemo");
+    expect(source).toContain('loadCatalog("near-ai")');
+    expect(source).toContain("mode: \"near-ai\", provider: \"near-ai\", model");
   });
 
   it("connects hash-only Open Finance verification to explicit mandate approval", () => {

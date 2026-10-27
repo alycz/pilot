@@ -74,6 +74,7 @@ import {
   type DemoModelIntegrityFailure,
   type DemoModelReservation,
 } from "../../../lib/demo-model-budget";
+import { NearAiUnavailableError } from "../../../lib/near-ai";
 import type {
   HermesWorkflowAdvisor,
   HermesWorkflowAdvisory,
@@ -464,6 +465,13 @@ export function streamErrorMessage(
 }
 
 function modelAccessFailureResponse(error: unknown): Response {
+  if (error instanceof NearAiUnavailableError) {
+    return errorResponse(
+      "The selected NEAR AI provider is unavailable. Choose OpenRouter or ask an operator to verify NEAR AI configuration.",
+      error.status,
+      { "x-pilot-error-code": error.code },
+    );
+  }
   if (error instanceof BedrockDailyTurnLimitError) {
     return visibleMessageResponse(
       "This wallet's Amazon Bedrock daily turn cap is exhausted. Wait for the wallet-scoped window to reset.",
@@ -2024,14 +2032,11 @@ export function createChatHandler(dependencies: ChatHandlerDependencies = {}) {
               model: await dependencies.createModel(access),
               trust: modelTrustForAccess(normalizedAccess),
             }
-          : await resolveChatModel(normalizedAccess);
-    } catch {
+          : await resolveChatModel(normalizedAccess, { signal: request.signal });
+    } catch (error) {
       await settleDemo("uncertain");
       await closeDemoBudget();
-      return errorResponse(
-        "Pilot's model connection is not available right now. Please reconnect or try again later.",
-        503,
-      );
+      return modelAccessFailureResponse(error);
     }
     const { model, trust: modelTrust } = resolved;
     const demoAccess = isDemoAccess(access);

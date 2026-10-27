@@ -1,5 +1,6 @@
 export * from "./mcp.js";
 export * from "./mock.js";
+export * from "./near-receipts.js";
 export * from "./rest.js";
 export * from "./request.js";
 export * from "./response.js";

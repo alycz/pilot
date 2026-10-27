@@ -4,16 +4,17 @@ import { integrationExplainers } from "./content";
 import { integrationLinks } from "./integration-links";
 
 describe("integration explainer content", () => {
-  it("defines the four canonical public routes exactly once", () => {
+  it("preserves the four explainers and adds the bounded NEAR fixture route once", () => {
     expect(integrationLinks.map((item) => item.href)).toEqual([
       "/integrations/mastercard",
       "/integrations/aws",
       "/integrations/quicknode",
       "/integrations/ledger",
+      "/demo/near-intents",
     ]);
-    expect(new Set(integrationLinks.map((item) => item.slug)).size).toBe(4);
+    expect(new Set(integrationLinks.map((item) => item.slug)).size).toBe(5);
     expect(Object.keys(integrationExplainers).sort()).toEqual(
-      integrationLinks.map((item) => item.slug).sort(),
+      integrationLinks.filter((item) => item.slug !== "near-intents").map((item) => item.slug).sort(),
     );
   });
 

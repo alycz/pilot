@@ -20,7 +20,7 @@ const ScopeIdSchema = z.string().regex(LOWER_HEX_64);
 const DigestSchema = z.string().regex(LOWER_HEX_64);
 const WalletProofConsumeRequestSchema = z.object({
   version: z.literal(1),
-  namespace: z.enum(["chat", "wallet-auth"]),
+  namespace: z.enum(["chat", "wallet-auth", "near-wallet-auth"]),
   scopeId: ScopeIdSchema,
   nonceDigest: DigestSchema,
   expiresAtMs: z.number().int().safe().positive(),

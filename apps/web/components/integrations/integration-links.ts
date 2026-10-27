@@ -1,8 +1,8 @@
-import type { IntegrationSlug } from "./types";
+import type { IntegrationLinkSlug } from "./types";
 
 export const integrationLinks: readonly {
-  slug: IntegrationSlug;
-  href: `/integrations/${IntegrationSlug}`;
+  slug: IntegrationLinkSlug;
+  href: `/integrations/${Exclude<IntegrationLinkSlug, "near-intents">}` | "/demo/near-intents";
   label: string;
   detail: string;
 }[] = [
@@ -29,5 +29,11 @@ export const integrationLinks: readonly {
     href: "/integrations/ledger",
     label: "Ledger",
     detail: "Owner-signing simulation",
+  },
+  {
+    slug: "near-intents",
+    href: "/demo/near-intents",
+    label: "NEAR Intents",
+    detail: "Fixture-only discovery and review",
   },
 ] as const;

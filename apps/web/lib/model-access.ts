@@ -7,6 +7,11 @@ import { readPilotAwsConfig } from "./aws/config";
 import { readDemoModelConfig } from "./demo-model-budget";
 import { readWalletSession } from "./wallet-session";
 import { isExactZeroPriceCatalogModel } from "./openrouter-free-policy";
+import {
+  readNearAiServerConfig,
+  type NearAiPrivacyDisclosure,
+  type NearAiServerConfig,
+} from "./near-ai";
 
 const MODEL_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$/;
 
@@ -26,12 +31,23 @@ export type ModelAccess =
       /** User OAuth credential used only by the explicit local Bedrock mock stand-in. */
       apiKey?: string;
       wallet?: WalletModelBinding;
+    }
+  | {
+      provider: "near-ai";
+      apiKey: string;
+      apiBase: Extract<NearAiServerConfig, { enabled: true }>["apiBase"];
+      model: string;
+      mode: "oauth";
+      privacy: NearAiPrivacyDisclosure;
+      wallet: WalletModelBinding;
     };
 
 export type PublicModel = {
   id: string;
   name: string;
   description?: string;
+  provider?: "near-ai";
+  privacy?: NearAiPrivacyDisclosure;
 };
 
 type OpenRouterModelRecord = {
@@ -119,10 +135,12 @@ function configuredIds(value: string | undefined): string[] {
 export function accountModelAllowlist(
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): readonly string[] {
+  const nearAi = readNearAiServerConfig(environment);
   const models = new Set<string>([
     requireValidModelId(environment.MODEL_DEFAULT),
     ...configuredIds(environment.OPENROUTER_ALLOWED_MODELS),
     ...configuredIds(environment.BEDROCK_MODELS),
+    ...(nearAi.enabled ? [requireValidModelId(nearAi.model)] : []),
   ]);
   return [...models];
 }
@@ -163,6 +181,19 @@ export function getModelAccess(request: Request): ModelAccess {
 
   if (session.mode === "oauth") {
     if (!session.apiKey) throw new Error("OpenRouter session is disconnected");
+
+    const nearAi = readNearAiServerConfig();
+    if (nearAi.enabled && nearAi.model === model) {
+      return {
+        provider: "near-ai",
+        apiKey: nearAi.apiKey,
+        apiBase: nearAi.apiBase,
+        model,
+        mode: "oauth",
+        privacy: nearAi.privacy,
+        wallet: session.wallet,
+      };
+    }
 
     const aws = readPilotAwsConfig();
     if (

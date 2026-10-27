@@ -81,6 +81,23 @@ export const UNTRUSTED_FIELD_RULES: Readonly<
   "mastercard.page": [{ kind: "mastercard-content", path: ["**"] }],
   "mastercard.search": [{ kind: "mastercard-content", path: ["**"] }],
   "mastercard.services": [{ kind: "mastercard-content", path: ["**"] }],
+  "near.intents.quote": [
+    { kind: "provider", path: ["quote", "correlationId"] },
+  ],
+  "near.intents.executable-quote.review": [
+    { kind: "provider", path: ["owner_review", "quote_correlation_id"] },
+  ],
+  "near.intents.status": [
+    { kind: "provider", path: ["status", "correlationId"] },
+    { kind: "provider", path: ["status", "quoteResponse", "correlationId"] },
+    { kind: "provider", path: ["status", "swapDetails", "refundReason"] },
+    { kind: "uri", path: ["status", "swapDetails", "originChainTxHashes", "*", "explorerUrl"] },
+    { kind: "uri", path: ["status", "swapDetails", "destinationChainTxHashes", "*", "explorerUrl"] },
+  ],
+  "near.intents.tokens": [
+    { kind: "token-name", path: ["tokens", "*", "symbol"] },
+    { kind: "provider", path: ["tokens", "*", "coingeckoId"] },
+  ],
   "perps.markets": [
     { kind: "market-coin", path: ["markets", "*", "coin"] },
     { kind: "margin-mode", path: ["markets", "*", "marginMode"] },
@@ -189,6 +206,17 @@ export const OP_SCREENING_CLASSIFICATION: Readonly<
   "mastercard.services": "untrusted",
   "merchants.get": "trusted",
   "merchants.list": "trusted",
+  // These are live provider reads. Strict schemas retain protocol identifiers
+  // and numbers, while the small set of provider-authored display fields is
+  // explicitly screened above before model use.
+  "near.intents.quote": "untrusted",
+  "near.intents.executable-quote.review": "untrusted",
+  // This result contains only locally generated identifiers, strict enums,
+  // atomic amounts, addresses, revisions, and verified provider hashes.
+  "near.intents.owner-funded.reserve": "structured",
+  "near.intents.owner-funded.reconcile": "structured",
+  "near.intents.status": "untrusted",
+  "near.intents.tokens": "untrusted",
   "onboarding.readiness": "structured",
   "perps.markets": "untrusted",
   "policy.get": "trusted",

@@ -6,7 +6,7 @@ import React, { useEffect, useRef, useState } from "react";
 
 import { integrationLinks } from "@/components/integrations/integration-links";
 import { IntegrationsMenu } from "@/components/integrations/integrations-menu";
-import type { IntegrationSlug } from "@/components/integrations/types";
+import type { IntegrationLinkSlug } from "@/components/integrations/types";
 import { DOCS_PATH } from "@/lib/docs-origin";
 
 import { DocsLink } from "./docs-link";
@@ -50,7 +50,7 @@ export function LaunchButton({ className = "" }: { className?: string }) {
  * The site navigation. On the landing page the section links scroll in place;
  * on an integration page (`current` set) they lead back to those sections.
  */
-export function LandingNav({ current }: { current?: IntegrationSlug } = {}) {
+export function LandingNav({ current }: { current?: IntegrationLinkSlug } = {}) {
   const onLanding = !current;
   const tracked = useActiveSection(onLanding ? sectionIds : noSections);
   const active = onLanding ? tracked : undefined;

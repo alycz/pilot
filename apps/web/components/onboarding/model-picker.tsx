@@ -3,10 +3,14 @@
 import { Check, ChevronDown, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import type { NearAiPrivacyDisclosure } from "@/lib/near-ai";
+
 export type ModelChoice = {
   id: string;
   name: string;
   description?: string;
+  provider?: "near-ai";
+  privacy?: NearAiPrivacyDisclosure;
 };
 
 export type BedrockPickerMode = "off" | "mock" | "aws";
@@ -21,7 +25,7 @@ type ModelPickerProps = {
 };
 
 export type ModelChoiceGroup = {
-  id: "openrouter" | "bedrock";
+  id: "openrouter" | "near-ai" | "bedrock";
   label: string;
   models: ModelChoice[];
 };
@@ -42,8 +46,13 @@ export function modelChoiceGroups(
   bedrockModels: readonly string[] = [],
 ): ModelChoiceGroup[] {
   const groups: ModelChoiceGroup[] = [];
-  if (models.length > 0) {
-    groups.push({ id: "openrouter", label: "OpenRouter", models: [...models] });
+  const openRouterModels = models.filter((model) => model.provider !== "near-ai");
+  const nearAiModels = models.filter((model) => model.provider === "near-ai");
+  if (openRouterModels.length > 0) {
+    groups.push({ id: "openrouter", label: "OpenRouter", models: openRouterModels });
+  }
+  if (nearAiModels.length > 0) {
+    groups.push({ id: "near-ai", label: "NEAR AI", models: nearAiModels });
   }
   if (bedrockMode !== "off" && bedrockModels.length > 0) {
     groups.push({
@@ -57,6 +66,15 @@ export function modelChoiceGroups(
     });
   }
   return groups;
+}
+
+export function nearAiModelPrivacyLabel(privacy: NearAiPrivacyDisclosure): string {
+  const tier = privacy.tier === "confidential-tee"
+    ? "Confidential TEE"
+    : privacy.tier === "third-party-confidential-tee"
+      ? "Third-party confidential TEE"
+      : "Incognito";
+  return `${tier} · operator-declared · attestation not verified`;
 }
 
 export function ModelPicker({
@@ -166,6 +184,11 @@ export function ModelPicker({
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">{model.name}</span>
                       <span className="mt-1 block break-all font-mono text-[10px] text-muted-foreground">{model.id}</span>
+                      {model.provider === "near-ai" && model.privacy ? (
+                        <span className="mt-1 block text-[10px] leading-4 text-muted-foreground">
+                          {nearAiModelPrivacyLabel(model.privacy)}
+                        </span>
+                      ) : null}
                     </span>
                     {model.id === value ? <Check className="mt-0.5 size-4 shrink-0 text-[color-mix(in_oklab,var(--primary)_80%,var(--foreground))]" aria-hidden="true" /> : null}
                   </button>

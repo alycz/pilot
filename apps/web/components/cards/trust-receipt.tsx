@@ -35,6 +35,19 @@ function countLabel(value: number, noun: string): string {
   return `${value} ${noun}${value === 1 ? "" : "s"}`;
 }
 
+function nearAiPrivacyTierLabel(tier: string): string | null {
+  switch (tier) {
+    case "confidential-tee":
+      return "Confidential TEE";
+    case "third-party-confidential-tee":
+      return "Third-party confidential TEE";
+    case "incognito":
+      return "Incognito";
+    default:
+      return null;
+  }
+}
+
 function screenChip(screen: CardTrust["screen"], presentation: NonNullable<TrustReceiptProps["presentation"]> = "default"): ReceiptChip | null {
   if (
     !screen ||
@@ -86,6 +99,7 @@ function modelChip(model: CardTrust["model"], presentation: NonNullable<TrustRec
   if (!model || typeof model.id !== "string" || model.id.trim() === "") return null;
 
   let label: string;
+  let detail: ReactNode = <p className="break-all font-mono">{model.id}</p>;
   switch (model.provider) {
     case "bedrock":
       label = "Model · Amazon Bedrock";
@@ -96,6 +110,26 @@ function modelChip(model: CardTrust["model"], presentation: NonNullable<TrustRec
     case "openrouter":
       label = "Model · OpenRouter";
       break;
+    case "near-ai": {
+      const privacyTier = nearAiPrivacyTierLabel(model.privacy.tier);
+      if (
+        !privacyTier ||
+        model.privacy.declaredBy !== "operator-configuration" ||
+        model.privacy.attestationVerified !== false ||
+        typeof model.privacy.summary !== "string" ||
+        model.privacy.summary.trim() === ""
+      ) return null;
+      label = "Model · NEAR AI";
+      detail = (
+        <div className="space-y-1.5">
+          <p className="break-all font-mono">{model.id}</p>
+          <p>Operator-declared privacy tier: {privacyTier}.</p>
+          <p>{model.privacy.summary}</p>
+          <p>Runtime attestation is not verified by Pilot.</p>
+        </div>
+      );
+      break;
+    }
     default:
       return null;
   }
@@ -104,7 +138,7 @@ function modelChip(model: CardTrust["model"], presentation: NonNullable<TrustRec
     id: "model",
     icon: Bot,
     label,
-    detail: <p className="break-all font-mono">{model.id}</p>,
+    detail,
   };
 }
 
@@ -262,22 +296,31 @@ function TrustChip({
 export function TrustReceipt({ appearance = "default", presentation = "default", trust }: TrustReceiptProps) {
   if (!trust || typeof trust !== "object") return null;
 
-  const awsChips = [screenChip(trust.screen, presentation), modelChip(trust.model, presentation), signerChip(trust.signer, presentation)];
+  const model = modelChip(trust.model, presentation);
+  const screen = screenChip(trust.screen, presentation);
+  const signer = signerChip(trust.signer, presentation);
+  const awsChips = [screen, signer];
   const quickNodeChips = [rpcChip(trust.rpc, presentation), confirmationChip(trust.confirmation, presentation), watchChip(trust.watch, presentation)];
-  const chips = [...awsChips, ...quickNodeChips].filter(
+  const chips = [...awsChips, model, ...quickNodeChips].filter(
     (chip): chip is ReceiptChip => chip !== null,
   );
   if (chips.length === 0) return null;
 
-  const hasAws = awsChips.some((chip) => chip !== null);
+  const hasAws = screen !== null ||
+    (signer !== null && trust.signer?.kind !== "local") ||
+    (model !== null && (trust.model?.provider === "bedrock" || trust.model?.provider === "bedrock-mock"));
   const hasQuickNode = quickNodeChips.some((chip) => chip !== null);
+  const providers = [
+    ...(hasAws ? ["AWS"] : []),
+    ...(model && trust.model?.provider === "near-ai" ? ["NEAR AI"] : []),
+    ...(model && trust.model?.provider === "openrouter" ? ["OpenRouter"] : []),
+    ...(hasQuickNode ? ["QuickNode"] : []),
+  ];
   const receiptLabel = presentation === "demo"
     ? "Capability preview"
-    : hasAws && hasQuickNode
-    ? "AWS and QuickNode trust receipt"
-    : hasQuickNode
-      ? "QuickNode trust receipt"
-      : "AWS trust receipt";
+    : providers.length > 0
+      ? `${providers.join(" and ")} trust receipt`
+      : "Trust receipt";
 
   return (
     <section aria-label={receiptLabel} className="min-w-0">

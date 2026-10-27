@@ -47,6 +47,43 @@ import type {
   Venue,
   ExecutionCapability,
 } from "@pilot/contracts";
+import {
+  NEAR_ARBITRUM_USDC_ASSET_ID,
+  NEAR_ARBITRUM_USDC_CONTRACT,
+  NEAR_WRAPPED_NEAR_ASSET_ID,
+  NEAR_WRAPPED_NEAR_CONTRACT,
+  Near1ClickAssetIdSchema,
+  Near1ClickBlockchainSchema,
+  Near1ClickDryQuoteResponseSchema,
+  Near1ClickQuoteHashSchema,
+  Near1ClickStatusResponseSchema,
+  Near1ClickTokenListSchema,
+  NearAccountIdSchema,
+  NearArbitrumUsdcToWnearExecutableQuoteBindingSchema,
+  NearArbitrumUsdcToWnearExecutableQuoteRequestSchema,
+  NearArbitrumUsdcToWnearRouteSchema,
+  NearNativeNearToArbitrumUsdcExecutableQuoteBindingSchema,
+  NearNativeNearToArbitrumUsdcExecutableQuoteRequestSchema,
+  NearNativeNearToArbitrumUsdcReserveRequestSchema,
+  NearNativeNearToArbitrumUsdcReserveResultSchema,
+  NearNativeNearToArbitrumUsdcReconcileRequestSchema,
+  NearNativeNearToArbitrumUsdcReconcileResultSchema,
+  NearNativeNearToArbitrumUsdcRouteSchema,
+  type Near1ClickBlockchain,
+  type Near1ClickDryQuoteResponse,
+  type Near1ClickStatusResponse,
+  type Near1ClickToken,
+  type NearArbitrumUsdcToWnearExecutableQuoteBinding,
+  type NearArbitrumUsdcToWnearExecutableQuoteRequest,
+  type NearArbitrumUsdcToWnearRoute,
+  type NearNativeNearToArbitrumUsdcExecutableQuoteBinding,
+  type NearNativeNearToArbitrumUsdcExecutableQuoteRequest,
+  type NearNativeNearToArbitrumUsdcReserveRequest,
+  type NearNativeNearToArbitrumUsdcReserveResult,
+  type NearNativeNearToArbitrumUsdcReconcileRequest,
+  type NearNativeNearToArbitrumUsdcReconcileResult,
+  type NearNativeNearToArbitrumUsdcRoute,
+} from "@pilot/contracts/near";
 import { z } from "zod";
 import { isValidClassicAddress } from "xrpl";
 import {
@@ -112,6 +149,225 @@ export interface VenueComparisonResult {
   side: "sell" | "buy";
   routes: VenueRouteQuote[];
 }
+
+export type NearIntentsTokensResult = {
+  provider: "near-intents-1click";
+  execution_enabled: false;
+  count: number;
+  tokens: Near1ClickToken[];
+} & ({ source: "live"; live: true } | { source: "fixture"; live: false });
+
+export type NearIntentsDryQuoteResult = {
+  provider: "near-intents-1click";
+  mode: "dry";
+  execution_enabled: false;
+  quote: Near1ClickDryQuoteResponse;
+} & (
+  | {
+      source: "live";
+      signature_verified: true;
+      /** Official provider hash: Base58-encoded SHA-256 message hash. */
+      quote_hash: string;
+    }
+  | {
+      source: "fixture";
+      signature_verified: false;
+      /** Local evidence identifier only; never provider authorization. */
+      local_fixture_id: string;
+    }
+);
+
+export type NearIntentsStatusResult = {
+  provider: "near-intents-1click";
+  execution_enabled: false;
+  status: Near1ClickStatusResponse;
+} & (
+  | { source: "live"; signature_verified: true }
+  | { source: "fixture"; signature_verified: false }
+);
+
+export const NEAR_EXECUTABLE_REVIEW_ROUTE = "arbitrum-usdc-to-near-wnear-v1" as const;
+export const NEAR_EXECUTABLE_REVIEW_FIXTURE_ID =
+  "arb-usdc-to-wnear-review-fixture-v1" as const;
+export const NEAR_NATIVE_EXECUTABLE_REVIEW_ROUTE = "near-native-to-arbitrum-usdc-v1" as const;
+export const NEAR_NATIVE_EXECUTABLE_REVIEW_FIXTURE_ID =
+  "near-native-to-arbitrum-usdc-review-fixture-v1" as const;
+
+export type NearExecutableReviewOwnerFields = {
+  action: "manually-transfer-origin-asset";
+  network: "arbitrum-mainnet";
+  chain_id: 42161;
+  token_contract: typeof NEAR_ARBITRUM_USDC_CONTRACT;
+  token_decimals: 6;
+  amount_atomic: string;
+  deposit_address: string;
+  deposit_memo: null;
+  provider_deadline: string;
+  provider_time_when_inactive: string;
+  quote_correlation_id: string;
+  destination_asset_id: typeof NEAR_WRAPPED_NEAR_ASSET_ID;
+  destination_recipient: string;
+  estimated_amount_out: string;
+  minimum_amount_out: string;
+  app_fee_bps: 0;
+  transaction_built: false;
+  transaction_signed: false;
+  transaction_broadcast: false;
+  funding_state: "not-funded";
+  warning: string;
+};
+
+export type NearExecutableReviewFixtureQuote = {
+  version: "pilot-near-arbitrum-usdc-to-wnear-quote-fixture-v1";
+  route: NearArbitrumUsdcToWnearRoute;
+  correlation_id: string;
+  provider_timestamp: string;
+  request_echo: NearArbitrumUsdcToWnearExecutableQuoteRequest;
+  amount_in: string;
+  amount_out: string;
+  min_amount_out: string;
+  recipient: string;
+  refund_to: string;
+  deposit_address: string;
+  deposit_memo_present: false;
+  provider_deadline_at: string;
+  provider_time_when_inactive_at: string;
+  approval_expires_at: string;
+};
+
+type NearArbitrumExecutableReviewResultBase = {
+  provider: "near-intents-1click";
+  mode: "executable-review";
+  route: NearArbitrumUsdcToWnearRoute;
+  execution_enabled: false;
+  manual_funding_required: true;
+};
+
+export type NearArbitrumExecutableQuoteReviewResult = NearArbitrumExecutableReviewResultBase & (
+  | {
+      source: "live";
+      provider_signature_verified: true;
+      quote_hash: string;
+      quote_binding: NearArbitrumUsdcToWnearExecutableQuoteBinding;
+      owner_review: NearExecutableReviewOwnerFields & {
+        status_lookup: {
+          operation: "near.intents.status";
+          deposit_address: string;
+          deposit_memo: null;
+          expected_correlation_id: string;
+          expected_quote_hash: string;
+        };
+      };
+    }
+  | {
+      source: "fixture";
+      provider_signature_verified: false;
+      local_fixture_id: typeof NEAR_EXECUTABLE_REVIEW_FIXTURE_ID;
+      fixture_quote: NearExecutableReviewFixtureQuote;
+      owner_review: NearExecutableReviewOwnerFields & {
+        status_lookup: {
+          operation: "near.intents.status";
+          deposit_address: string;
+          deposit_memo: null;
+          expected_correlation_id: string;
+          local_fixture_id: typeof NEAR_EXECUTABLE_REVIEW_FIXTURE_ID;
+        };
+      };
+    }
+);
+
+export type NearNativeExecutableReviewOwnerFields = {
+  action: "manually-transfer-native-near";
+  network: "near-mainnet";
+  funding_asset: "native-near";
+  amount_atomic: string;
+  amount_unit: "yoctoNEAR";
+  deposit_address: string;
+  deposit_memo: null;
+  managed_wrapping_by_1click: true;
+  owner_should_send_native_near: true;
+  owner_should_not_pre_wrap: true;
+  provider_deadline: string;
+  provider_time_when_inactive: string;
+  quote_correlation_id: string;
+  destination_chain_id: 42161;
+  destination_token_contract: typeof NEAR_ARBITRUM_USDC_CONTRACT;
+  destination_token_decimals: 6;
+  destination_recipient: string;
+  estimated_amount_out: string;
+  minimum_amount_out: string;
+  app_fee_bps: 0;
+  transaction_built: false;
+  transaction_signed: false;
+  transaction_broadcast: false;
+  funding_state: "not-funded";
+  warning: string;
+};
+
+export type NearNativeExecutableReviewFixtureQuote = {
+  version: "pilot-near-native-to-arbitrum-usdc-quote-fixture-v1";
+  route: NearNativeNearToArbitrumUsdcRoute;
+  correlation_id: string;
+  provider_timestamp: string;
+  request_echo: NearNativeNearToArbitrumUsdcExecutableQuoteRequest;
+  amount_in: string;
+  amount_out: string;
+  min_amount_out: string;
+  recipient: string;
+  refund_to: string;
+  deposit_address: string;
+  deposit_memo_present: false;
+  provider_deadline_at: string;
+  provider_time_when_inactive_at: string;
+  approval_expires_at: string;
+};
+
+type NearNativeExecutableReviewResultBase = {
+  provider: "near-intents-1click";
+  mode: "executable-review";
+  route: NearNativeNearToArbitrumUsdcRoute;
+  execution_enabled: false;
+  manual_funding_required: true;
+};
+
+export type NearNativeExecutableQuoteReviewResult = NearNativeExecutableReviewResultBase & (
+  | {
+      source: "live";
+      provider_signature_verified: true;
+      quote_hash: string;
+      quote_binding: NearNativeNearToArbitrumUsdcExecutableQuoteBinding;
+      owner_review: NearNativeExecutableReviewOwnerFields & {
+        status_lookup: {
+          operation: "near.intents.status";
+          profile: typeof NEAR_NATIVE_EXECUTABLE_REVIEW_ROUTE;
+          deposit_address: string;
+          deposit_memo: null;
+          expected_correlation_id: string;
+          expected_quote_hash: string;
+        };
+      };
+    }
+  | {
+      source: "fixture";
+      provider_signature_verified: false;
+      local_fixture_id: typeof NEAR_NATIVE_EXECUTABLE_REVIEW_FIXTURE_ID;
+      fixture_quote: NearNativeExecutableReviewFixtureQuote;
+      owner_review: NearNativeExecutableReviewOwnerFields & {
+        status_lookup: {
+          operation: "near.intents.status";
+          profile: typeof NEAR_NATIVE_EXECUTABLE_REVIEW_ROUTE;
+          deposit_address: string;
+          deposit_memo: null;
+          expected_correlation_id: string;
+          local_fixture_id: typeof NEAR_NATIVE_EXECUTABLE_REVIEW_FIXTURE_ID;
+        };
+      };
+    }
+);
+
+export type NearIntentsExecutableQuoteReviewResult =
+  | NearArbitrumExecutableQuoteReviewResult
+  | NearNativeExecutableQuoteReviewResult;
 
 export interface AccountInfoResult {
   account_data: JsonObject;
@@ -731,6 +987,71 @@ export interface HarborOperationMap {
     };
     result: VenueComparisonResult;
   };
+  "near.intents.tokens": {
+    args: {
+      blockchain?: Near1ClickBlockchain;
+      symbol?: string;
+      include_ondo?: boolean;
+      limit?: number;
+    };
+    result: NearIntentsTokensResult;
+  };
+  "near.intents.quote": {
+    args: {
+      dry?: true;
+      origin_asset_id: string;
+      destination_asset_id: string;
+      amount: string;
+      slippage_bps: number;
+      deposit_type: "ORIGIN_CHAIN";
+      recipient: string;
+      recipient_type: "DESTINATION_CHAIN";
+      refund_to: string;
+      refund_type: "ORIGIN_CHAIN";
+      /** 1Click refund-start deadline, not Pilot approval freshness. */
+      refund_deadline: string;
+      quote_waiting_time_ms?: number;
+    };
+    result: NearIntentsDryQuoteResult;
+  };
+  "near.intents.status": {
+    args: {
+      deposit_address: string;
+      deposit_memo?: string;
+      profile?: typeof NEAR_NATIVE_EXECUTABLE_REVIEW_ROUTE;
+      expected_quote_hash?: string;
+      expected_correlation_id?: string;
+    };
+    result: NearIntentsStatusResult;
+  };
+  "near.intents.executable-quote.review": {
+    args: {
+      amount_atomic: string;
+      slippage_bps: number;
+      refund_deadline: string;
+      quote_waiting_time_ms?: number;
+    } & (
+      | {
+          route: typeof NEAR_EXECUTABLE_REVIEW_ROUTE;
+          recipient: string;
+          refund_to: string;
+        }
+      | {
+          route: typeof NEAR_NATIVE_EXECUTABLE_REVIEW_ROUTE;
+          recipient: string;
+          refund_to: string;
+        }
+    );
+    result: NearIntentsExecutableQuoteReviewResult;
+  };
+  "near.intents.owner-funded.reserve": {
+    args: NearNativeNearToArbitrumUsdcReserveRequest;
+    result: NearNativeNearToArbitrumUsdcReserveResult;
+  };
+  "near.intents.owner-funded.reconcile": {
+    args: NearNativeNearToArbitrumUsdcReconcileRequest;
+    result: NearNativeNearToArbitrumUsdcReconcileResult;
+  };
   "ledger.account.info": {
     args: AccountArgs & { ledger_hash?: string; ledger_index?: LedgerIndex; queue?: boolean; signer_lists?: boolean };
     result: AccountInfoResult;
@@ -1129,6 +1450,13 @@ export type ArgsFor<K extends HarborOpName> = HarborOperationMap[K]["args"];
 export type ResultFor<K extends HarborOpName> = HarborOperationMap[K]["result"];
 
 const NonEmptyStringSchema = z.string().trim().min(1);
+const NearVisibleTextSchema = z.string().trim().min(1).max(512)
+  .regex(/^[\x21-\x7e]+$/, "must contain only visible ASCII characters");
+const NearAtomicAmountSchema = z.string().max(128)
+  .regex(/^[1-9]\d*$/, "must be a positive atomic-unit integer string");
+const NearCorrelationIdSchema = z.string().trim().min(1).max(128)
+  .regex(/^[A-Za-z0-9._:-]+$/);
+const NearArbitrumAddressSchema = z.string().regex(/^0x[0-9A-Fa-f]{40}$/);
 const TransactionHashSchema = z.string().regex(/^[A-Fa-f0-9]{64}$/);
 const LedgerHashSchema = TransactionHashSchema;
 const ExecutionNetworkSchema = z.enum(["testnet", "devnet"]);
@@ -1526,6 +1854,72 @@ export const HarborArgsSchemas = {
       side: z.enum(["sell", "buy"]),
     })
     .strict(),
+  "near.intents.tokens": z
+    .object({
+      blockchain: Near1ClickBlockchainSchema.optional(),
+      symbol: z.string().trim().min(1).max(32).optional(),
+      include_ondo: z.boolean().optional(),
+      limit: z.number().int().min(1).max(500).optional(),
+    })
+    .strict(),
+  "near.intents.quote": z
+    .object({
+      dry: z.literal(true).default(true),
+      origin_asset_id: Near1ClickAssetIdSchema,
+      destination_asset_id: Near1ClickAssetIdSchema,
+      amount: NearAtomicAmountSchema,
+      slippage_bps: z.number().int().min(0).max(10_000),
+      deposit_type: z.literal("ORIGIN_CHAIN"),
+      recipient: NearVisibleTextSchema,
+      recipient_type: z.literal("DESTINATION_CHAIN"),
+      refund_to: NearVisibleTextSchema,
+      refund_type: z.literal("ORIGIN_CHAIN"),
+      refund_deadline: z.string().datetime({ offset: true }),
+      quote_waiting_time_ms: z.number().int().min(0).max(30_000).optional(),
+    })
+    .strict()
+    .refine((request) => request.origin_asset_id !== request.destination_asset_id, {
+      path: ["destination_asset_id"],
+      message: "origin and destination assets must differ",
+    }),
+  "near.intents.status": z
+    .object({
+      profile: z.literal(NEAR_NATIVE_EXECUTABLE_REVIEW_ROUTE).optional(),
+      deposit_address: NearVisibleTextSchema,
+      deposit_memo: NearVisibleTextSchema.optional(),
+      expected_quote_hash: Near1ClickQuoteHashSchema.optional(),
+      expected_correlation_id: NearCorrelationIdSchema.optional(),
+    })
+    .strict()
+    .superRefine((request, context) => {
+      if (request.profile !== NEAR_NATIVE_EXECUTABLE_REVIEW_ROUTE) return;
+      if (request.deposit_memo !== undefined) context.addIssue({ code: "custom", path: ["deposit_memo"], message: "native NEAR status rejects deposit memos" });
+      if (request.expected_quote_hash === undefined) context.addIssue({ code: "custom", path: ["expected_quote_hash"], message: "native NEAR status requires the reviewed quote hash" });
+      if (request.expected_correlation_id === undefined) context.addIssue({ code: "custom", path: ["expected_correlation_id"], message: "native NEAR status requires the reviewed correlation id" });
+      if (!NearAccountIdSchema.safeParse(request.deposit_address).success) context.addIssue({ code: "custom", path: ["deposit_address"], message: "native NEAR status requires a NEAR deposit account" });
+    }),
+  "near.intents.executable-quote.review": z.discriminatedUnion("route", [
+    z.object({
+      route: z.literal(NEAR_EXECUTABLE_REVIEW_ROUTE),
+      amount_atomic: NearAtomicAmountSchema,
+      slippage_bps: z.number().int().min(0).max(1_000),
+      recipient: NearAccountIdSchema,
+      refund_to: NearArbitrumAddressSchema,
+      refund_deadline: z.string().datetime({ offset: true }),
+      quote_waiting_time_ms: z.number().int().min(0).max(30_000).optional(),
+    }).strict(),
+    z.object({
+      route: z.literal(NEAR_NATIVE_EXECUTABLE_REVIEW_ROUTE),
+      amount_atomic: NearAtomicAmountSchema,
+      slippage_bps: z.number().int().min(0).max(1_000),
+      recipient: NearArbitrumAddressSchema,
+      refund_to: NearAccountIdSchema,
+      refund_deadline: z.string().datetime({ offset: true }),
+      quote_waiting_time_ms: z.number().int().min(0).max(30_000).optional(),
+    }).strict(),
+  ]),
+  "near.intents.owner-funded.reserve": NearNativeNearToArbitrumUsdcReserveRequestSchema,
+  "near.intents.owner-funded.reconcile": NearNativeNearToArbitrumUsdcReconcileRequestSchema,
   "ledger.account.info": z
     .object({
       account: AccountSchema,
@@ -2261,6 +2655,294 @@ const VenueComparisonResultSchema = z.object({
   side: z.enum(["sell", "buy"]),
   routes: z.array(VenueRouteQuoteSchema),
 }).strict();
+const NearIntentsTokensResultBaseSchema = z.object({
+  provider: z.literal("near-intents-1click"),
+  execution_enabled: z.literal(false),
+  count: z.number().int().min(0).max(500),
+  tokens: Near1ClickTokenListSchema,
+}).strict();
+const NearIntentsTokensResultSchema = z.discriminatedUnion("source", [
+  NearIntentsTokensResultBaseSchema.extend({
+    source: z.literal("live"),
+    live: z.literal(true),
+  }).strict(),
+  NearIntentsTokensResultBaseSchema.extend({
+    source: z.literal("fixture"),
+    live: z.literal(false),
+  }).strict(),
+]).superRefine((result, context) => {
+  if (result.count !== result.tokens.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["count"],
+      message: "token count must match the returned token list",
+    });
+  }
+});
+const NearIntentsDryQuoteResultBaseSchema = z.object({
+  provider: z.literal("near-intents-1click"),
+  mode: z.literal("dry"),
+  execution_enabled: z.literal(false),
+  quote: Near1ClickDryQuoteResponseSchema,
+}).strict();
+const NearIntentsDryQuoteResultSchema = z.discriminatedUnion("source", [
+  NearIntentsDryQuoteResultBaseSchema.extend({
+    source: z.literal("live"),
+    signature_verified: z.literal(true),
+    quote_hash: Near1ClickQuoteHashSchema,
+  }).strict(),
+  NearIntentsDryQuoteResultBaseSchema.extend({
+    source: z.literal("fixture"),
+    signature_verified: z.literal(false),
+    local_fixture_id: z.string().regex(/^near-fixture-[a-z0-9-]{1,96}$/),
+  }).strict(),
+]);
+const NearIntentsStatusResultBaseSchema = z.object({
+  provider: z.literal("near-intents-1click"),
+  execution_enabled: z.literal(false),
+  status: Near1ClickStatusResponseSchema,
+}).strict();
+const NearIntentsStatusResultSchema = z.discriminatedUnion("source", [
+  NearIntentsStatusResultBaseSchema.extend({
+    source: z.literal("live"),
+    signature_verified: z.literal(true),
+  }).strict(),
+  NearIntentsStatusResultBaseSchema.extend({
+    source: z.literal("fixture"),
+    signature_verified: z.literal(false),
+  }).strict(),
+]);
+const NearExecutableReviewStatusLookupBaseSchema = z.object({
+  operation: z.literal("near.intents.status"),
+  deposit_address: NearArbitrumAddressSchema,
+  deposit_memo: z.null(),
+  expected_correlation_id: NearCorrelationIdSchema,
+});
+const NearExecutableReviewOwnerBaseSchema = z.object({
+  action: z.literal("manually-transfer-origin-asset"),
+  network: z.literal("arbitrum-mainnet"),
+  chain_id: z.literal(42161),
+  token_contract: z.literal(NEAR_ARBITRUM_USDC_CONTRACT),
+  token_decimals: z.literal(6),
+  amount_atomic: NearAtomicAmountSchema,
+  deposit_address: NearArbitrumAddressSchema,
+  deposit_memo: z.null(),
+  provider_deadline: z.string().datetime({ offset: true }),
+  provider_time_when_inactive: z.string().datetime({ offset: true }),
+  quote_correlation_id: NearCorrelationIdSchema,
+  destination_asset_id: z.literal(NEAR_WRAPPED_NEAR_ASSET_ID),
+  destination_recipient: NearAccountIdSchema,
+  estimated_amount_out: NearAtomicAmountSchema,
+  minimum_amount_out: NearAtomicAmountSchema,
+  app_fee_bps: z.literal(0),
+  transaction_built: z.literal(false),
+  transaction_signed: z.literal(false),
+  transaction_broadcast: z.literal(false),
+  funding_state: z.literal("not-funded"),
+  warning: z.string().min(1).max(1_024),
+});
+const NearExecutableReviewFixtureQuoteSchema = z.object({
+  version: z.literal("pilot-near-arbitrum-usdc-to-wnear-quote-fixture-v1"),
+  route: NearArbitrumUsdcToWnearRouteSchema,
+  correlation_id: NearCorrelationIdSchema,
+  provider_timestamp: z.string().datetime({ offset: true }),
+  request_echo: NearArbitrumUsdcToWnearExecutableQuoteRequestSchema,
+  amount_in: NearAtomicAmountSchema,
+  amount_out: NearAtomicAmountSchema,
+  min_amount_out: NearAtomicAmountSchema,
+  recipient: NearAccountIdSchema,
+  refund_to: NearArbitrumAddressSchema,
+  deposit_address: NearArbitrumAddressSchema,
+  deposit_memo_present: z.literal(false),
+  provider_deadline_at: z.string().datetime({ offset: true }),
+  provider_time_when_inactive_at: z.string().datetime({ offset: true }),
+  approval_expires_at: z.string().datetime({ offset: true }),
+}).strict().superRefine((quote, context) => {
+  const issue = (path: string[], message: string) => context.addIssue({
+    code: "custom",
+    path,
+    message,
+  });
+  if (quote.amount_in !== quote.request_echo.amount) {
+    issue(["amount_in"], "fixture amount must match its request echo");
+  }
+  if (quote.recipient !== quote.request_echo.recipient) {
+    issue(["recipient"], "fixture recipient must match its request echo");
+  }
+  if (quote.refund_to.toLowerCase() !== quote.request_echo.refundTo.toLowerCase()) {
+    issue(["refund_to"], "fixture refund address must match its request echo");
+  }
+  if (quote.provider_deadline_at !== quote.request_echo.deadline) {
+    issue(["provider_deadline_at"], "fixture deadline must match its request echo");
+  }
+  if (Date.parse(quote.approval_expires_at) > Date.parse(quote.provider_deadline_at)) {
+    issue(["approval_expires_at"], "fixture review must expire no later than provider refund start");
+  }
+});
+const NearExecutableReviewResultBaseSchema = z.object({
+  provider: z.literal("near-intents-1click"),
+  mode: z.literal("executable-review"),
+  route: NearArbitrumUsdcToWnearRouteSchema,
+  execution_enabled: z.literal(false),
+  manual_funding_required: z.literal(true),
+});
+const NearArbitrumExecutableQuoteReviewResultSchema = z.discriminatedUnion("source", [
+  NearExecutableReviewResultBaseSchema.extend({
+    source: z.literal("live"),
+    provider_signature_verified: z.literal(true),
+    quote_hash: Near1ClickQuoteHashSchema,
+    quote_binding: NearArbitrumUsdcToWnearExecutableQuoteBindingSchema,
+    owner_review: NearExecutableReviewOwnerBaseSchema.extend({
+      status_lookup: NearExecutableReviewStatusLookupBaseSchema.extend({
+        expected_quote_hash: Near1ClickQuoteHashSchema,
+      }).strict(),
+    }).strict(),
+  }).strict(),
+  NearExecutableReviewResultBaseSchema.extend({
+    source: z.literal("fixture"),
+    provider_signature_verified: z.literal(false),
+    local_fixture_id: z.literal(NEAR_EXECUTABLE_REVIEW_FIXTURE_ID),
+    fixture_quote: NearExecutableReviewFixtureQuoteSchema,
+    owner_review: NearExecutableReviewOwnerBaseSchema.extend({
+      status_lookup: NearExecutableReviewStatusLookupBaseSchema.extend({
+        local_fixture_id: z.literal(NEAR_EXECUTABLE_REVIEW_FIXTURE_ID),
+      }).strict(),
+    }).strict(),
+  }).strict(),
+]).superRefine((result, context) => {
+  const quote = result.source === "live" ? result.quote_binding : result.fixture_quote;
+  const owner = result.owner_review;
+  const issue = (path: string[], message: string) => context.addIssue({
+    code: "custom",
+    path,
+    message,
+  });
+  if (owner.amount_atomic !== quote.amount_in) issue(["owner_review", "amount_atomic"], "owner amount must match quote");
+  if (owner.minimum_amount_out !== quote.min_amount_out) issue(["owner_review", "minimum_amount_out"], "owner minimum output must match quote");
+  if (owner.destination_recipient !== quote.recipient) issue(["owner_review", "destination_recipient"], "owner recipient must match quote");
+  if (owner.deposit_address.toLowerCase() !== quote.deposit_address.toLowerCase()) issue(["owner_review", "deposit_address"], "owner deposit address must match quote");
+  if (owner.provider_deadline !== quote.provider_deadline_at) issue(["owner_review", "provider_deadline"], "owner deadline must match quote");
+  if (owner.provider_time_when_inactive !== quote.provider_time_when_inactive_at) issue(["owner_review", "provider_time_when_inactive"], "owner inactivity time must match quote");
+  if (owner.quote_correlation_id !== quote.correlation_id) issue(["owner_review", "quote_correlation_id"], "owner correlation id must match quote");
+  if (owner.status_lookup.deposit_address.toLowerCase() !== quote.deposit_address.toLowerCase()) issue(["owner_review", "status_lookup", "deposit_address"], "status lookup deposit address must match quote");
+  if (owner.status_lookup.expected_correlation_id !== quote.correlation_id) issue(["owner_review", "status_lookup", "expected_correlation_id"], "status lookup correlation id must match quote");
+  if (result.source === "live") {
+    if (result.quote_hash !== result.quote_binding.quote_hash) issue(["quote_hash"], "top-level quote hash must match quote binding");
+    if (result.owner_review.estimated_amount_out !== result.quote_binding.provider_quote_response.quote.amountOut) issue(["owner_review", "estimated_amount_out"], "estimated output must match provider quote");
+    if (result.owner_review.status_lookup.expected_quote_hash !== result.quote_hash) issue(["owner_review", "status_lookup", "expected_quote_hash"], "status lookup quote hash must match quote binding");
+  } else if (owner.estimated_amount_out !== result.fixture_quote.amount_out) {
+    issue(["owner_review", "estimated_amount_out"], "fixture estimated output must match fixture quote");
+  }
+});
+const NearNativeReviewStatusLookupBaseSchema = z.object({
+  operation: z.literal("near.intents.status"),
+  profile: z.literal(NEAR_NATIVE_EXECUTABLE_REVIEW_ROUTE),
+  deposit_address: NearAccountIdSchema,
+  deposit_memo: z.null(),
+  expected_correlation_id: NearCorrelationIdSchema,
+});
+const NearNativeReviewOwnerBaseSchema = z.object({
+  action: z.literal("manually-transfer-native-near"),
+  network: z.literal("near-mainnet"),
+  funding_asset: z.literal("native-near"),
+  amount_atomic: NearAtomicAmountSchema,
+  amount_unit: z.literal("yoctoNEAR"),
+  deposit_address: NearAccountIdSchema,
+  deposit_memo: z.null(),
+  managed_wrapping_by_1click: z.literal(true),
+  owner_should_send_native_near: z.literal(true),
+  owner_should_not_pre_wrap: z.literal(true),
+  provider_deadline: z.string().datetime({ offset: true }),
+  provider_time_when_inactive: z.string().datetime({ offset: true }),
+  quote_correlation_id: NearCorrelationIdSchema,
+  destination_chain_id: z.literal(42161),
+  destination_token_contract: z.literal(NEAR_ARBITRUM_USDC_CONTRACT),
+  destination_token_decimals: z.literal(6),
+  destination_recipient: NearArbitrumAddressSchema,
+  estimated_amount_out: NearAtomicAmountSchema,
+  minimum_amount_out: NearAtomicAmountSchema,
+  app_fee_bps: z.literal(0),
+  transaction_built: z.literal(false),
+  transaction_signed: z.literal(false),
+  transaction_broadcast: z.literal(false),
+  funding_state: z.literal("not-funded"),
+  warning: z.string().min(1).max(1_024),
+});
+const NearNativeReviewFixtureQuoteSchema = z.object({
+  version: z.literal("pilot-near-native-to-arbitrum-usdc-quote-fixture-v1"),
+  route: NearNativeNearToArbitrumUsdcRouteSchema,
+  correlation_id: NearCorrelationIdSchema,
+  provider_timestamp: z.string().datetime({ offset: true }),
+  request_echo: NearNativeNearToArbitrumUsdcExecutableQuoteRequestSchema,
+  amount_in: NearAtomicAmountSchema,
+  amount_out: NearAtomicAmountSchema,
+  min_amount_out: NearAtomicAmountSchema,
+  recipient: NearArbitrumAddressSchema,
+  refund_to: NearAccountIdSchema,
+  deposit_address: NearAccountIdSchema,
+  deposit_memo_present: z.literal(false),
+  provider_deadline_at: z.string().datetime({ offset: true }),
+  provider_time_when_inactive_at: z.string().datetime({ offset: true }),
+  approval_expires_at: z.string().datetime({ offset: true }),
+}).strict().superRefine((quote, context) => {
+  const issue = (path: string[], message: string) => context.addIssue({ code: "custom", path, message });
+  if (quote.amount_in !== quote.request_echo.amount) issue(["amount_in"], "fixture amount must match its request echo");
+  if (quote.recipient.toLowerCase() !== quote.request_echo.recipient.toLowerCase()) issue(["recipient"], "fixture recipient must match its request echo");
+  if (quote.refund_to !== quote.request_echo.refundTo) issue(["refund_to"], "fixture refund account must match its request echo");
+  if (quote.provider_deadline_at !== quote.request_echo.deadline) issue(["provider_deadline_at"], "fixture deadline must match its request echo");
+  if (Date.parse(quote.approval_expires_at) <= Date.parse(quote.provider_timestamp) || Date.parse(quote.approval_expires_at) > Date.parse(quote.provider_deadline_at)) issue(["approval_expires_at"], "fixture review expiry must follow issuance and not exceed refund start");
+});
+const NearNativeReviewResultBaseSchema = z.object({
+  provider: z.literal("near-intents-1click"),
+  mode: z.literal("executable-review"),
+  route: NearNativeNearToArbitrumUsdcRouteSchema,
+  execution_enabled: z.literal(false),
+  manual_funding_required: z.literal(true),
+});
+const NearNativeExecutableQuoteReviewResultSchema = z.discriminatedUnion("source", [
+  NearNativeReviewResultBaseSchema.extend({
+    source: z.literal("live"),
+    provider_signature_verified: z.literal(true),
+    quote_hash: Near1ClickQuoteHashSchema,
+    quote_binding: NearNativeNearToArbitrumUsdcExecutableQuoteBindingSchema,
+    owner_review: NearNativeReviewOwnerBaseSchema.extend({
+      status_lookup: NearNativeReviewStatusLookupBaseSchema.extend({ expected_quote_hash: Near1ClickQuoteHashSchema }).strict(),
+    }).strict(),
+  }).strict(),
+  NearNativeReviewResultBaseSchema.extend({
+    source: z.literal("fixture"),
+    provider_signature_verified: z.literal(false),
+    local_fixture_id: z.literal(NEAR_NATIVE_EXECUTABLE_REVIEW_FIXTURE_ID),
+    fixture_quote: NearNativeReviewFixtureQuoteSchema,
+    owner_review: NearNativeReviewOwnerBaseSchema.extend({
+      status_lookup: NearNativeReviewStatusLookupBaseSchema.extend({ local_fixture_id: z.literal(NEAR_NATIVE_EXECUTABLE_REVIEW_FIXTURE_ID) }).strict(),
+    }).strict(),
+  }).strict(),
+]).superRefine((result, context) => {
+  const quote = result.source === "live" ? result.quote_binding : result.fixture_quote;
+  const owner = result.owner_review;
+  const issue = (path: string[], message: string) => context.addIssue({ code: "custom", path, message });
+  if (owner.amount_atomic !== quote.amount_in) issue(["owner_review", "amount_atomic"], "owner amount must match quote");
+  if (owner.minimum_amount_out !== quote.min_amount_out) issue(["owner_review", "minimum_amount_out"], "owner minimum output must match quote");
+  if (owner.destination_recipient.toLowerCase() !== quote.recipient.toLowerCase()) issue(["owner_review", "destination_recipient"], "owner recipient must match quote");
+  if (owner.deposit_address !== quote.deposit_address) issue(["owner_review", "deposit_address"], "owner deposit account must match quote");
+  if (owner.provider_deadline !== quote.provider_deadline_at) issue(["owner_review", "provider_deadline"], "owner deadline must match quote");
+  if (owner.provider_time_when_inactive !== quote.provider_time_when_inactive_at) issue(["owner_review", "provider_time_when_inactive"], "owner inactivity time must match quote");
+  if (owner.quote_correlation_id !== quote.correlation_id) issue(["owner_review", "quote_correlation_id"], "owner correlation id must match quote");
+  if (owner.status_lookup.deposit_address !== quote.deposit_address) issue(["owner_review", "status_lookup", "deposit_address"], "status deposit account must match quote");
+  if (owner.status_lookup.expected_correlation_id !== quote.correlation_id) issue(["owner_review", "status_lookup", "expected_correlation_id"], "status correlation id must match quote");
+  if (result.source === "live") {
+    if (result.quote_hash !== result.quote_binding.quote_hash) issue(["quote_hash"], "top-level quote hash must match quote binding");
+    if (result.owner_review.estimated_amount_out !== result.quote_binding.provider_quote_response.quote.amountOut) issue(["owner_review", "estimated_amount_out"], "estimated output must match provider quote");
+    if (result.owner_review.status_lookup.expected_quote_hash !== result.quote_hash) issue(["owner_review", "status_lookup", "expected_quote_hash"], "status quote hash must match quote binding");
+  } else if (owner.estimated_amount_out !== result.fixture_quote.amount_out) {
+    issue(["owner_review", "estimated_amount_out"], "fixture estimated output must match fixture quote");
+  }
+});
+const NearIntentsExecutableQuoteReviewResultSchema = z.union([
+  NearArbitrumExecutableQuoteReviewResultSchema,
+  NearNativeExecutableQuoteReviewResultSchema,
+]);
 const AccountInfoResultSchema = z.object({
   account_data: JsonObjectSchema,
   ledger_current_index: z.number().int().nonnegative().optional(),
@@ -2650,6 +3332,12 @@ export const HarborResultSchemas = {
   "venues.list": z.array(VenueSchema),
   "venues.get": VenueSchema,
   "venues.compare": VenueComparisonResultSchema,
+  "near.intents.tokens": NearIntentsTokensResultSchema,
+  "near.intents.quote": NearIntentsDryQuoteResultSchema,
+  "near.intents.status": NearIntentsStatusResultSchema,
+  "near.intents.executable-quote.review": NearIntentsExecutableQuoteReviewResultSchema,
+  "near.intents.owner-funded.reserve": NearNativeNearToArbitrumUsdcReserveResultSchema,
+  "near.intents.owner-funded.reconcile": NearNativeNearToArbitrumUsdcReconcileResultSchema,
   "ledger.account.info": AccountInfoResultSchema,
   "ledger.account.lines": AccountLinesResultSchema,
   "ledger.account.objects": AccountObjectsResultSchema,

@@ -92,6 +92,12 @@ const requiredOps = [
   "venues.list",
   "venues.get",
   "venues.compare",
+  "near.intents.tokens",
+  "near.intents.quote",
+  "near.intents.status",
+  "near.intents.executable-quote.review",
+  "near.intents.owner-funded.reserve",
+  "near.intents.owner-funded.reconcile",
   "ledger.account.info",
   "ledger.account.lines",
   "ledger.account.objects",
@@ -204,6 +210,36 @@ const fixtureArgs = {
     amount: "100",
     side: "sell",
   },
+  "near.intents.tokens": { blockchain: "near", limit: 25 },
+  "near.intents.quote": {
+    dry: true,
+    origin_asset_id: "nep141:fixture-origin.near",
+    destination_asset_id: "nep141:fixture-destination.near",
+    amount: "1000000",
+    slippage_bps: 100,
+    deposit_type: "ORIGIN_CHAIN",
+    recipient: "recipient.near",
+    recipient_type: "DESTINATION_CHAIN",
+    refund_to: "refund.near",
+    refund_type: "ORIGIN_CHAIN",
+    refund_deadline: "2027-01-01T00:00:00.000Z",
+  },
+  "near.intents.status": {
+    deposit_address: "fixture-deposit-address",
+    deposit_memo: "fixture-deposit-memo",
+  },
+  "near.intents.executable-quote.review": {
+    route: "arbitrum-usdc-to-near-wnear-v1",
+    amount_atomic: "1000000",
+    slippage_bps: 100,
+    recipient: "owner.near",
+    refund_to: "0x1111111111111111111111111111111111111111",
+    refund_deadline: "2027-01-01T00:00:00.000Z",
+  },
+  // Admission has no fixture transport. Its complete strict request is covered
+  // in near-owner-funded-reserve.test.ts and is never dispatched by this matrix.
+  "near.intents.owner-funded.reserve": {} as ArgsFor<"near.intents.owner-funded.reserve">,
+  "near.intents.owner-funded.reconcile": {} as ArgsFor<"near.intents.owner-funded.reconcile">,
   "ledger.account.info": { account: ACCOUNT, network: "testnet" },
   "ledger.account.lines": { account: ACCOUNT, network: "testnet", limit: 20 },
   "ledger.account.objects": {
@@ -910,6 +946,11 @@ const extraResultSchemas: Partial<Record<HarborOpName, z.ZodTypeAny>> = {
   "mastercard.page": MastercardPageSchema,
   "mastercard.search": MastercardSearchSchema,
   "venues.compare": VenueComparisonSchema,
+  "near.intents.tokens": HarborResultSchemas["near.intents.tokens"],
+  "near.intents.quote": HarborResultSchemas["near.intents.quote"],
+  "near.intents.status": HarborResultSchemas["near.intents.status"],
+  "near.intents.owner-funded.reserve": HarborResultSchemas["near.intents.owner-funded.reserve"],
+  "near.intents.owner-funded.reconcile": HarborResultSchemas["near.intents.owner-funded.reconcile"],
   "ledger.account.info": HarborResultSchemas["ledger.account.info"],
   "ledger.account.lines": HarborResultSchemas["ledger.account.lines"],
   "ledger.account.objects": HarborResultSchemas["ledger.account.objects"],
@@ -1454,6 +1495,9 @@ describe(`Harbor REST contract (${useLiveHarbor ? "live" : "mock"})`, () => {
     "tx.approvalReconcile",
     "tx.submit",
     "x402.payIssuedFixture",
+    "near.intents.executable-quote.review",
+    "near.intents.owner-funded.reserve",
+    "near.intents.owner-funded.reconcile",
   ]);
   const intentionallyUnsupportedMockOps = new Set<HarborOpName>([
     "tx.approvalPreflight",
@@ -1469,6 +1513,18 @@ describe(`Harbor REST contract (${useLiveHarbor ? "live" : "mock"})`, () => {
   it.each(requiredOps)(
     "calls %s with valid args and validates its client contract",
     async (name) => {
+      if (!useLiveHarbor && name === "near.intents.executable-quote.review") {
+        await expect(op(name, fixtureArgs[name])).rejects.toThrow(
+          "Missing Harbor mock fixture for near.intents.executable-quote.review",
+        );
+        return;
+      }
+      if (name === "near.intents.owner-funded.reserve" || name === "near.intents.owner-funded.reconcile") {
+        // Admission and reconciliation require a fresh, live provider quote,
+        // exact economic approval, and durable state. Never synthesize them for
+        // the exhaustive fixture matrix.
+        return;
+      }
       const result = await op(name, fixtureArgs[name]);
       const envelope = EnvelopeSchema(z.unknown()).parse(result);
       expectNoSecretFields(envelope);

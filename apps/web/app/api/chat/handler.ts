@@ -429,6 +429,21 @@ export function streamErrorMessage(
     }
     return "Amazon Bedrock couldn't finish this response. No blocked transaction was retried.";
   }
+  if (provider === "near-ai") {
+    if (status === 401 || status === 403) {
+      return "The configured model provider rejected server access. Ask an operator to verify the provider connection and try again.";
+    }
+    if (status === 402) {
+      return "The configured model provider rejected this request for account or billing reasons. No transaction was retried.";
+    }
+    if (status === 404) {
+      return "The selected model is unavailable from the configured provider. Choose another allowed model and try again.";
+    }
+    if (isRateLimitError(error)) {
+      return "The configured model provider rate-limited this request. Wait before trying again.";
+    }
+    return "The configured model provider couldn't finish this response. No blocked transaction was retried.";
+  }
   if (status === 401 || status === 403) {
     return "The model connection expired or was rejected. Reconnect OpenRouter before trying again.";
   }
@@ -474,7 +489,7 @@ function normalizeModelAccess(access: ChatModelAccess): ModelAccess {
 }
 
 function isDemoAccess(access: ChatModelAccess): boolean {
-  if ("provider" in access && access.provider === "bedrock") return false;
+  if ("provider" in access && access.provider !== "openrouter") return false;
   if ("provider" in access && access.mode === "demo") return true;
   const demoKey = process.env.DEMO_OPENROUTER_API_KEY;
   return (

@@ -123,6 +123,53 @@ describe("resolveChatModel", () => {
     expect(JSON.stringify(resolved.trust)).not.toContain("secret");
   });
 
+  it("creates a catalog-verified NEAR AI model with truthful privacy trust", async () => {
+    const modelProvider = vi.fn(() => fakeModel);
+    const createProvider = vi.fn(() => modelProvider);
+    const privacy = {
+      tier: "incognito" as const,
+      declaredBy: "operator-configuration" as const,
+      attestationVerified: false as const,
+      summary: "The upstream model runs outside the gateway TEE.",
+    };
+
+    const resolved = await resolveChatModel(
+      {
+        provider: "near-ai",
+        apiKey: "near-ai-server-secret",
+        apiBase: "https://cloud-api.near.ai/v1",
+        model: "z-ai/example-model",
+        mode: "oauth",
+        privacy,
+        wallet: {
+          account: "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
+          network: "testnet",
+          expiresAt: Date.now() + 60_000,
+          sessionId: "near-ai-test-session",
+        },
+      },
+      {
+        nearAi: {
+          createProvider,
+          discoverModels: async () => [{
+            id: "z-ai/example-model",
+            supportedFeatures: ["tools"],
+            supportedSamplingParameters: [],
+            ready: true,
+          }],
+        },
+      },
+    );
+
+    expect(resolved.model).toBe(fakeModel);
+    expect(resolved.trust).toEqual({
+      provider: "near-ai",
+      id: "z-ai/example-model",
+      privacy,
+    });
+    expect(JSON.stringify(resolved.trust)).not.toContain("near-ai-server-secret");
+  });
+
   it("passes an explicitly selected legacy region to the live provider unchanged", async () => {
     const modelProvider = vi.fn(() => fakeModel);
     const createAmazonBedrock = vi.fn(() => modelProvider);

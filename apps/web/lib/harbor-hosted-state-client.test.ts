@@ -23,9 +23,9 @@ function json(value: unknown, init: ResponseInit = {}): Response {
   });
 }
 
-function proofInput() {
+function proofInput(namespace: "chat" | "wallet-auth" | "near-wallet-auth" = "wallet-auth") {
   return {
-    version: 1 as const, namespace: "wallet-auth" as const, scopeId: HEX,
+    version: 1 as const, namespace, scopeId: HEX,
     nonceDigest: OTHER_HEX, expiresAtMs: 1_800_000_000_000,
   };
 }
@@ -90,6 +90,16 @@ describe("Harbor hosted-state client boundary", () => {
     expect(init).toMatchObject({ method: "POST", redirect: "error", cache: "no-store" });
     expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${KEY}`);
     expect(JSON.parse(String(init?.body))).toEqual(proofInput());
+  });
+
+  it("accepts the exact domain-separated NEAR wallet-auth namespace", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(json({ consumed: true }));
+    const client = createHarborHostedStateClientFromEnv(ENV, { fetch: fetchMock });
+    await expect(client.consumeWalletProof(proofInput("near-wallet-auth")))
+      .resolves.toEqual({ consumed: true });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]![1]?.body))).toEqual(
+      proofInput("near-wallet-auth"),
+    );
   });
 
   it("never retries an uncertain proof consume", async () => {

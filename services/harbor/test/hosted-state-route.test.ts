@@ -146,6 +146,16 @@ describe("private hosted Pilot state route", () => {
 		);
 		expect(await body(proofResponse)).toEqual({ consumed: true });
 		expect(fakeStore.consumeWalletProof).toHaveBeenCalledWith(PRINCIPAL, proof());
+		const nearProofRequest = proof({ namespace: "near-wallet-auth" });
+		const nearProofResponse = await handleHostedStateRoute(
+			request(`${PREFIX}/wallet-proofs/consume`, nearProofRequest),
+			routeOptions,
+		);
+		expect(await body(nearProofResponse)).toEqual({ consumed: true });
+		expect(fakeStore.consumeWalletProof).toHaveBeenLastCalledWith(
+			PRINCIPAL,
+			nearProofRequest,
+		);
 
 		const readRequest = {
 			version: 1,
@@ -216,7 +226,8 @@ describe("private hosted Pilot state route", () => {
 			PRINCIPAL,
 			quotaRequest,
 		);
-		for (const response of [proofResponse, readResponse, casResponse, deleteResponse, quotaResponse]) {
+		for (const response of [proofResponse, nearProofResponse, readResponse, casResponse,
+			deleteResponse, quotaResponse]) {
 			expect(response?.status).toBe(200);
 			expectPrivateHeaders(response);
 		}

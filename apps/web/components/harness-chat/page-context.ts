@@ -102,6 +102,11 @@ const routeSpecs = {
     title: "Ledger demonstration",
     summaryKeys: ["section", "state"],
   },
+  "/demo/near-intents": {
+    id: "demo_near_intents",
+    title: "NEAR Intents fixture",
+    summaryKeys: ["section", "state"],
+  },
 } as const satisfies Record<string, {
   id: string;
   title: string;

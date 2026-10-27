@@ -195,11 +195,120 @@ const KNOWN_ISSUERS = new Set([
   "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
 ]);
 
+const NEAR_FIXTURE_AT = "2026-10-26T12:00:00.000Z";
+const nearFixtureQuoteRequest = {
+  dry: true,
+  swapType: "EXACT_INPUT",
+  slippageTolerance: 100,
+  originAsset: "nep141:fixture-origin.near",
+  depositType: "ORIGIN_CHAIN",
+  destinationAsset: "nep141:fixture-destination.near",
+  amount: "1000000",
+  refundTo: "refund.fixture.near",
+  refundType: "ORIGIN_CHAIN",
+  recipient: "recipient.fixture.near",
+  recipientType: "DESTINATION_CHAIN",
+  deadline: "2027-01-01T00:00:00.000Z",
+  depositMode: "SIMPLE",
+  confidentiality: "public",
+  quoteWaitingTimeMs: 0,
+  insured: false,
+};
+const nearFixtureQuoteAmounts = {
+  amountIn: "1000000",
+  amountInFormatted: "1",
+  amountInUsd: "1",
+  minAmountIn: "1000000",
+  amountOut: "995000",
+  amountOutFormatted: "0.995",
+  amountOutUsd: "0.995",
+  minAmountOut: "990000",
+  timeEstimate: 30,
+};
+const nearFixtureDryQuote = {
+  correlationId: "fixture-correlation",
+  timestamp: NEAR_FIXTURE_AT,
+  signature: "fixture-provider-signature-not-verified",
+  quoteRequest: nearFixtureQuoteRequest,
+  quote: nearFixtureQuoteAmounts,
+};
+const nearFixtureExecutableQuote = {
+  ...nearFixtureDryQuote,
+  quoteRequest: { ...nearFixtureQuoteRequest, dry: false },
+  quote: {
+    ...nearFixtureQuoteAmounts,
+    depositAddress: "fixture-deposit-address",
+    depositMemo: "fixture-deposit-memo",
+    deadline: "2027-01-01T00:00:00.000Z",
+    timeWhenInactive: "2027-01-01T00:00:00.000Z",
+  },
+};
+const nearFixtures: FixtureTable = {
+  "near.intents.tokens": {
+    ok: true,
+    data: {
+      provider: "near-intents-1click",
+      source: "fixture",
+      live: false,
+      execution_enabled: false,
+      count: 1,
+      tokens: [{
+        assetId: "nep141:fixture-origin.near",
+        decimals: 24,
+        blockchain: "near",
+        symbol: "FIXTURE",
+        price: 1,
+        priceUpdatedAt: NEAR_FIXTURE_AT,
+      }],
+    },
+    asOf: NEAR_FIXTURE_AT,
+    asOfBasis: "explicit non-live fixture",
+  },
+  "near.intents.quote": {
+    ok: true,
+    data: {
+      provider: "near-intents-1click",
+      source: "fixture",
+      mode: "dry",
+      signature_verified: false,
+      execution_enabled: false,
+      local_fixture_id: "near-fixture-dry-quote-001",
+      quote: nearFixtureDryQuote,
+    },
+    asOf: NEAR_FIXTURE_AT,
+    asOfBasis: "explicit non-live dry quote fixture",
+  },
+  "near.intents.status": {
+    ok: true,
+    data: {
+      provider: "near-intents-1click",
+      source: "fixture",
+      signature_verified: false,
+      execution_enabled: false,
+      status: {
+        correlationId: "fixture-status-correlation",
+        quoteResponse: nearFixtureExecutableQuote,
+        status: "PENDING_DEPOSIT",
+        updatedAt: "2026-10-26T12:01:00.000Z",
+        swapDetails: {
+          intentHashes: [],
+          nearTxHashes: [],
+          originChainTxHashes: [],
+          destinationChainTxHashes: [],
+        },
+      },
+    },
+    asOf: "2026-10-26T12:01:00.000Z",
+    asOfBasis: "explicit non-live pending-status fixture",
+  },
+};
+
 const fixtures: FixtureTable = {
   ...(readFixturesJson as FixtureTable),
   ...(builderFixturesJson as FixtureTable),
   ...(executionFixturesJson as FixtureTable),
   ...(ap4mFixturesJson as FixtureTable),
+  ...nearFixtures,
 };
 
 const builderOperations = new Set<HarborOpName>([
@@ -387,6 +496,15 @@ function fixtureEnvelope(key: string): Envelope<unknown> {
       break;
     case "mastercard.search":
       MastercardSearchResultSchema.parse(envelope.data);
+      break;
+    case "near.intents.tokens":
+      HarborResultSchemas["near.intents.tokens"].parse(envelope.data);
+      break;
+    case "near.intents.quote":
+      HarborResultSchemas["near.intents.quote"].parse(envelope.data);
+      break;
+    case "near.intents.status":
+      HarborResultSchemas["near.intents.status"].parse(envelope.data);
       break;
     case "lending.brokers":
       HarborResultSchemas["lending.brokers"].parse(envelope.data);

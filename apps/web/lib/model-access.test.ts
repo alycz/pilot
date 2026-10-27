@@ -107,6 +107,10 @@ describe("getModelAccess", () => {
     delete process.env.BEDROCK_MODE;
     delete process.env.BEDROCK_MODELS;
     delete process.env.BEDROCK_DAILY_TURN_CAP;
+    delete process.env.NEAR_AI_ENABLED;
+    delete process.env.NEAR_AI_API_KEY;
+    delete process.env.NEAR_AI_MODEL;
+    delete process.env.NEAR_AI_PRIVACY_TIER;
   });
 
   it("requires a wallet-bound demo session and enforces its exact allowlist", () => {
@@ -139,6 +143,46 @@ describe("getModelAccess", () => {
       model: "provider/account-model",
       mode: "oauth",
     });
+  });
+
+  it("routes only the explicitly configured account model to NEAR AI", () => {
+    process.env.NEAR_AI_ENABLED = "1";
+    process.env.NEAR_AI_API_KEY = "server-only-near-ai-key";
+    process.env.NEAR_AI_MODEL = "z-ai/example-model";
+    process.env.NEAR_AI_PRIVACY_TIER = "third-party-confidential-tee";
+
+    const access = getModelAccess(modelRequest({
+      mode: "oauth",
+      model: "z-ai/example-model",
+      apiKey: "user-owned-openrouter-key",
+    }));
+
+    expect(access).toMatchObject({
+      provider: "near-ai",
+      apiKey: "server-only-near-ai-key",
+      apiBase: "https://cloud-api.near.ai/v1",
+      model: "z-ai/example-model",
+      mode: "oauth",
+      privacy: {
+        tier: "third-party-confidential-tee",
+        declaredBy: "operator-configuration",
+        attestationVerified: false,
+      },
+    });
+    expect(JSON.stringify(access)).not.toContain("user-owned-openrouter-key");
+  });
+
+  it("keeps NEAR AI default-off and fails closed for malformed enabled configuration", () => {
+    expect(getModelAccess(modelRequest({
+      mode: "oauth",
+      model: "provider/account-model",
+      apiKey: "user-owned-openrouter-key",
+    })).provider).toBe("openrouter");
+
+    process.env.NEAR_AI_ENABLED = "1";
+    process.env.NEAR_AI_MODEL = "z-ai/example-model";
+    process.env.NEAR_AI_PRIVACY_TIER = "confidential-tee";
+    expect(() => requireAccountModel("z-ai/example-model")).toThrow("NEAR_AI_API_KEY");
   });
 
   it.each(["off", "mock", "aws"] as const)(

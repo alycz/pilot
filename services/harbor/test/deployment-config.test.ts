@@ -115,7 +115,7 @@ describe("Free/QuickJS deployment configuration", () => {
 		expect(result.stderr).toContain("missing --profile");
 	});
 
-	it("pins the exact base migrations plus hosted state without enabling intervening features", async () => {
+	it("pins the exact base migrations plus reviewed hosted state without enabling intervening features", async () => {
 		expect(FREE_QUICKJS_MIGRATIONS).toEqual([
 			"0001_init.sql",
 			"0002_build_capability_isolation.sql",
@@ -130,6 +130,9 @@ describe("Free/QuickJS deployment configuration", () => {
 			"0009_aws_kms_delegate_keys.sql",
 			"0010_ap4m_channel_purchase.sql",
 			"0017_hosted_pilot_state.sql",
+			"0018_near_attempt_store.sql",
+			"0019_near_wallet_proof_replay.sql",
+			"0020_near_native_to_arbitrum_usdc_lifecycle.sql",
 		]);
 		expect(FREE_QUICKJS_MIGRATIONS.some((name) => /^001[1-6]_/.test(name))).toBe(false);
 		await expect(validateIsolatedMigrationProfile(serviceRoot, "free-quickjs"))

@@ -5,14 +5,14 @@ import Link from "next/link";
 import React, { useEffect, useRef, useState } from "react";
 
 import { integrationLinks } from "./integration-links";
-import type { IntegrationSlug } from "./types";
+import type { IntegrationLinkSlug } from "./types";
 
 export function IntegrationsMenu({
   current,
   align = "end",
   className = "",
 }: {
-  current?: IntegrationSlug;
+  current?: IntegrationLinkSlug;
   align?: "start" | "end";
   className?: string;
 }) {

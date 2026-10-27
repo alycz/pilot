@@ -47,6 +47,9 @@ export const FREE_QUICKJS_MIGRATIONS = Object.freeze([
 	"0009_aws_kms_delegate_keys.sql",
 	"0010_ap4m_channel_purchase.sql",
 	"0017_hosted_pilot_state.sql",
+	"0018_near_attempt_store.sql",
+	"0019_near_wallet_proof_replay.sql",
+	"0020_near_native_to_arbitrum_usdc_lifecycle.sql",
 ]);
 
 const PROFILES = Object.freeze({
@@ -68,6 +71,9 @@ const PROFILES = Object.freeze({
 			"0009_aws_kms_delegate_keys.sql": "38db2663ab897d46da23e904190d7541cabbb686173153abe274248bf240bbab",
 			"0010_ap4m_channel_purchase.sql": "4c27d6cfe254e993eeb4d392ad42196b43bde941da71b9aef1bc07e665e30e91",
 			"0017_hosted_pilot_state.sql": "c5f0b77b231e40138fe17b3cb07690182b0da2519956ecf46e3844de31c3562b",
+			"0018_near_attempt_store.sql": "2460a259b348ad1d563bd34f7887f1292b65cd668325e5708e61d2cdf4ae82e8",
+			"0019_near_wallet_proof_replay.sql": "9239e61697ed8bc4c109151563408f97a5c862a5f7c836e82bc4f753f62c9c4e",
+			"0020_near_native_to_arbitrum_usdc_lifecycle.sql": "493a0935a424660ccf6b214c0c0a0a92b0519a2ebd42d23ea742afa8fd9567fd",
 		}),
 	}),
 	"trading-isolated-v1": Object.freeze({

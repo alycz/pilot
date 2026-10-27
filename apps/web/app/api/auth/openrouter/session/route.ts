@@ -89,12 +89,23 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   } catch (error) {
     return sessionUnavailable(error);
   }
+  let model: string;
+  let demo: Awaited<ReturnType<typeof publicDemoStatus>>;
+  try {
+    model = session?.model ?? getDefaultModel();
+    demo = await publicDemoStatus();
+  } catch {
+    return json({
+      error: "Model access configuration is unavailable.",
+      code: "MODEL_ACCESS_UNAVAILABLE",
+    }, 503);
+  }
   const response = NextResponse.json({
     mode: session?.mode ?? "demo",
-    model: session?.model ?? getDefaultModel(),
+    model,
     selected: session !== null,
     connected: session?.mode === "oauth",
-    demo: await publicDemoStatus(),
+    demo,
   });
   response.headers.set("Cache-Control", "no-store");
   return response;

@@ -115,7 +115,8 @@ function clientFor(ctx: OpContext, allowExecutableQuotes = false): OneClickClien
   const apiKey = typeof env.NEAR_INTENTS_API_KEY === "string"
     ? env.NEAR_INTENTS_API_KEY
     : undefined;
-  return createOneClickClient({ apiKey, allowExecutableQuotes });
+  const signal = ctx.request instanceof Request ? ctx.request.signal : undefined;
+  return createOneClickClient({ apiKey, allowExecutableQuotes, signal });
 }
 
 function hasConfiguredPrincipal(value: unknown, principal: string): boolean {
@@ -656,7 +657,11 @@ function isNativeNearReconciliationPort(value: unknown): value is NativeNearReco
   return isRecord(value) && typeof value.recordNativeNearToArbitrumEvidence === "function";
 }
 
-function nativeNearReservationPort(ctx: OpContext, tenantId: string): NativeNearReservationPort {
+function nativeNearReservationPort(
+  ctx: OpContext,
+  tenantId: string,
+  approvedPrincipalId: string,
+): NativeNearReservationPort {
   if (!isD1Binding(ctx.db)) {
     throw new OneClickOwnerFundedReserveError(
       "OWNER_FUNDED_RESERVE_D1_REQUIRED",
@@ -664,10 +669,14 @@ function nativeNearReservationPort(ctx: OpContext, tenantId: string): NativeNear
     );
   }
   if (isNativeNearReservationPort(ctx.nearNativeAttemptStore)) return ctx.nearNativeAttemptStore;
-  return new D1NearAttemptStore(ctx.db, tenantId, ctx.principal);
+  return new D1NearAttemptStore(ctx.db, tenantId, approvedPrincipalId);
 }
 
-function nativeNearReconciliationPort(ctx: OpContext, tenantId: string): NativeNearReconciliationPort {
+function nativeNearReconciliationPort(
+  ctx: OpContext,
+  tenantId: string,
+  approvedPrincipalId: string,
+): NativeNearReconciliationPort {
   if (!isD1Binding(ctx.db)) {
     throw new OneClickOwnerFundedReconcileError(
       "OWNER_FUNDED_RECONCILE_UNAVAILABLE",
@@ -675,7 +684,7 @@ function nativeNearReconciliationPort(ctx: OpContext, tenantId: string): NativeN
     );
   }
   if (isNativeNearReconciliationPort(ctx.nearNativeAttemptStore)) return ctx.nearNativeAttemptStore;
-  return new D1NearAttemptStore(ctx.db, tenantId, ctx.principal);
+  return new D1NearAttemptStore(ctx.db, tenantId, approvedPrincipalId);
 }
 
 function nativeBinding(
@@ -833,7 +842,7 @@ async function verifyProviderBinding(
   }
 }
 
-function validateActiveOwnerApproval(request: NativeNearOwnerFundedReserveRequest, principal: string, nowMs: number): void {
+function validateActiveOwnerApproval(request: NativeNearOwnerFundedReserveRequest, nowMs: number): void {
   const approval = request.approval;
   const payload = approval.payload;
   const approvedAt = Date.parse(payload.approved_at);
@@ -842,11 +851,11 @@ function validateActiveOwnerApproval(request: NativeNearOwnerFundedReserveReques
   const deadlineAt = Date.parse(payload.provider_deadline_at);
   const providerTimestamp = Date.parse(request.quote_binding.provider_timestamp);
   const controlVerifiedAt = Date.parse(approval.account_control.verified_at);
-  if (payload.principal_id !== principal || payload.reservation.principal_id !== principal ||
-      approval.account_control.principal_id !== principal) {
+  if (payload.reservation.principal_id !== payload.principal_id ||
+      approval.account_control.principal_id !== payload.principal_id) {
     throw new OneClickOwnerFundedReserveError(
       "OWNER_FUNDED_RESERVE_AUTH_REQUIRED",
-      "Approval principal does not match the authenticated approval gateway",
+      "Approval principal bindings do not match",
     );
   }
   if (approval.economic_approval.confirmed_at !== payload.approved_at ||
@@ -875,7 +884,7 @@ async function handleOwnerFundedReserve(ctx: OpContext, rawArgs: unknown) {
   }
   const request = parsed.data;
   const nowMs = Date.now();
-  validateActiveOwnerApproval(request, ctx.principal, nowMs);
+  validateActiveOwnerApproval(request, nowMs);
   const computedApprovalDigest = await approvalDigest(request.approval.payload);
   if (computedApprovalDigest !== request.approval.approval_digest) {
     throw new OneClickOwnerFundedReserveError(
@@ -934,17 +943,21 @@ async function handleOwnerFundedReserve(ctx: OpContext, rawArgs: unknown) {
     destinationRecipient: quote.recipient,
     minAmountOut: quote.min_amount_out,
   };
-  const reserved = await nativeNearReservationPort(ctx, runtime.tenantId)
+  const reserved = await nativeNearReservationPort(
+    ctx,
+    runtime.tenantId,
+    payload.principal_id,
+  )
     .reserveNativeNearToArbitrum(storeInput, storeBinding);
   const attempt = reserved.attempt;
   const lifecycle = reserved.lifecycle;
-  if (attempt.tenantId !== runtime.tenantId || attempt.principalId !== ctx.principal ||
+  if (attempt.tenantId !== runtime.tenantId || attempt.principalId !== payload.principal_id ||
       attempt.accountId !== payload.near_account_id || attempt.idempotencyKey !== request.idempotency_key ||
       attempt.requestDigest !== payload.reservation.request_digest || attempt.attemptId !== request.attempt_id ||
       attempt.reservationId !== request.reservation_id || attempt.assetId !== quote.route.origin_asset_id ||
       attempt.amountAtomic !== quote.amount_in || attempt.budgetLimitAtomic !== runtime.budgetLimitAtomic ||
       attempt.state !== "approved" || attempt.reservationState !== "reserved" ||
-      lifecycle.tenantId !== runtime.tenantId || lifecycle.principalId !== ctx.principal ||
+      lifecycle.tenantId !== runtime.tenantId || lifecycle.principalId !== payload.principal_id ||
       lifecycle.accountId !== payload.near_account_id || lifecycle.idempotencyKey !== request.idempotency_key ||
       lifecycle.attemptId !== request.attempt_id || lifecycle.reservationId !== request.reservation_id ||
       lifecycle.lifecycleState !== "reserved" || lifecycle.entryRevision !== attempt.entryRevision) {
@@ -999,8 +1012,10 @@ async function handleOwnerFundedReconcile(ctx: OpContext, rawArgs: unknown) {
     throw new OneClickOwnerFundedReconcileError("OWNER_FUNDED_RECONCILE_INVALID", "Reconciliation request did not match the exact approved attempt");
   }
   const request = parsed.data;
-  if (request.approval.payload.principal_id !== ctx.principal ||
-      request.approval.payload.reservation.principal_id !== ctx.principal) {
+  if (request.approval.payload.reservation.principal_id !==
+      request.approval.payload.principal_id ||
+      request.approval.account_control.principal_id !==
+      request.approval.payload.principal_id) {
     throw new OneClickOwnerFundedReconcileError("OWNER_FUNDED_RECONCILE_AUTH_REQUIRED", "Reconciliation principal does not match the approved attempt");
   }
   const digest = await approvalDigest(request.approval.payload);
@@ -1008,7 +1023,11 @@ async function handleOwnerFundedReconcile(ctx: OpContext, rawArgs: unknown) {
     throw new OneClickOwnerFundedReconcileError("OWNER_FUNDED_RECONCILE_INVALID", "Economic approval digest did not verify");
   }
   await verifyProviderBinding(ctx, request);
-  const store = nativeNearReconciliationPort(ctx, runtime.tenantId);
+  const store = nativeNearReconciliationPort(
+    ctx,
+    runtime.tenantId,
+    request.approval.payload.principal_id,
+  );
   const checkedAt = new Date().toISOString();
   if (request.stage === "source-funding") {
     const evidence = await runtime.rpc.verifySource({

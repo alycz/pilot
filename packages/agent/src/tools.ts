@@ -177,6 +177,9 @@ const READ_ONLY_HARBOR_OPERATIONS = new Set([
   "account.status",
   "policy.get",
   "tx.status",
+  "near.intents.tokens",
+  "near.intents.quote",
+  "near.intents.status",
 ]);
 
 const ACCOUNT_ARGUMENT_BY_OPERATION: Record<string, "account" | "owner"> = {

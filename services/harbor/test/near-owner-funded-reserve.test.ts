@@ -7,7 +7,8 @@ import type {
 import { ops } from "../src/ops/near-intents";
 
 const NOW = "2026-10-26T12:00:30.000Z";
-const PRINCIPAL = "approval-gateway";
+const GATEWAY_PRINCIPAL = "approval-gateway";
+const USER_PRINCIPAL = "near-wallet-principal-v1-owner";
 const TENANT = "pilot-internal";
 const OWNER = "owner.near";
 const DEPOSIT = "native-near-deposit.near";
@@ -128,7 +129,7 @@ async function request() {
   const payload = {
     version: "pilot-near-native-near-to-arbitrum-usdc-approval-payload-v1" as const,
     route,
-    principal_id: PRINCIPAL,
+    principal_id: USER_PRINCIPAL,
     near_account_id: OWNER,
     network: "near:mainnet" as const,
     policy_digest: POLICY_DIGEST,
@@ -149,7 +150,7 @@ async function request() {
       version: "pilot-near-native-near-to-arbitrum-usdc-reservation-v1" as const,
       reservation_id: "reservation-1",
       attempt_id: "attempt-1",
-      principal_id: PRINCIPAL,
+      principal_id: USER_PRINCIPAL,
       near_account_id: OWNER,
       network: "near:mainnet" as const,
       idempotency_version: "pilot-near-idempotency-v1" as const,
@@ -175,7 +176,7 @@ async function request() {
         scope: "source-account-control-only" as const,
         grants_economic_transfer_approval: false as const,
         authorization_id: "wallet-proof-1",
-        principal_id: PRINCIPAL,
+        principal_id: USER_PRINCIPAL,
         near_account_id: OWNER,
         network: "near:mainnet" as const,
         verified_at: "2026-10-26T11:59:30.000Z",
@@ -199,10 +200,10 @@ const env = {
   HARBOR_NEAR_INTENTS_OWNER_FUNDED_RESERVE_ENABLED: "true",
   HARBOR_NEAR_INTENTS_OWNER_FUNDED_REVIEW_ENABLED: "true",
   HARBOR_NEAR_INTENTS_EXECUTABLE_REVIEW_PROFILE: "near-native-to-arbitrum-usdc-v1",
-  HARBOR_NEAR_INTENTS_APPROVAL_GATEWAY_PRINCIPAL: PRINCIPAL,
+  HARBOR_NEAR_INTENTS_APPROVAL_GATEWAY_PRINCIPAL: GATEWAY_PRINCIPAL,
   HARBOR_NEAR_INTENTS_TENANT_ID: TENANT,
   HARBOR_NEAR_INTENTS_NATIVE_NEAR_BUDGET_LIMIT_ATOMIC: BUDGET,
-  HARBOR_API_KEYS: `${PRINCIPAL}:secret`,
+  HARBOR_API_KEYS: `${GATEWAY_PRINCIPAL}:secret`,
   MAINNET_EXECUTION: "false",
 };
 
@@ -221,7 +222,7 @@ function store(replay = false) {
       replay,
       attempt: {
         tenantId: TENANT,
-        principalId: PRINCIPAL,
+        principalId: USER_PRINCIPAL,
         accountId: input.accountId,
         idempotencyKey: input.idempotencyKey,
         requestDigest: input.requestDigest,
@@ -239,7 +240,7 @@ function store(replay = false) {
       },
       lifecycle: {
         tenantId: TENANT,
-        principalId: PRINCIPAL,
+        principalId: USER_PRINCIPAL,
         accountId: input.accountId,
         idempotencyKey: input.idempotencyKey,
         attemptId: input.attemptId,
@@ -255,7 +256,7 @@ function store(replay = false) {
 
 function context(reservationStore = store(), overrides: Record<string, unknown> = {}) {
   return {
-    principal: PRINCIPAL,
+    principal: GATEWAY_PRINCIPAL,
     env,
     db: { prepare: vi.fn(), batch: vi.fn() },
     nearNativeAttemptStore: reservationStore,

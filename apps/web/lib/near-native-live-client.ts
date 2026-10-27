@@ -1,7 +1,11 @@
 import {
   NearNativeNearToArbitrumUsdcExecutableQuoteBindingSchema,
   NearNativeNearToArbitrumUsdcFundingInstructionsSchema,
+  NearNativeNearToArbitrumUsdcReconcileResultSchema,
+  NearNativeNearToArbitrumUsdcReserveRequestSchema,
   type NearNativeNearToArbitrumUsdcExecutableQuoteBinding,
+  type NearNativeNearToArbitrumUsdcReconcileResult,
+  type NearNativeNearToArbitrumUsdcReserveRequest,
 } from "@pilot/contracts/near";
 import { z } from "zod";
 
@@ -48,7 +52,8 @@ export const NearSessionUpgradeResponseSchema = z.object({
     "near.intents.executable-quote.review",
     "near.intents.status",
     "near.intents.owner-funded.reserve",
-  ])).length(4),
+    "near.intents.owner-funded.reconcile",
+  ])).length(5),
   execution_enabled: z.literal(false),
 }).strict();
 
@@ -85,6 +90,7 @@ export const NearOwnerApproveResponseSchema = z.object({
   attempt_id: z.string().min(1).max(200),
   idempotency_key: z.string().min(1).max(200),
   funding_instructions: NearNativeNearToArbitrumUsdcFundingInstructionsSchema,
+  reconciliation_context: NearNativeNearToArbitrumUsdcReserveRequestSchema,
   execution_enabled: z.literal(false),
   manual_owner_funding_only: z.literal(true),
 }).strict();
@@ -101,6 +107,10 @@ export type NearQuoteChallengeResponse = z.infer<
 >;
 export type NearQuoteVerifyResponse = z.infer<typeof NearQuoteVerifyResponseSchema>;
 export type NearOwnerApproveResponse = z.infer<typeof NearOwnerApproveResponseSchema>;
+
+const NearOwnerReconcileResponseSchema = NearNativeNearToArbitrumUsdcReconcileResultSchema;
+
+export type NearOwnerReconcileResponse = NearNativeNearToArbitrumUsdcReconcileResult;
 
 async function post<T>(
   path: string,
@@ -251,6 +261,36 @@ export function createNearNativeLiveClient(
         "/api/auth/near/executable-review/approve",
         { owner_confirmed: true, quote_binding: exact },
         NearOwnerApproveResponseSchema,
+        fetchImpl,
+        signal,
+        timeoutMs,
+      );
+    },
+    reconcile(
+      input: Readonly<{
+        context: NearNativeNearToArbitrumUsdcReserveRequest;
+        stage: "source-funding" | "settlement";
+        transitionId: string;
+        expectedEntryRevision: number;
+        nearTransactionHash?: string;
+      }>,
+      signal?: AbortSignal,
+    ): Promise<NearOwnerReconcileResponse> {
+      const context = NearNativeNearToArbitrumUsdcReserveRequestSchema.parse(
+        input.context,
+      );
+      return post(
+        "/api/auth/near/owner-funded/reconcile",
+        {
+          reconciliation_context: context,
+          stage: input.stage,
+          transition_id: input.transitionId,
+          expected_entry_revision: input.expectedEntryRevision,
+          ...(input.nearTransactionHash === undefined
+            ? {}
+            : { near_transaction_hash: input.nearTransactionHash }),
+        },
+        NearOwnerReconcileResponseSchema,
         fetchImpl,
         signal,
         timeoutMs,

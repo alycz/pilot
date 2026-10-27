@@ -30,7 +30,9 @@ sent to Harbor.
 After the exact full-access-key proof and durable nonce consumption succeed,
 the session route replaces a bootstrap preauthorization with a 15-minute sealed
 authorization limited to approval review, executable-quote review, status, and
-owner-funded reservation. No scope upgrade occurs before proof consumption.
+owner-funded reservation and reconciliation. Reconciliation is available only
+through its dedicated same-origin route; the generic Harbor browser proxy
+rejects reserve and reconcile operations.
 
 Proof verification requires migration `0019_near_wallet_proof_replay.sql` and
 the separately authenticated hosted-state route. Missing configuration, RPC,

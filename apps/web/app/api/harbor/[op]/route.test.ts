@@ -537,6 +537,27 @@ describe("POST /api/harbor/[op]", () => {
   });
 
   it.each([
+    "near.intents.owner-funded.reserve",
+    "near.intents.owner-funded.reconcile",
+  ])("rejects %s on the generic browser proxy before dispatch", async (op) => {
+    const upstreamFetch = vi.fn();
+    const handler = createProductionHarborProxyHandler({
+      authorizeOperation: () => true,
+      env: ENVIRONMENT,
+      fetch: fetchDependency(upstreamFetch),
+    });
+
+    const response = await handler(request("{}"), context(op));
+
+    expect(response.status).toBe(403);
+    expect((await response.json()).error).toMatchObject({
+      code: "HARBOR_PROXY_UNAUTHORIZED",
+      message: expect.stringContaining("dedicated principal-bound route"),
+    });
+    expect(upstreamFetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
     ["mandate.prepare", MANDATE_PREPARE_ARGS],
     ["mandate.register", MANDATE_REGISTER_ARGS],
     ["mandate.revoke", { mandate_id: "mandate-1" }],

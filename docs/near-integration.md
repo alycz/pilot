@@ -93,6 +93,10 @@ as a claim that every catalogued venue is executable.
   token discovery, dry quote, and status reads. Executable review, durable
   reserve, and reconciliation remain owner-controlled server operations and
   are never model tools.
+- Harbor authenticates one configured approval-gateway API-key principal at
+  the transport boundary, but D1 attempt, replay, and budget rows are scoped by
+  the distinct opaque user principal bound into the server-created approval.
+  Multiple users therefore cannot collapse into the gateway's budget bucket.
 - Pilot's specialized same-origin owner route returns the exact admitted
   reserve context after durable reservation and accepts source/provider/
   destination reconciliation only through

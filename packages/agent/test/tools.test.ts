@@ -494,8 +494,14 @@ describe("createAgentTools Harbor boundary", () => {
         code: `return await harbor.ledger.account.info({"network":"testnet","account":"${account}"});`,
       }),
     ).resolves.toEqual({ ok: true });
+    await expect(
+      execute({
+        code: 'return await harbor.near.intents.tokens({"blockchain":"near","limit":25});',
+      }),
+    ).resolves.toEqual({ ok: true });
     expect(calls).toEqual([
       `return await harbor.ledger.account.info({"network":"testnet","account":"${account}"});`,
+      'return await harbor.near.intents.tokens({"blockchain":"near","limit":25});',
     ]);
     await expect(
       execute({
@@ -507,8 +513,18 @@ describe("createAgentTools Harbor boundary", () => {
         code: 'return await harbor.venues.list({"network":"mainnet"});',
       }),
     ).rejects.toThrow("server-authorized network");
+    await expect(
+      execute({
+        code: 'return await harbor.near.intents.owner-funded.reserve({});',
+      }),
+    ).rejects.toThrow();
+    await expect(
+      execute({
+        code: 'return await harbor.near.intents.owner-funded.reconcile({});',
+      }),
+    ).rejects.toThrow();
     expect(tools).not.toHaveProperty("unsafe_extra_tool");
-    expect(calls).toHaveLength(1);
+    expect(calls).toHaveLength(2);
   });
 
   it("emits only the safe guardrail notice projection for an eligible result", async () => {

@@ -766,6 +766,7 @@ export function createNearExecutableReviewApproveHandler(
         attempt_id: attemptId,
         idempotency_key: idempotencyKey,
         funding_instructions: result.data.funding_instructions,
+        reconciliation_context: reserveRequest,
         execution_enabled: false,
         manual_owner_funding_only: true,
       }, { headers: { "Cache-Control": "no-store" } }));

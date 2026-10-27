@@ -284,6 +284,43 @@ describe("NEAR Intents 1Click client", () => {
     });
   });
 
+  it("propagates caller cancellation without converting it to provider success or timeout", async () => {
+    const caller = new AbortController();
+    const fetcher = vi.fn((_input: string | URL | Request, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        const signal = init?.signal;
+        expect(signal).toBeInstanceOf(AbortSignal);
+        signal?.addEventListener("abort", () => {
+          reject(signal.reason ?? new DOMException("cancelled", "AbortError"));
+        }, { once: true });
+      })
+    );
+    const client = createOneClickClient({
+      fetch: fetcher,
+      signal: caller.signal,
+      timeoutMs: 10_000,
+    });
+
+    const pending = client.tokens();
+    caller.abort(new DOMException("browser request closed", "AbortError"));
+
+    await expect(pending).rejects.toMatchObject({ code: "CANCELLED" });
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it("does not dispatch a provider request when the caller is already cancelled", async () => {
+    const caller = new AbortController();
+    caller.abort(new DOMException("browser request closed", "AbortError"));
+    const fetcher = vi.fn();
+    const client = createOneClickClient({
+      fetch: fetcher,
+      signal: caller.signal,
+    });
+
+    await expect(client.tokens()).rejects.toMatchObject({ code: "CANCELLED" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it("rejects deeply nested quote and status JSON before signature canonicalization", async () => {
     const deeplyNestedJson = `${"[".repeat(66)}0${"]".repeat(66)}`;
     const verifier = vi.fn(() => true);

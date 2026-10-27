@@ -21,6 +21,7 @@ export const NEAR_UPGRADED_AUTHORIZED_OPERATIONS = Object.freeze([
   "near.intents.executable-quote.review",
   "near.intents.status",
   "near.intents.owner-funded.reserve",
+  "near.intents.owner-funded.reconcile",
 ] as const);
 
 export type NearPrincipalBootstrapEnvironment = Readonly<{

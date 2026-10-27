@@ -568,9 +568,17 @@ should use a deliberately scoped principal rather than a personal credential.
 template for a no-spend deployment review. It has no Worker Loader binding and
 no cron, keeps mainnet, autonomous execution, QuickNode, Mastercard MCP, KMS,
 AP4M, and shared model access off, and exposes only MCP search. REST operations
-return a fail-closed deployment-profile error, and MCP `execute`
-stays unregistered until a separately authorized Workers Free CPU acceptance
-run shows that the QuickJS path fits the plan's CPU budget.
+remain denied except for the exact authenticated NEAR backend allowlist:
+`near.intents.tokens`, `near.intents.quote`, `near.intents.status`,
+`near.intents.executable-quote.review`,
+`near.intents.owner-funded.reserve`, and
+`near.intents.owner-funded.reconcile`. Each operation retains its independent
+provider, principal, feature-flag, D1, approval, and reconciliation checks;
+this allowlist does not enable any operation by itself. Lookalike names and all
+other REST operations remain fail-closed. MCP `execute` stays unregistered,
+while MCP search may describe the bounded operations, until a separately
+authorized Workers Free CPU acceptance run shows that the QuickJS execution
+path fits the plan's CPU budget.
 
 The checked-in template is deliberately not deployable because its Worker, D1,
 account subdomain, origin, and D1 UUID are placeholders. Its Workers.dev mode

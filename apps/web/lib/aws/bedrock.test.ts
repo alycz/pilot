@@ -139,7 +139,7 @@ describe("resolveChatModel", () => {
         apiKey: "near-ai-server-secret",
         apiBase: "https://cloud-api.near.ai/v1",
         model: "z-ai/example-model",
-        mode: "oauth",
+        mode: "near-ai",
         privacy,
         wallet: {
           account: "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
@@ -168,6 +168,39 @@ describe("resolveChatModel", () => {
       privacy,
     });
     expect(JSON.stringify(resolved.trust)).not.toContain("near-ai-server-secret");
+  });
+
+  it("propagates request cancellation through NEAR AI catalog preflight", async () => {
+    const abort = new AbortController();
+    abort.abort(new DOMException("cancelled", "AbortError"));
+    const privacy = {
+      tier: "incognito" as const,
+      declaredBy: "operator-configuration" as const,
+      attestationVerified: false as const,
+      summary: "The upstream model runs outside the gateway TEE.",
+    };
+    const discoverModels = vi.fn(async (signal?: AbortSignal) => {
+      expect(signal).toBe(abort.signal);
+      throw signal?.reason;
+    });
+
+    await expect(resolveChatModel({
+      provider: "near-ai",
+      apiKey: "near-ai-server-secret",
+      apiBase: "https://cloud-api.near.ai/v1",
+      model: "z-ai/example-model",
+      mode: "near-ai",
+      privacy,
+      wallet: {
+        account: "r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59",
+        network: "testnet",
+        expiresAt: Date.now() + 60_000,
+        sessionId: "near-ai-test-session",
+      },
+    }, {
+      signal: abort.signal,
+      nearAi: { discoverModels },
+    })).rejects.toMatchObject({ name: "AbortError" });
   });
 
   it("passes an explicitly selected legacy region to the live provider unchanged", async () => {

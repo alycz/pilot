@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   discoverNearAiModels,
+  inspectNearAiServerConfig,
+  nearAiConfiguredModelHint,
   nearAiOpenAiCompatibleOptions,
   nearAiPublicDescriptor,
   readNearAiServerConfig,
@@ -51,6 +53,17 @@ describe("NEAR AI provider configuration", () => {
     [{ ...enabled, NEAR_AI_PRIVACY_TIER: "tee" }, "NEAR_AI_PRIVACY_TIER"],
   ])("fails closed for invalid configuration %#", (environment, expected) => {
     expect(() => readNearAiServerConfig(environment)).toThrow(expected);
+  });
+
+  it("reports invalid optional configuration without exposing credentials", () => {
+    const environment = {
+      ...enabled,
+      NEAR_AI_API_KEY: "",
+    };
+    expect(nearAiConfiguredModelHint(environment)).toBe("z-ai/example-model");
+    const state = inspectNearAiServerConfig(environment);
+    expect(state).toEqual({ state: "invalid", modelHint: "z-ai/example-model" });
+    expect(JSON.stringify(state)).not.toContain("server-only-near-ai-key");
   });
 });
 

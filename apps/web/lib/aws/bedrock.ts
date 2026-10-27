@@ -13,6 +13,7 @@ import {
   createNearAiChatModel,
   type NearAiProviderDependencies,
 } from "../near-ai-provider";
+import { NearAiUnavailableError } from "../near-ai";
 import type { OpenRouterChatSettings } from "@openrouter/ai-sdk-provider";
 
 type ModelProvider = (
@@ -38,6 +39,7 @@ export type BedrockModelDependencies = {
   createOpenRouter?: OpenRouterFactory;
   createAmazonBedrock?: AmazonBedrockFactory;
   nearAi?: NearAiProviderDependencies;
+  signal?: AbortSignal;
 };
 
 export function modelTrustForAccess(
@@ -116,10 +118,15 @@ export async function resolveChatModel(
       model: access.model,
       privacy: access.privacy,
     } as const;
-    return {
-      model: await createNearAiChatModel(config, dependencies.nearAi),
-      trust: modelTrustForAccess(access, dependencies.config, env),
-    };
+    try {
+      return {
+        model: await createNearAiChatModel(config, dependencies.nearAi, dependencies.signal),
+        trust: modelTrustForAccess(access, dependencies.config, env),
+      };
+    } catch (error) {
+      if (dependencies.signal?.aborted) throw error;
+      throw new NearAiUnavailableError();
+    }
   }
 
   const config = dependencies.config ?? readPilotAwsConfig(env);

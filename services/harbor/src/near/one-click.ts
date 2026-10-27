@@ -222,6 +222,7 @@ export type OneClickClientOptions = Readonly<{
   apiKey?: string;
   verifyQuoteSignature?: OneClickQuoteVerifier;
   allowExecutableQuotes?: boolean;
+  signal?: AbortSignal;
   timeoutMs?: number;
   maxResponseBytes?: number;
 }>;
@@ -230,7 +231,7 @@ export class OneClickClientError extends Error {
   constructor(
     readonly code: "EXECUTION_DISABLED" | "HTTP_ERROR" | "INVALID_RESPONSE" |
       "INVALID_SIGNATURE" | "REQUEST_MISMATCH" | "RESPONSE_TOO_LARGE" | "TIMEOUT" |
-      "UNKNOWN_OUTCOME" | "RESPONSE_TOO_COMPLEX",
+      "UNKNOWN_OUTCOME" | "RESPONSE_TOO_COMPLEX" | "CANCELLED",
     message: string,
   ) {
     super(message);
@@ -374,6 +375,7 @@ export class OneClickClient {
   readonly #apiKey?: string;
   readonly #verify: OneClickQuoteVerifier;
   readonly #allowExecutableQuotes: boolean;
+  readonly #signal?: AbortSignal;
   readonly #timeoutMs: number;
   readonly #maxResponseBytes: number;
 
@@ -382,6 +384,7 @@ export class OneClickClient {
     this.#apiKey = options.apiKey?.trim() || undefined;
     this.#verify = options.verifyQuoteSignature ?? officialVerifier;
     this.#allowExecutableQuotes = options.allowExecutableQuotes === true;
+    this.#signal = options.signal;
     this.#timeoutMs = integerOption(options.timeoutMs, DEFAULT_TIMEOUT_MS, "timeoutMs");
     this.#maxResponseBytes = integerOption(options.maxResponseBytes, DEFAULT_MAX_RESPONSE_BYTES, "maxResponseBytes");
   }
@@ -393,9 +396,24 @@ export class OneClickClient {
     headers.set("accept", "application/json");
     if (init.body !== undefined) headers.set("content-type", "application/json");
     if (this.#apiKey) headers.set("x-api-key", this.#apiKey);
+    const controller = new AbortController();
+    let timedOut = false;
+    const cancelFromCaller = () => controller.abort(this.#signal?.reason);
+    if (this.#signal?.aborted) {
+      cancelFromCaller();
+    } else {
+      this.#signal?.addEventListener("abort", cancelFromCaller, { once: true });
+    }
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort(new DOMException("request timed out", "TimeoutError"));
+    }, this.#timeoutMs);
     try {
+      if (controller.signal.aborted) {
+        throw new OneClickClientError("CANCELLED", "NEAR Intents request was cancelled");
+      }
       const response = await this.#fetch(url, {
-        ...init, headers, redirect: "error", signal: AbortSignal.timeout(this.#timeoutMs),
+        ...init, headers, redirect: "error", signal: controller.signal,
       });
       if (response.status === 404) {
         throw new OneClickClientError("UNKNOWN_OUTCOME", "NEAR Intents did not recognize the requested resource; outcome remains unknown");
@@ -404,10 +422,16 @@ export class OneClickClient {
       return await readBoundedJson(response, this.#maxResponseBytes);
     } catch (error) {
       if (error instanceof OneClickClientError) throw error;
-      if (error instanceof DOMException && error.name === "TimeoutError") {
+      if (timedOut || (error instanceof DOMException && error.name === "TimeoutError")) {
         throw new OneClickClientError("TIMEOUT", "NEAR Intents request timed out");
       }
+      if (this.#signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) {
+        throw new OneClickClientError("CANCELLED", "NEAR Intents request was cancelled");
+      }
       throw new OneClickClientError("HTTP_ERROR", "NEAR Intents request failed");
+    } finally {
+      clearTimeout(timeout);
+      this.#signal?.removeEventListener("abort", cancelFromCaller);
     }
   }
 

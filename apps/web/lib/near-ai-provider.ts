@@ -19,7 +19,7 @@ export type NearAiProviderFactory = (
 
 export type NearAiProviderDependencies = Readonly<{
   createProvider?: NearAiProviderFactory;
-  discoverModels?: () => Promise<readonly NearAiCatalogModel[]>;
+  discoverModels?: (signal?: AbortSignal) => Promise<readonly NearAiCatalogModel[]>;
 }>;
 
 /**
@@ -30,8 +30,11 @@ export type NearAiProviderDependencies = Readonly<{
 export async function createNearAiChatModel(
   config: EnabledNearAiConfig,
   dependencies: NearAiProviderDependencies = {},
+  signal?: AbortSignal,
 ): Promise<LanguageModel> {
-  const models = await (dependencies.discoverModels ?? (() => discoverNearAiModels()))();
+  const models = await (
+    dependencies.discoverModels ?? ((catalogSignal) => discoverNearAiModels({ signal: catalogSignal }))
+  )(signal);
   verifyNearAiConfiguredChatModel(config, models);
   const createProvider = dependencies.createProvider ?? createOpenAICompatible;
   const provider = createProvider({

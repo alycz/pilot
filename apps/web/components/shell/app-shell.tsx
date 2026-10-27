@@ -39,10 +39,12 @@ export const SHELL_SIDEBAR_SLOT_ID = "pilot-sidebar-slot";
 /** Bottom-of-sidebar slot for page context (e.g. chat's Live context). */
 export const SHELL_SIDEBAR_FOOTER_SLOT_ID = "pilot-sidebar-footer-slot";
 
+type ModelSessionMode = "demo" | "oauth" | "near-ai";
+
 export async function persistModelSelection(
   fetcher: typeof fetch,
   nextModel: string,
-  nextMode: "demo" | "oauth",
+  nextMode: ModelSessionMode,
 ): Promise<void> {
   const response = await fetcher("/api/auth/openrouter/session", {
     method: "POST",
@@ -50,7 +52,9 @@ export async function persistModelSelection(
     body: JSON.stringify(
       nextMode === "demo"
         ? { mode: "demo", model: nextModel }
-        : { model: nextModel },
+        : nextMode === "near-ai"
+          ? { mode: "near-ai", provider: "near-ai", model: nextModel }
+          : { model: nextModel },
     ),
   });
   const result = (await response.json()) as { error?: string };
@@ -58,7 +62,7 @@ export async function persistModelSelection(
 }
 
 export function demoSwitchRevocationNotice(
-  previousMode: "demo" | "oauth",
+  previousMode: ModelSessionMode,
 ): string | undefined {
   return previousMode === "oauth"
     ? "Pilot switched this browser session to the server-managed free demo. Your OpenRouter-generated key remains active until you revoke it in OpenRouter settings; it is not used by the free demo."
@@ -410,7 +414,7 @@ function DelegationStatus({ status }: { status: DelegationStatusState }) {
 function SettingsMenu({ identity }: { identity: ShellIdentityLabels }) {
   const [open, setOpen] = useState(false);
   const [model, setModel] = useState("nvidia/nemotron-3.5-super-vl:free");
-  const [mode, setMode] = useState<"demo" | "oauth">("demo");
+  const [mode, setMode] = useState<ModelSessionMode>("demo");
   const [models, setModels] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -457,7 +461,7 @@ function SettingsMenu({ identity }: { identity: ShellIdentityLabels }) {
           );
           return;
         }
-        const session = (await sessionResponse.json()) as { mode: "demo" | "oauth"; model: string };
+        const session = (await sessionResponse.json()) as { mode: ModelSessionMode; model: string };
         setMode(session.mode);
         setModel(session.model);
         const modelsResponse = await fetch(`/api/auth/openrouter/models?mode=${session.mode}`, { signal: controller.signal });
@@ -598,7 +602,7 @@ function SettingsMenu({ identity }: { identity: ShellIdentityLabels }) {
             <div className="border-b border-border p-4">
               <div className="flex items-center justify-between gap-3">
                 <span className="label-mono">AI access</span>
-                <span className={`border px-1.5 py-0.5 text-xs font-medium rounded ${mode === "oauth" ? "border-executed/30 bg-executed/10 text-executed" : "border-border text-muted-foreground"}`}>{mode === "oauth" ? "OpenRouter" : "Demo"}</span>
+                <span className={`border px-1.5 py-0.5 text-xs font-medium rounded ${mode === "oauth" || mode === "near-ai" ? "border-executed/30 bg-executed/10 text-executed" : "border-border text-muted-foreground"}`}>{mode === "oauth" ? "OpenRouter" : mode === "near-ai" ? "NEAR AI" : "Demo"}</span>
               </div>
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <a href="/api/auth/openrouter/start?returnTo=/chat" className="inline-flex items-center justify-center gap-1.5 bg-primary px-2 py-2 text-[13px] font-medium text-primary-foreground hover:bg-primary/90">
@@ -620,7 +624,7 @@ function SettingsMenu({ identity }: { identity: ShellIdentityLabels }) {
                 {models.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
               </select>
               <span className="mt-2 flex min-h-4 items-center gap-1.5 text-[11px] text-muted-foreground">
-                {loading || saving ? <><LoaderCircle className="h-3 w-3 animate-spin" />{loading ? "Loading tool-capable models" : "Saving selection"}</> : mode === "demo" ? "Demo shows free, tool-capable models only." : "Using your OpenRouter account."}
+                {loading || saving ? <><LoaderCircle className="h-3 w-3 animate-spin" />{loading ? "Loading tool-capable models" : "Saving selection"}</> : mode === "demo" ? "Demo shows free, tool-capable models only." : mode === "near-ai" ? "Using the configured server-side NEAR AI provider." : "Using your OpenRouter account."}
               </span>
             </label>
             </>

@@ -15,6 +15,7 @@ import {
   type TxBuild,
 } from "@pilot/contracts";
 import { IntentSchema, toBuild } from "@pilot/intents";
+import { HarborArgsSchemas } from "@pilot/harbor-client";
 import { jsonSchema, tool, type Tool } from "ai";
 import { z } from "zod";
 
@@ -157,6 +158,21 @@ const HarborExecuteSchema = z
   })
   .strict();
 
+const NearIntentsReadSchema = z.discriminatedUnion("operation", [
+  z.object({
+    operation: z.literal("near.intents.tokens"),
+    args: HarborArgsSchemas["near.intents.tokens"],
+  }).strict(),
+  z.object({
+    operation: z.literal("near.intents.quote"),
+    args: HarborArgsSchemas["near.intents.quote"],
+  }).strict(),
+  z.object({
+    operation: z.literal("near.intents.status"),
+    args: HarborArgsSchemas["near.intents.status"],
+  }).strict(),
+]);
+
 const HARBOR_CALL_PATTERN =
   /^\s*return\s+await\s+harbor\.([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*\(\s*(\{[\s\S]*\})\s*\)\s*;?\s*$/;
 
@@ -177,6 +193,9 @@ const READ_ONLY_HARBOR_OPERATIONS = new Set([
   "account.status",
   "policy.get",
   "tx.status",
+  "near.intents.tokens",
+  "near.intents.quote",
+  "near.intents.status",
 ]);
 
 const ACCOUNT_ARGUMENT_BY_OPERATION: Record<string, "account" | "owner"> = {
@@ -686,6 +705,29 @@ function readOnlyHarborExecute(options: AgentToolOptions): Tool<any, any> | unde
   });
 }
 
+/**
+ * Production Free/QuickJS intentionally has no generic MCP execute tool. This
+ * dedicated REST-backed surface keeps models limited to exact discovery, dry
+ * quote, and status operations and cannot express review, reserve, reconcile,
+ * submission, signing, or arbitrary Harbor code.
+ */
+function nearIntentsReadTool(options: AgentToolOptions): Tool<any, any> {
+  return tool({
+    description:
+      "Read NEAR Intents token metadata, request a provider-verified dry quote, or observe an existing exact settlement reference. This tool cannot create executable quotes, approve, reserve, fund, sign, reconcile, or submit transactions.",
+    inputSchema: NearIntentsReadSchema,
+    execute: async (input) => {
+      const request = NearIntentsReadSchema.parse(input);
+      const result = await options.harborRest.op(
+        request.operation,
+        request.args,
+      );
+      await emitSafeGuardrailNotice(result, options.emitGuardrailNotice);
+      return result;
+    },
+  });
+}
+
 async function portfolio(options: AgentToolOptions): Promise<unknown> {
   const account = options.account.budget_account;
   const args = { account, network: options.network };
@@ -803,6 +845,7 @@ export function createAgentTools(options: AgentToolOptions) {
 
   return {
     ...harborTools,
+    near_intents_read: nearIntentsReadTool(turnOptions),
     ...x402Tools,
     ...ap4mTools,
     propose_strategy: createStrategyProposalTool({

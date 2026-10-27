@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 import {
   getDefaultModel,
-  requireAccountModel,
   requireDemoModel,
+  requireOpenRouterAccountModel,
 } from "../../../../../lib/model-access";
 import {
   createDemoModelBudget,
@@ -31,6 +31,12 @@ import {
   assertCurrentZeroPriceModel,
   OpenRouterFreePolicyError,
 } from "../../../../../lib/openrouter-free-policy";
+import {
+  discoverNearAiModels,
+  inspectNearAiServerConfig,
+  NearAiUnavailableError,
+  verifyNearAiConfiguredChatModel,
+} from "../../../../../lib/near-ai";
 
 export const runtime = "nodejs";
 
@@ -102,6 +108,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
   const response = NextResponse.json({
     mode: session?.mode ?? "demo",
+    ...(session?.mode === "near-ai" ? { provider: "near-ai" as const } : {}),
     model,
     selected: session !== null,
     connected: session?.mode === "oauth",
@@ -128,7 +135,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return json({ error: "Invalid session body" }, 400);
   }
 
-  const input = body as { mode?: unknown; model?: unknown };
+  const input = body as { mode?: unknown; provider?: unknown; model?: unknown };
   let wallet: ReturnType<typeof walletForRequest>;
   let current: ReturnType<typeof readWalletBoundOpenRouterSession>;
   try {
@@ -141,6 +148,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   try {
     if (input.mode === "demo") {
+      if (input.provider !== undefined && input.provider !== "openrouter") {
+        return json({ error: "Demo mode uses the OpenRouter provider" }, 400);
+      }
       const model = requireDemoModel(input.model);
       if (!process.env.DEMO_OPENROUTER_API_KEY?.trim()) {
         throw new DemoModelAccessError(
@@ -182,15 +192,51 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return response;
     }
 
-    if (input.mode !== undefined) {
-      return json({ error: "mode may only be supplied when selecting demo mode" }, 400);
+    if (input.mode === "near-ai" || input.provider === "near-ai") {
+      if (input.mode !== "near-ai" || input.provider !== "near-ai") {
+        return json({ error: "NEAR AI selection requires explicit mode and provider" }, 400);
+      }
+      const nearAi = inspectNearAiServerConfig();
+      if (nearAi.state !== "enabled" || input.model !== nearAi.config.model) {
+        throw new NearAiUnavailableError();
+      }
+      try {
+        verifyNearAiConfiguredChatModel(
+          nearAi.config,
+          await discoverNearAiModels({ signal: request.signal }),
+        );
+      } catch (error) {
+        if (request.signal.aborted) throw error;
+        throw new NearAiUnavailableError();
+      }
+      const response = NextResponse.json({
+        mode: "near-ai",
+        provider: "near-ai",
+        model: nearAi.config.model,
+        connected: false,
+        selected: true,
+      });
+      response.cookies.set(
+        OPENROUTER_SESSION_COOKIE,
+        sealOpenRouterSession(createOpenRouterSession(
+          { mode: "near-ai", provider: "near-ai", model: nearAi.config.model },
+          wallet.binding,
+        )),
+        SESSION_COOKIE_OPTIONS,
+      );
+      response.headers.set("Cache-Control", "no-store");
+      return response;
+    }
+
+    if (input.mode !== undefined || (input.provider !== undefined && input.provider !== "openrouter")) {
+      return json({ error: "Unsupported model provider selection" }, 400);
     }
 
     if (current?.mode !== "oauth") {
       return json({ error: "Sign in with OpenRouter before selecting an account model" }, 401);
     }
 
-    const model = requireAccountModel(input.model);
+    const model = requireOpenRouterAccountModel(input.model);
     const response = NextResponse.json({ mode: "oauth", model, connected: true });
     response.cookies.set(
       OPENROUTER_SESSION_COOKIE,
@@ -200,11 +246,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     response.headers.set("Cache-Control", "no-store");
     return response;
   } catch (error) {
+    if (request.signal.aborted) throw error;
     const message = error instanceof Error ? error.message : "Invalid session";
-    const status = error instanceof DemoModelAccessError || error instanceof OpenRouterFreePolicyError
+    const status = error instanceof DemoModelAccessError ||
+        error instanceof OpenRouterFreePolicyError ||
+        error instanceof NearAiUnavailableError
       ? error.status
       : 400;
-    const code = error instanceof DemoModelAccessError ? error.code : undefined;
+    const code = error instanceof DemoModelAccessError || error instanceof NearAiUnavailableError
+      ? error.code
+      : undefined;
     return json({ error: message, ...(code ? { code } : {}) }, status);
   }
 }

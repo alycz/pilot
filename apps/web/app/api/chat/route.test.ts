@@ -24,6 +24,7 @@ import {
   type WalletSession,
 } from "../../../lib/wallet-session";
 import { DemoModelAccessError } from "../../../lib/demo-model-budget";
+import { NearAiUnavailableError } from "../../../lib/near-ai";
 
 import {
   createDefaultHarborClients,
@@ -4088,6 +4089,23 @@ describe("POST /api/chat", () => {
       expect(message).toContain(expected);
       expect(message).not.toContain("OpenRouter");
     }
+  });
+
+  it("returns an explicit unavailable error for an explicitly selected invalid NEAR AI provider", async () => {
+    const chat = createChatHandler({
+      environment: HOSTED_HANDLER_ENVIRONMENT,
+      getModelAccess: async () => {
+        throw new NearAiUnavailableError();
+      },
+      context: testContext,
+    });
+
+    const response = await chat(requestFor("Use the selected model."));
+    expect(response.status).toBe(503);
+    expect(response.headers.get("x-pilot-error-code")).toBe("NEAR_AI_UNAVAILABLE");
+    await expect(response.json()).resolves.toEqual({
+      error: "The selected NEAR AI provider is unavailable. Choose OpenRouter or ask an operator to verify NEAR AI configuration.",
+    });
   });
 
   it("enforces the fallback fixed-window demo limit", () => {

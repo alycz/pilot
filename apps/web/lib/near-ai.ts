@@ -40,9 +40,45 @@ export type NearAiCatalogModel = Readonly<{
   ready: boolean;
 }>;
 
+export type NearAiConfigurationState =
+  | Readonly<{ state: "disabled" }>
+  | Readonly<{
+      state: "enabled";
+      config: Extract<NearAiServerConfig, { enabled: true }>;
+      modelHint: string;
+    }>
+  | Readonly<{
+      state: "invalid";
+      modelHint?: string;
+    }>;
+
+export class NearAiUnavailableError extends Error {
+  readonly status = 503;
+  readonly code = "NEAR_AI_UNAVAILABLE";
+
+  constructor(message = "The selected NEAR AI provider is unavailable") {
+    super(message);
+    this.name = "NearAiUnavailableError";
+  }
+}
+
 type Environment = Readonly<Record<string, string | undefined>>;
 type Fetch = typeof globalThis.fetch;
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{1,199}$/;
+
+/**
+ * Identify an explicitly configured NEAR AI model without validating or
+ * exposing any credential. This is used only to prevent an invalid optional
+ * provider from being mistaken for an identically named OpenRouter model.
+ */
+export function nearAiConfiguredModelHint(
+  environment: Environment = process.env,
+): string | undefined {
+  const enabled = environment.NEAR_AI_ENABLED;
+  if (enabled === undefined || enabled === "" || enabled === "0") return undefined;
+  const model = environment.NEAR_AI_MODEL?.trim();
+  return model && MODEL_ID.test(model) ? model : undefined;
+}
 
 function configuredValue(environment: Environment, name: string): string {
   const value = environment[name]?.trim();
@@ -99,6 +135,27 @@ export function readNearAiServerConfig(environment: Environment = process.env): 
     model,
     privacy: privacyDisclosure(configuredValue(environment, "NEAR_AI_PRIVACY_TIER")),
   });
+}
+
+/**
+ * Inspect optional provider state without allowing its configuration failure to
+ * take down the default OpenRouter path. Explicit selection still fails closed
+ * through NearAiUnavailableError in model-access.
+ */
+export function inspectNearAiServerConfig(
+  environment: Environment = process.env,
+): NearAiConfigurationState {
+  const modelHint = nearAiConfiguredModelHint(environment);
+  try {
+    const config = readNearAiServerConfig(environment);
+    if (!config.enabled) return Object.freeze({ state: "disabled" });
+    return Object.freeze({ state: "enabled", config, modelHint: config.model });
+  } catch {
+    return Object.freeze({
+      state: "invalid",
+      ...(modelHint ? { modelHint } : {}),
+    });
+  }
 }
 
 /** Strip the server credential before returning provider provenance to a UI. */

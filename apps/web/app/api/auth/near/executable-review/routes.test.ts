@@ -18,6 +18,9 @@ import {
   createNearExecutableReviewVerifyHandler,
 } from "../../../../../lib/near-executable-review-handler";
 import {
+  createNearOwnerFundedReconcileHandler,
+} from "../../../../../lib/near-owner-funded-reconcile-handler";
+import {
   NEAR_EXECUTABLE_REVIEW_WALLET_CONTROL_COOKIE,
 } from "../../../../../lib/near-executable-review-wallet-control";
 import {
@@ -407,6 +410,10 @@ describe("NEAR executable-review proof routes", () => {
         deposit_account_id: quote.deposit_address,
         amount_yocto_near: quote.amount_in,
       },
+      reconciliation_context: {
+        version: "pilot-near-native-to-arbitrum-usdc-reserve-request-v1",
+        quote_binding: quote,
+      },
     });
     expect(consume).toHaveBeenCalledOnce();
     expect(reserve).toHaveBeenCalledOnce();
@@ -424,6 +431,196 @@ describe("NEAR executable-review proof routes", () => {
     expect(response.cookies.get(
       NEAR_EXECUTABLE_REVIEW_WALLET_CONTROL_COOKIE,
     )?.value).toBe("");
+  });
+
+  it("reaches principal-bound source reconciliation through its dedicated route", async () => {
+    const authorization = nearExecutableReviewAuthorization({
+      operations: [
+        "near.intents.approval.review",
+        "near.intents.executable-quote.review",
+        "near.intents.status",
+        "near.intents.owner-funded.reserve",
+        "near.intents.owner-funded.reconcile",
+      ],
+    });
+    const principal = sealNearPrincipalAuthorization(authorization, ENVIRONMENT);
+    const quote = nearNativeExecutableReviewQuote();
+    const proof = await verifiedWalletControlCookie({ principal, quote });
+    const reserve = vi.fn(async (_name, reserveRequest) => ({
+      ok: true as const,
+      data: durableReservationResult(reserveRequest),
+      asOf: new Date(NOW + 2).toISOString(),
+      asOfBasis: "durable-admission-store",
+    }));
+    const approved = await createNearExecutableReviewApproveHandler({
+      environment: ENVIRONMENT,
+      clock: () => NOW + 2,
+      walletControlConsumerFactory: () => ({ consume: async () => true }),
+      reserveClient: { op: reserve },
+    })(request(
+      "/api/auth/near/executable-review/approve",
+      { owner_confirmed: true, quote_binding: quote },
+      {
+        [NEAR_PRINCIPAL_AUTHORIZATION_COOKIE]: principal,
+        [NEAR_EXECUTABLE_REVIEW_WALLET_CONTROL_COOKIE]: proof,
+      },
+    ));
+    const approvalBody = await approved.json();
+    const reconcile = vi.fn(async (_name, input) => ({
+      ok: true as const,
+      data: {
+        version: "pilot-near-native-to-arbitrum-usdc-reconcile-result-v1" as const,
+        stage: "source-funding" as const,
+        action: "source-verified" as const,
+        attempt_id: input.attempt_id,
+        lifecycle_state: "source_verified" as const,
+        attempt_revision: 2,
+        lifecycle_revision: 1,
+        source_transaction_hash: "B".repeat(44),
+        safe_to_resubmit: false as const,
+        execution_enabled: false as const,
+      },
+      asOf: new Date(NOW + 3).toISOString(),
+      asOfBasis: "durable-reconciliation-store",
+    }));
+    const handler = createNearOwnerFundedReconcileHandler({
+      environment: ENVIRONMENT,
+      clock: () => NOW + 3,
+      reconcileClient: { op: reconcile },
+    });
+    const response = await handler(request(
+      "/api/auth/near/owner-funded/reconcile",
+      {
+        reconciliation_context: approvalBody.reconciliation_context,
+        stage: "source-funding",
+        transition_id: "source-owner-report-1",
+        expected_entry_revision: 1,
+        near_transaction_hash: "B".repeat(44),
+      },
+      { [NEAR_PRINCIPAL_AUTHORIZATION_COOKIE]: principal },
+    ));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      action: "source-verified",
+      lifecycle_state: "source_verified",
+      source_transaction_hash: "B".repeat(44),
+      safe_to_resubmit: false,
+      execution_enabled: false,
+    });
+    expect(reconcile).toHaveBeenCalledOnce();
+    expect(reconcile.mock.calls[0]?.[0]).toBe(
+      "near.intents.owner-funded.reconcile",
+    );
+    expect(reconcile.mock.calls[0]?.[1]).toMatchObject({
+      account_id: "alice.near",
+      stage: "source-funding",
+      transition_id: "source-owner-report-1",
+      expected_entry_revision: 1,
+      near_transaction_hash: "B".repeat(44),
+    });
+
+    const foreign = sealNearPrincipalAuthorization(
+      nearExecutableReviewAuthorization({
+        authorization_id: "authorization-principal-bob",
+        principal_id: "principal-bob",
+        account_id: "bob.near",
+        operations: authorization.operations,
+      }),
+      ENVIRONMENT,
+    );
+    const denied = await handler(request(
+      "/api/auth/near/owner-funded/reconcile",
+      {
+        reconciliation_context: approvalBody.reconciliation_context,
+        stage: "settlement",
+        transition_id: "settlement-foreign-1",
+        expected_entry_revision: 2,
+      },
+      { [NEAR_PRINCIPAL_AUTHORIZATION_COOKIE]: foreign },
+    ));
+    expect(denied.status).toBe(403);
+    expect(reconcile).toHaveBeenCalledOnce();
+
+    const impersonated = structuredClone(approvalBody.reconciliation_context);
+    impersonated.approval.payload.principal_id = "principal-bob";
+    impersonated.approval.payload.reservation.principal_id = "principal-bob";
+    impersonated.approval.account_control.principal_id = "principal-bob";
+    const impersonation = await handler(request(
+      "/api/auth/near/owner-funded/reconcile",
+      {
+        reconciliation_context: impersonated,
+        stage: "settlement",
+        transition_id: "settlement-impersonation-1",
+        expected_entry_revision: 2,
+      },
+      { [NEAR_PRINCIPAL_AUTHORIZATION_COOKIE]: principal },
+    ));
+    expect(impersonation.status).toBe(403);
+
+    const callerSelectedPrincipal = await handler(request(
+      "/api/auth/near/owner-funded/reconcile",
+      {
+        reconciliation_context: approvalBody.reconciliation_context,
+        stage: "settlement",
+        transition_id: "settlement-caller-principal-1",
+        expected_entry_revision: 2,
+        principal_id: "principal-bob",
+      },
+      { [NEAR_PRINCIPAL_AUTHORIZATION_COOKIE]: principal },
+    ));
+    expect(callerSelectedPrincipal.status).toBe(400);
+    expect(reconcile).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["lying", "2"],
+  ] as const)("bounds a streamed reconciliation request with %s Content-Length", async (
+    _label,
+    declared,
+  ) => {
+    const authorization = nearExecutableReviewAuthorization({
+      operations: [
+        "near.intents.approval.review",
+        "near.intents.executable-quote.review",
+        "near.intents.status",
+        "near.intents.owner-funded.reserve",
+        "near.intents.owner-funded.reconcile",
+      ],
+    });
+    const principal = sealNearPrincipalAuthorization(authorization, ENVIRONMENT);
+    const reconcile = vi.fn();
+    const handler = createNearOwnerFundedReconcileHandler({
+      environment: ENVIRONMENT,
+      clock: () => NOW + 3,
+      reconcileClient: { op: reconcile },
+    });
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const chunk = new Uint8Array(128 * 1_024).fill(65);
+        controller.enqueue(chunk);
+        controller.enqueue(chunk);
+        controller.enqueue(Uint8Array.of(65));
+        controller.close();
+      },
+    });
+    const headers = new Headers({
+      "content-type": "application/json",
+      host: "pilot.example",
+      origin: "https://pilot.example",
+      cookie: `${NEAR_PRINCIPAL_AUTHORIZATION_COOKIE}=${encodeURIComponent(principal)}`,
+    });
+    if (declared !== undefined) headers.set("content-length", declared);
+    const oversized = new NextRequest(
+      "https://pilot.example/api/auth/near/owner-funded/reconcile",
+      { method: "POST", headers, body, duplex: "half" },
+    );
+
+    const response = await handler(oversized);
+
+    expect(response.status).toBe(400);
+    expect(reconcile).not.toHaveBeenCalled();
   });
 
   it("rejects replay, mutation, cross-principal use, expiry, and missing config", async () => {

@@ -198,7 +198,7 @@ export function shouldSuppressOnboardingRestoration(search: string): boolean {
 }
 
 export function shouldShowSimulatedLedgerReplay(
-  aiMode: "demo" | "openrouter",
+  aiMode: "demo" | "openrouter" | "near-ai",
   accounts: Partial<Record<LedgerOnboardingAccountIndex, string>>,
 ) {
   return (
@@ -322,7 +322,7 @@ export type StoredActiveOnboardingRecord = {
   delegate: string;
   permissions: string[];
   model: string;
-  aiMode: "demo" | "openrouter";
+  aiMode: "demo" | "openrouter" | "near-ai";
   status: "active";
   txHash: string;
   ledger?: StoredLedgerOnboardingConfig;
@@ -498,7 +498,7 @@ export function storedActiveOnboardingRecord(
   link: AccountLink,
   provider: WalletProvider,
   model: string,
-  aiMode: "demo" | "openrouter",
+  aiMode: "demo" | "openrouter" | "near-ai",
   txHash: string,
   ledger?: StoredLedgerOnboardingConfig,
 ): StoredActiveOnboardingRecord {
@@ -550,7 +550,7 @@ export function parseStoredActiveOnboardingRecord(
       (value.network !== "testnet" && value.network !== "devnet") ||
       typeof value.delegate !== "string" || !CLASSIC_ADDRESS.test(value.delegate) ||
       value.status !== "active" || typeof value.model !== "string" || value.model.length === 0 ||
-      (value.aiMode !== "demo" && value.aiMode !== "openrouter") ||
+      (value.aiMode !== "demo" && value.aiMode !== "openrouter" && value.aiMode !== "near-ai") ||
       typeof value.txHash !== "string" || !HASH.test(value.txHash) ||
       (value.provider === "ledger"
         ? !validStoredLedgerConfig(value.ledger)
@@ -2236,7 +2236,7 @@ export function OnboardingFlow({
   // available until the wallet-gated demo lookup verifies it.
   const [models, setModels] = useState<ModelChoice[]>([]);
   const [model, setModel] = useState(DEFAULT_MODEL);
-  const [aiMode, setAiMode] = useState<"demo" | "openrouter">("demo");
+  const [aiMode, setAiMode] = useState<"demo" | "openrouter" | "near-ai">("demo");
   const [modelAccessReady, setModelAccessReady] = useState(false);
   const [oauthConnected, setOauthConnected] = useState(false);
   const [demoCatalog, setDemoCatalog] = useState<DemoCatalogState>({ status: "idle" });
@@ -2592,7 +2592,8 @@ export function OnboardingFlow({
             if (!modelResponse.ok) throw new Error("model session unavailable");
             const modelSession = await modelResponse.json() as {
               connected?: boolean;
-              mode?: "demo" | "oauth";
+              mode?: "demo" | "oauth" | "near-ai";
+              provider?: "near-ai";
               model?: string;
               selected?: boolean;
             };
@@ -2603,7 +2604,13 @@ export function OnboardingFlow({
               modelSession.connected === true,
             );
             if (modelSession.selected === true && modelSession.mode) {
-              setAiMode(modelSession.mode === "oauth" ? "openrouter" : "demo");
+              setAiMode(
+                modelSession.mode === "oauth"
+                  ? "openrouter"
+                  : modelSession.mode === "near-ai"
+                    ? "near-ai"
+                    : "demo",
+              );
             }
             setModelAccessReady(modelSession.selected === true);
             setModelSessionStatusUnavailable(false);
@@ -2672,7 +2679,8 @@ export function OnboardingFlow({
             if (!modelResponse.ok) throw new Error("model session unavailable");
             const modelSession = await modelResponse.json() as {
               connected?: boolean;
-              mode?: "demo" | "oauth";
+              mode?: "demo" | "oauth" | "near-ai";
+              provider?: "near-ai";
               model?: string;
               selected?: boolean;
             };
@@ -2683,7 +2691,13 @@ export function OnboardingFlow({
               modelSession.connected === true,
             );
             if (modelSession.selected === true && modelSession.mode) {
-              setAiMode(modelSession.mode === "oauth" ? "openrouter" : "demo");
+              setAiMode(
+                modelSession.mode === "oauth"
+                  ? "openrouter"
+                  : modelSession.mode === "near-ai"
+                    ? "near-ai"
+                    : "demo",
+              );
             }
             setModelAccessReady(modelSession.selected === true);
             setModelSessionStatusUnavailable(false);
@@ -2743,48 +2757,61 @@ export function OnboardingFlow({
       setDemoLimits(undefined);
       setModels([]);
     }
-    fetch(`/api/auth/openrouter/models?mode=${mode}`, { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) {
-          const payload = await response.json().catch(() => undefined) as
-            | { error?: unknown }
-            | undefined;
-          throw new Error(
-            typeof payload?.error === "string" && payload.error.trim()
-              ? payload.error.trim()
-              : mode === "demo"
-                ? "The free demo is unavailable right now."
-                : "The OpenRouter model list is unavailable right now.",
-          );
-        }
-        return response.json() as Promise<{
-          defaultModel?: string;
-          models?: ModelChoice[];
-          demo?: {
-            maxInputBytes?: number;
-            maxOutputTokens?: number;
-            maxSteps?: number;
-          };
-        }>;
-      })
-      .then((payload) => {
-        const nextModels = payload.models ?? [];
-        const verifiedDefaultModel = payload.defaultModel && nextModels.some(
-          (choice) => choice.id === payload.defaultModel,
+    const loadCatalog = async (catalogMode: "demo" | "oauth" | "near-ai") => {
+      const response = await fetch(`/api/auth/openrouter/models?mode=${catalogMode}`, {
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => undefined) as
+          | { error?: unknown }
+          | undefined;
+        throw new Error(
+          typeof payload?.error === "string" && payload.error.trim()
+            ? payload.error.trim()
+            : catalogMode === "demo"
+              ? "The free demo is unavailable right now."
+              : catalogMode === "oauth"
+                ? "The OpenRouter model list is unavailable right now."
+                : "NEAR AI is unavailable right now.",
+        );
+      }
+      return response.json() as Promise<{
+        defaultModel?: string;
+        models?: ModelChoice[];
+        demo?: {
+          maxInputBytes?: number;
+          maxOutputTokens?: number;
+          maxSteps?: number;
+        };
+      }>;
+    };
+    void Promise.allSettled([loadCatalog(mode), loadCatalog("near-ai")])
+      .then(([primaryResult, nearAiResult]) => {
+        if (controller.signal.aborted) return;
+        const primary = primaryResult.status === "fulfilled" ? primaryResult.value : undefined;
+        const nearAi = nearAiResult.status === "fulfilled" ? nearAiResult.value : undefined;
+        const nextModels = [...(primary?.models ?? []), ...(nearAi?.models ?? [])];
+        const verifiedDefaultModel = primary?.defaultModel && nextModels.some(
+          (choice) => choice.id === primary.defaultModel,
         )
-          ? payload.defaultModel
+          ? primary.defaultModel
           : undefined;
         setModels(nextModels);
-        if (verifiedDefaultModel) setModel(verifiedDefaultModel);
+        setModel((current) =>
+          nextModels.some((choice) => choice.id === current)
+            ? current
+            : (verifiedDefaultModel ?? current));
         if (mode === "demo") {
           if (!verifiedDefaultModel) {
             setDemoCatalog({
               status: "unavailable",
-              message: "No eligible free demo model is currently available.",
+              message: primaryResult.status === "rejected" && primaryResult.reason instanceof Error
+                ? primaryResult.reason.message
+                : "No eligible free demo model is currently available.",
             });
             return;
           }
-          setDemoLimits(payload.demo);
+          setDemoLimits(primary?.demo);
           setDemoCatalog({ status: "available" });
         }
       })
@@ -3091,6 +3118,39 @@ export function OnboardingFlow({
       if (!response.ok) throw new Error("The selected OpenRouter model could not be saved.");
       await restoreWalletFacadeAfterOAuth();
       setAiMode("openrouter");
+      setModelAccessReady(true);
+      setStep(nextStepAfterModelAccess());
+    });
+
+  const continueNearAi = () =>
+    run(async () => {
+      if (!walletSessionReady || !account) {
+        throw new Error("Connect and authenticate the budget wallet before using NEAR AI.");
+      }
+      if (walletSessionStatusUnavailable || modelSessionStatusUnavailable) {
+        throw new Error("Pilot must revalidate the wallet and model sessions before changing model access.");
+      }
+      const selected = models.find((choice) => choice.id === model);
+      if (selected?.provider !== "near-ai") {
+        throw new Error("Choose the verified NEAR AI model before continuing.");
+      }
+      const response = await fetch("/api/auth/openrouter/session", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "near-ai", provider: "near-ai", model }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => undefined) as
+          | { error?: unknown }
+          | undefined;
+        throw new Error(
+          typeof payload?.error === "string" && payload.error.trim()
+            ? payload.error.trim()
+            : "The selected NEAR AI provider is unavailable.",
+        );
+      }
+      setAiMode("near-ai");
+      setOauthConnected(false);
       setModelAccessReady(true);
       setStep(nextStepAfterModelAccess());
     });
@@ -4685,6 +4745,23 @@ export function OnboardingFlow({
       );
     });
 
+  const selectedModelChoice = models.find((choice) => choice.id === model);
+  const selectingNearAi = selectedModelChoice?.provider === "near-ai";
+  const modelAction = selectingNearAi
+    ? continueNearAi
+    : oauthConnected
+      ? continueOpenRouter
+      : startDemo;
+  const modelActionLabel = selectingNearAi
+    ? "Continue with NEAR AI"
+    : oauthConnected
+      ? "Continue with OpenRouter"
+      : demoCatalog.status === "loading"
+        ? "Checking free demo"
+        : demoCatalog.status === "unavailable"
+          ? "Free demo unavailable"
+          : "Try free demo";
+
   return (
     <div className="flex min-h-dvh flex-col">
     <header className="border-b border-border">
@@ -4715,7 +4792,7 @@ export function OnboardingFlow({
         <section className="min-w-0 p-6 sm:p-9 lg:p-12">
           {step === "ai" ? (
             <div className="space-y-6">
-              <div><p className="label-mono">Step 2 of 3 · wallet connected</p><h2 className="mt-2 text-xl font-normal tracking-[-0.02em]">Choose an AI model <span className="text-muted-foreground">(optional)</span></h2><p className="mt-2 text-sm leading-6 text-muted-foreground">You’re signed in. Pick the model Pilot uses to chat. Try the free demo, connect your own OpenRouter account, or skip this for now. Your keys stay on Pilot&apos;s server.</p></div>
+              <div><p className="label-mono">Step 2 of 3 · wallet connected</p><h2 className="mt-2 text-xl font-normal tracking-[-0.02em]">Choose an AI model <span className="text-muted-foreground">(optional)</span></h2><p className="mt-2 text-sm leading-6 text-muted-foreground">You’re signed in. Pick the model Pilot uses to chat. Try the free demo, use configured NEAR AI, connect your own OpenRouter account, or skip this for now. Provider keys stay on Pilot&apos;s server.</p></div>
               <ModelPicker
                 {...{
                   bedrockMode: oauthConnected ? bedrockMode : "off",
@@ -4752,11 +4829,11 @@ export function OnboardingFlow({
                     <ExternalLink className="size-4" /> {oauthConnected ? "Reconnect OpenRouter" : "Connect OpenRouter"}
                   </a>
                 )}
-                <button className="inline-flex h-11 items-center justify-center gap-2 bg-primary px-4 text-[13px] font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-45 rounded-md" disabled={busy || walletSessionStatusUnavailable || modelSessionStatusUnavailable || (!oauthConnected && demoCatalog.status !== "available")} onClick={oauthConnected ? continueOpenRouter : startDemo} type="button">
-                  {busy || (!oauthConnected && demoCatalog.status === "loading") ? <LoaderCircle className="size-4 animate-spin" /> : oauthConnected ? <ArrowRight className="size-4" /> : <Bot className="size-4" />} {oauthConnected ? "Continue with OpenRouter" : demoCatalog.status === "loading" ? "Checking free demo" : demoCatalog.status === "unavailable" ? "Free demo unavailable" : "Try free demo"}
+                <button className="inline-flex h-11 items-center justify-center gap-2 bg-primary px-4 text-[13px] font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-45 rounded-md" disabled={busy || walletSessionStatusUnavailable || modelSessionStatusUnavailable || (!selectingNearAi && !oauthConnected && demoCatalog.status !== "available")} onClick={modelAction} type="button">
+                  {busy || (!selectingNearAi && !oauthConnected && demoCatalog.status === "loading") ? <LoaderCircle className="size-4 animate-spin" /> : selectingNearAi || oauthConnected ? <ArrowRight className="size-4" /> : <Bot className="size-4" />} {modelActionLabel}
                 </button>
               </div>
-              {!oauthConnected && demoCatalog.status === "unavailable" ? (
+              {!selectingNearAi && !oauthConnected && demoCatalog.status === "unavailable" ? (
                 <p className="border border-approval/35 bg-approval/10 px-3 py-2 text-xs leading-5 text-approval rounded-xl" role="status">
                   {demoCatalog.message} Connect OpenRouter instead, or return to the wallet step to explore the read-only demo.
                 </p>
@@ -4865,7 +4942,7 @@ export function OnboardingFlow({
               <AccountPanel account={account} network={network} />
               <div className="grid gap-px border border-border bg-border text-left sm:grid-cols-2 rounded-xl overflow-hidden">
                 <div className="bg-card p-4"><p className="label-mono">Wallet</p><p className="mt-1.5 text-sm font-medium">{WALLET_NAMES[provider] ?? provider}</p></div>
-                <div className="bg-card p-4"><p className="label-mono">AI model</p><p className="mt-1.5 text-sm font-medium">{modelAccessReady ? aiMode === "openrouter" ? "Your OpenRouter account" : "Free demo" : "Not set up yet"}</p></div>
+                <div className="bg-card p-4"><p className="label-mono">AI model</p><p className="mt-1.5 text-sm font-medium">{modelAccessReady ? aiMode === "openrouter" ? "Your OpenRouter account" : aiMode === "near-ai" ? "Configured NEAR AI" : "Free demo" : "Not set up yet"}</p></div>
               </div>
               <p className="border border-approval/35 bg-approval/[0.06] px-4 py-3 text-sm leading-6 text-muted-foreground rounded-xl">
                 Want Pilot to trade for you? Turn on Testnet trading next. You’ll review and sign each step in your wallet. You don’t need it to explore or chat.

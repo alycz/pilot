@@ -89,6 +89,7 @@ export interface Env {
 	HARBOR_DEMO_MAX_STEPS?: string;
 	HARBOR_HOSTED_STATE_ENABLED?: string;
 	HARBOR_HOSTED_STATE_PRINCIPAL?: string;
+	HARBOR_DEPLOYMENT_PROFILE?: string;
 	HARBOR_RESEARCH_QUOTA_POLICY_VERSION?: string;
 	HARBOR_RESEARCH_QUOTA_ACCOUNT_HOURLY_RUNS?: string;
 	HARBOR_RESEARCH_QUOTA_SESSION_HOURLY_RUNS?: string;
@@ -481,6 +482,41 @@ export function restOperationsEnabledForDeployment(
 	return profile === "paid-dynamic";
 }
 
+/**
+ * The hosted Pilot gateway needs a very small REST surface even when Harbor is
+ * running in the Free/QuickJS profile. Keep this list exact: the profile must
+ * not become a general-purpose operation executor, and MCP `execute` remains
+ * independently disabled.
+ *
+ * Every operation below still applies its own principal, feature-flag,
+ * provider, D1, approval, and reconciliation checks. Listing an operation here
+ * only lets an authenticated request reach those checks.
+ */
+export const FREE_QUICKJS_REST_OPERATION_NAMES = Object.freeze([
+	"near.intents.tokens",
+	"near.intents.quote",
+	"near.intents.status",
+	"near.intents.executable-quote.review",
+	"near.intents.owner-funded.reserve",
+	"near.intents.owner-funded.reconcile",
+] as const);
+
+const FREE_QUICKJS_REST_OPERATION_NAME_SET = new Set<string>(
+	FREE_QUICKJS_REST_OPERATION_NAMES,
+);
+
+export function restOperationEnabledForDeployment(
+	env: object,
+	operationName: string,
+): boolean {
+	const profile = "HARBOR_DEPLOYMENT_PROFILE" in env
+		? (env as Readonly<{ HARBOR_DEPLOYMENT_PROFILE?: unknown }>).HARBOR_DEPLOYMENT_PROFILE
+		: undefined;
+	if (profile === undefined || profile === "paid-dynamic") return true;
+	return profile === "free-quickjs" &&
+		FREE_QUICKJS_REST_OPERATION_NAME_SET.has(operationName);
+}
+
 export function createWorker(
 	registry?: OpRegistry,
 	localX402Service: LocalX402ServiceFactory = createLocalX402Service,
@@ -643,7 +679,8 @@ export function createWorker(
 				...(ap4mServices === undefined ? {} : { ap4mServices }),
 			};
 			if (url.pathname.startsWith("/api/ops/")) {
-				if (!restOperationsEnabledForDeployment(env)) {
+				const opName = url.pathname.slice("/api/ops/".length);
+				if (!restOperationEnabledForDeployment(env, opName)) {
 					return Response.json(
 						{
 							ok: false,
@@ -657,7 +694,6 @@ export function createWorker(
 						{ status: 403, headers: { "cache-control": "no-store" } },
 					);
 				}
-				const opName = url.pathname.slice("/api/ops/".length);
 				return handleRestOperation(request, opName, ctx, requestRegistry);
 			}
 

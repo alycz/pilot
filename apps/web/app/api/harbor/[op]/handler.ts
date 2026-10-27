@@ -26,6 +26,10 @@ const OP_PATTERN = /^[a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9]*)+$/;
 const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 const NEAR_EXECUTABLE_QUOTE_REVIEW_OP =
   "near.intents.executable-quote.review" as const;
+const DEDICATED_NEAR_OWNER_OPS = new Set<string>([
+  "near.intents.owner-funded.reserve",
+  "near.intents.owner-funded.reconcile",
+]);
 
 class HarborRequestTooLargeError extends Error {}
 
@@ -559,7 +563,8 @@ export function createHarborProxyHandler(
 
     if (
       typeof op !== "string" || op.length > 128 ||
-      (!OP_PATTERN.test(op) && op !== NEAR_EXECUTABLE_QUOTE_REVIEW_OP)
+      (!OP_PATTERN.test(op) && op !== NEAR_EXECUTABLE_QUOTE_REVIEW_OP &&
+        !DEDICATED_NEAR_OWNER_OPS.has(op))
     ) {
       return errorResponse(400, "HARBOR_PROXY_INVALID_OP", "The Harbor operation is invalid.");
     }
@@ -594,6 +599,14 @@ export function createHarborProxyHandler(
         403,
         "HARBOR_PROXY_FORBIDDEN_ORIGIN",
         "Cross-origin Harbor operation requests are not allowed.",
+      );
+    }
+
+    if (DEDICATED_NEAR_OWNER_OPS.has(op)) {
+      return errorResponse(
+        403,
+        "HARBOR_PROXY_UNAUTHORIZED",
+        "This owner-controlled NEAR operation requires its dedicated principal-bound route.",
       );
     }
 

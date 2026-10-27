@@ -1956,6 +1956,14 @@ describe("live development-signer RLUSD onboarding", () => {
       hash,
     );
     expect(parseStoredActiveOnboardingRecord(JSON.stringify(record))).toEqual(record);
+    const nearAiRecord = storedActiveOnboardingRecord(
+      link,
+      "dev",
+      "z-ai/example-model",
+      "near-ai",
+      hash,
+    );
+    expect(parseStoredActiveOnboardingRecord(JSON.stringify(nearAiRecord))).toEqual(nearAiRecord);
     expect(parseStoredActiveOnboardingRecord(JSON.stringify({
       ...record,
       permissions: [...DEFAULT_PERMISSIONS.slice(0, 6), "Payment"],

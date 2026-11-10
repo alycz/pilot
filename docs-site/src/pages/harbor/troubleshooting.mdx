@@ -1,0 +1,25 @@
+# Troubleshooting Harbor
+
+Start with the selected profile, request path, named principal, network, and redacted response. Do not paste bearer tokens, seeds, signed blobs, private files, or populated databases into bug reports.
+
+| Symptom | Check | Safe next step |
+| --- | --- | --- |
+| `/health` works but onboarding does not | Health is process liveness, not permission, funding, or link readiness. | Use the selected profile's authenticated `onboarding.readiness` and `account.status` paths where allowed. |
+| Authentication fails | Exact named bearer format, unique principal/token mapping, intended endpoint. | Ask the operator to verify configuration; never fall back to a broader credential. |
+| Unknown operation | Exact name and runtime registry; production excludes local-only operations. | Search the active catalog and compare the [reference](/harbor/operations). |
+| Known operation is refused | Profile allowlist, deployment tier, network, feature gate, and owner scope. | Use the intended documented profile; do not turn off guards to make a request pass. |
+| HTTP 200 with `ok: false` | Operation-level failure envelope. | Handle `error`, not `data`; HTTP transport success is not execution success. |
+| HTTP 400 or 413 | JSON encoding and request size. | Send valid bounded JSON; REST request/response limits are 1 MiB. |
+| MCP script exceeds limits | Number of Harbor calls, runtime deadline, serialized output. | Reduce independent read work/output. Never split a blocked financial intent to evade policy. |
+| Link is suspended or revocation is pending | Local suspension and on-ledger state are distinct. | Obtain validated ledger evidence via the reviewed lifecycle; do not claim revoked from a local flag. |
+| Submitted transaction has no final result | Persisted hash, inclusion window, execution state. | Reconcile the same attempt. Never blindly re-sign, resubmit, or rotate the idempotency key. |
+| Isolated local endpoint rejects host | Exact raw Host and profile-bound port/state are required. | Use the documented address; do not alias, proxy, or canonicalize away the boundary. |
+| Fixture works, provider does not | Fixtures and stand-ins are not live acceptance. | Run a separately authorized acceptance lane with its actual prerequisites. |
+
+## An actionable bug report
+
+Include the source revision, profile name, operation name, network, HTTP status, redacted envelope, and whether the result is unknown or terminal. Preserve correlation/build/execution identifiers only in the appropriate private support channel. State whether a real external call was made and which checks were actually run.
+
+For a timeout after a mutating request, “unknown outcome” is the correct status until reconciliation proves otherwise. A retry must not become a new financial intent.
+
+Source: [routing](https://github.com/alycz/pilot/blob/main/services/harbor/src/server.ts), [REST bounds](https://github.com/alycz/pilot/blob/main/services/harbor/src/rest.ts), [provider guards](https://github.com/alycz/pilot/blob/main/services/harbor/src/executor/providers.ts).

@@ -1,0 +1,89 @@
+# Transaction execution lifecycle
+
+Harbor separates discovery, unsigned construction, authorization, signing, relay, and validated outcome. An agent can help prepare an intent without having authority to execute it.
+
+This page covers the XRPL execution service. Other payment and cross-chain integrations have separate contracts and must not inherit these permissions by analogy.
+
+## 1. Establish a link
+
+`account.link` creates or reuses a Harbor delegate and returns an **unsigned** owner `DelegateSet`. The owner reviews and signs it in the wallet. The link becomes usable only when `account.status` establishes `active` from validated ledger state.
+
+The reviewed delegate permission set is `OfferCreate`, `OfferCancel`, `TrustSet`, `AMMDeposit`, `AMMWithdraw`, `EscrowFinish`, and `CheckCash`. It is not an unrestricted owner wallet. A transaction outside delegation can require owner approval even when a link exists.
+
+In reviewed local profiles, onboarding and trading are separate modes. The onboarding relay validates the stored principal/owner/delegate/network/link tuple and durable origin binding. Do not assume that local behavior defines a general hosted relay contract.
+
+See [policy and delegation](/mcp/policy) and [profile selection](/harbor/profiles).
+
+## 2. Build and simulate an exact transaction
+
+Builders such as `tx.swap` and `tx.trustSet` return a stored unsigned `TxBuild`. Construction fills transaction context, performs preflight, and simulates the exact unsigned transaction. Preserve the returned build ID and, where applicable, execution capability and revision.
+
+Simulation is evidence about an attempted transaction under observed conditions. It is not owner authorization, a liquidity reservation, or final ledger inclusion. A quote is not a best-execution guarantee.
+
+For swaps, omitted `execution_mode` preserves immediate-or-cancel behavior. Exact-output fill-or-kill requires its own validated path evidence, exact arithmetic, bounded ledger window, and re-simulation; clients must not silently substitute one mode for the other.
+
+## 3. Evaluate one intent
+
+Call `tx.execute` with the stored build and a stable idempotency key. This example explicitly requires owner approval and is not a read-only call:
+
+```js
+return await harbor.tx.execute({
+  build_id: "<BUILD_ID>",
+  idempotency_key: "<STABLE_KEY_FOR_THIS_INTENT>",
+  require_owner_approval: true,
+});
+```
+
+Policy checks link state, network, transaction type, issuer/RequireAuth facts, USD valuation, slippage, and daily allowance. Delegated execution atomically reserves allowance and its immutable snapshot **before** delegate signing.
+
+The idempotency identity includes the principal, build, execution contract, revision, and execution mode. Reusing the key with changed inputs fails closed. Requiring owner approval is a one-way choice: a permissive or concurrently changed policy cannot turn it into delegated signing.
+
+## 4. Handle the result without guessing
+
+| Result | Client behavior |
+| --- | --- |
+| `executed` | Retain the validated hash and ledger index. |
+| `needs_approval` | Present the exact unsigned transaction, reasons, approval ID, and expiry; wait for the owner. |
+| `blocked` | Stop. Do not split the intent, weaken policy, or substitute another route. |
+| `failed` | Report the final engine result without calling it successful execution. |
+| Pending or unknown outcome | Retain durable identifiers and reconcile; never blindly re-sign or re-submit. |
+
+Check both the response envelope and the operation's lifecycle fields. HTTP 200 alone does not prove execution. See [response envelopes](/mcp/envelope) and [transaction API usage](/mcp/transactions).
+
+## Bounded local execution v2
+
+`xrpl_execution_v2` is a provisional local-only contract accepted only in exact reviewed trading/onboarding profiles. It is not a general hosted feature or a deployed acceptance claim. Omitting `execution_contract` selects legacy v1, not “the newest supported version.”
+
+The build and execute calls must carry the same explicit contract. V2 execution also requires the exact returned `build_revision`. Missing, mixed, or malformed evidence must not be downgraded to v1.
+
+| Constraint | V1 | V2 |
+| --- | --- | --- |
+| Last-ledger offset | 4 | 64 |
+| Minimum ledgers remaining at signing/first relay | Legacy behavior | 8 validated ledgers |
+| Owner approval wall-clock TTL | 10 minutes | 90 seconds |
+| Transaction identity | Legacy stored build | Immutable revision plus canonical unsigned digest and economic fingerprint |
+
+For v2, effective validity ends at the earlier of the approval expiry and ledger bound. Its market quote freshness is a separate check; a long inclusion window does not make an old quote fresh.
+
+Every fresh build creates a new build ID with revision 1. There is no public in-place revision refresh API. Do not invent revision `n + 1`, rewrite an approved transaction, or calculate replacement capability fields in the client.
+
+## Owner signing and first relay
+
+V2 requires `tx.approvalPreflight` immediately before owner sign-only. Harbor verifies the exact approved transaction and applicable freshness, fee, sequence, and balance evidence. Official Testnet RLUSD acquisition can carry an exact issued-balance invariant; sequence equality alone is insufficient because incoming transfers do not consume the owner's sequence.
+
+Before the sole relay, the submitted hash is durably claimed. The first relay rechecks the remaining-ledger boundary. If the relay outcome becomes unknown, reconciliation uses the exact hash and persisted inclusion window rather than creating another signature.
+
+The narrow `tx.approvalReconcile` recovery path is not a universal retry mechanism. It can burn an expired, preflighted, provably non-included official Testnet RLUSD acquisition tuple and direct a client toward a fresh build only when its contract's evidence requirements hold.
+
+## 5. Revoke and verify
+
+`account.revoke` suspends the local link and returns an unsigned empty-permission `DelegateSet`. Complete revocation requires owner signing, validated inclusion on the correct network, and `account.status` reporting `revoked`.
+
+Deleting local state or seeing a process stop is not revocation proof. Preserve the public evidence needed to distinguish local suspension from the on-ledger outcome.
+
+## Implementation references
+
+- [Execution operations](https://github.com/alycz/pilot/blob/main/services/harbor/src/ops/tx-exec.ts)
+- [Build implementation](https://github.com/alycz/pilot/blob/main/services/harbor/src/exec/build.ts)
+- [Policy implementation](https://github.com/alycz/pilot/blob/main/services/harbor/src/exec/policy.ts)
+- [Full v2 contract](https://github.com/alycz/pilot/blob/main/services/harbor/docs/execution-lifetime-v2-contract.md)

@@ -1,0 +1,999 @@
+# Harbor operation signatures
+
+Generated from the source catalog. Do not edit this page by hand; run `npm run generate` in `services/harbor`, then `npm run catalog` in `docs-site`.
+
+The generated registry contains **109 operations**, of which **101** remain in the production registry after the local-only filter. These counts describe code registration, not live acceptance or permission. Deployment profiles, operation guards, provider configuration, network support, and owner scope can further restrict availability.
+
+Arguments marked `?` are optional in the catalog signature. Search the running MCP catalog for current discovery metadata; inspect the linked source schemas for required enums, bounds, cross-field validation, and authorization. A signature is not a complete JSON Schema.
+
+Use `POST /api/ops/{operation}` with JSON arguments or the corresponding MCP namespace. Hyphenated namespace segments require JavaScript bracket notation, not dot notation. See [first request](/harbor/quickstart), [response envelopes](/mcp/envelope), and [security](/harbor/security).
+
+## account
+
+### account.link
+
+Create or reuse a test-network delegate account and prepare its permission grant.
+
+```text
+account.link({ owner, network, permissions? }) → AccountLink
+```
+
+### account.revoke
+
+Prepare an empty-permission DelegateSet and suspend execution until revocation is confirmed.
+
+```text
+account.revoke({ owner, network }) → AccountLink
+```
+
+### account.status
+
+Read the on-ledger delegation and refresh the principal-scoped account link.
+
+```text
+account.status({ owner, network }) → AccountLink
+```
+
+## amendments
+
+### amendments.status
+
+Read network-specific XRPL amendment enablement and server support.
+
+```text
+amendments.status(args) → amendment IDs with network-specific enabled and supported flags
+```
+
+Catalog caveats: `amendment-pending`.
+
+## amm
+
+### amm.info
+
+Read the validated state of an XRPL automated market maker.
+
+```text
+amm.info(args) → AMM reserves, LP-token supply, trading fee, and ledger metadata
+```
+
+### amm.pools
+
+List normalized XRPL AMM pools with provider liquidity and activity metrics when available.
+
+```text
+amm.pools({ limit }) → normalized AMM pools and the indexer source
+```
+
+Catalog caveats: `off-ledger`.
+
+### amm.position
+
+Read one account's LP-token position in an XRPL AMM.
+
+```text
+amm.position(args) → the provider account and AMM state whose lp_token is that account's balance
+```
+
+## analytics
+
+### analytics.marketSnapshot
+
+Read one bounded, normalized XRPL pair snapshot with book, AMM, spread, and executable-liquidity estimates.
+
+```text
+analytics.marketSnapshot(args) → a source-labelled validated-ledger pair snapshot with explicit availability, units, and freshness
+```
+
+## ap4m
+
+### ap4m.evmBindVoucher
+
+Validate an explicit owner-wallet voucher signature and bind it to one exact prepared redemption.
+
+```text
+ap4m.evmBindVoucher(args) → the exact decoded redemption transaction after signer recovery and fee-bound validation
+```
+
+### ap4m.evmPrepareApproval
+
+Prepare a short-lived, exact owner-wallet approval for one XRPL EVM Testnet voucher redemption.
+
+```text
+ap4m.evmPrepareApproval(args) → an exact typed-data and transaction expectation; never a signature or submitted transaction
+```
+
+### ap4m.evmReconcile
+
+Read chain evidence for an already-recorded voucher transaction without resubmitting it.
+
+```text
+ap4m.evmReconcile(args) → pending, failed-absent, or confirmed only with verified voucher and merchant-payout evidence
+```
+
+### ap4m.evmRecordSubmission
+
+Record a wallet-submitted voucher transaction as outcome-unknown for hash-based reconciliation.
+
+```text
+ap4m.evmRecordSubmission(args) → a durable reconciliation-required state; this operation never submits or retries a transaction
+```
+
+### ap4m.evmStatus
+
+Read durable AP4M EVM channel or voucher-attempt state without performing an effect.
+
+```text
+ap4m.evmStatus(args) → the principal-scoped durable channel and optional attempt state
+```
+
+### ap4m.purchase
+
+Purchase one allowlisted AP4M product under an active Testnet mandate.
+
+```text
+ap4m.purchase(args) → { receipt: Ap4mReceipt, data: Ap4mTypedData, evidence?: Ap4mPublicEvidence }
+```
+
+## capability
+
+### capability.activate
+
+Activate an exact local mock capability after owner signature verification.
+
+```text
+capability.activate(args) → the active capability view
+```
+
+**Local registry only.** Not included in the production registry.
+
+### capability.invoke
+
+Invoke one fixed local fixture adapter through an opaque scoped capability.
+
+```text
+capability.invoke(args) → an idempotent completed or unknown result
+```
+
+**Local registry only.** Not included in the production registry.
+
+### capability.prepare
+
+Prepare a default-off local mock capability and exact owner review.
+
+```text
+capability.prepare(args) → a prepared capability and owner review payload
+```
+
+**Local registry only.** Not included in the production registry.
+
+### capability.prepareRevoke
+
+Prepare an exact owner-reviewed local capability revocation.
+
+```text
+capability.prepareRevoke(args) → an exact owner review payload
+```
+
+**Local registry only.** Not included in the production registry.
+
+### capability.revoke
+
+Revoke an exact local capability after owner signature verification.
+
+```text
+capability.revoke(args) → the revoked capability view
+```
+
+**Local registry only.** Not included in the production registry.
+
+### capability.status
+
+Read one account-bound local mock capability.
+
+```text
+capability.status(args) → the safe capability view
+```
+
+**Local registry only.** Not included in the production registry.
+
+## channel
+
+### channel.list
+
+List a mandate's payment channels with local highest-claim state.
+
+```text
+channel.list(args) → ChannelListItem[]
+```
+
+### channel.status
+
+Read one mandate payment channel with validated ledger and local highest-claim state.
+
+```text
+channel.status(args) → ChannelStatus
+```
+
+## credential
+
+### credential.ids
+
+Return accepted, unexpired AP4M-Agent CredentialIDs for a Testnet payer.
+
+```text
+credential.ids(args) → accepted AP4M-Agent CredentialIDs safe to place on a Payment
+```
+
+### credential.payerAccept
+
+Accept the configured AP4M-Agent credential from Harbor's own Testnet payer account.
+
+```text
+credential.payerAccept(args) → the Harbor-self CredentialAccept submission status
+```
+
+### credential.status
+
+Read the accepted and expiration status of the configured AP4M-Agent credential on XRPL Testnet.
+
+```text
+credential.status(args) → the configured Testnet credential ledger status
+```
+
+## dex
+
+### dex.book
+
+Read offers from one side of an XRPL decentralized exchange book.
+
+```text
+dex.book({ network, taker_gets, taker_pays, taker?, limit?, ledger_index? }) → the XRPL book_offers response
+```
+
+### dex.depth
+
+Aggregate funded XRPL order-book offers into price levels and totals.
+
+```text
+dex.depth({ network, taker_gets, taker_pays, limit?, ledger_index? }) → funded book levels and aggregate taker-get/taker-pay totals
+```
+
+### dex.quote
+
+Request an indicative first-pass XRPL payment-path quote for a destination amount.
+
+```text
+dex.quote({ network, source_account, destination_account, destination_amount, send_max?, source_currencies? }) → the initial path_find response, which may have full_reply false
+```
+
+Catalog caveats: `unverified-match`.
+
+## docs
+
+### docs.search
+
+Search the official XRP Ledger documentation.
+
+```text
+docs.search({ query }) → DocsSearchHit[]
+```
+
+## ledger
+
+### ledger.account.info
+
+Read an XRPL account root, flags, and optional queue or signer-list data.
+
+```text
+ledger.account.info({ network, account, ledger_hash?, ledger_index?, queue?, signer_lists? }) → the raw account_info result
+```
+
+### ledger.account.lines
+
+Read an XRPL account's trust lines with optional peer filtering and pagination.
+
+```text
+ledger.account.lines({ network, account, peer?, ignore_default?, ledger_hash?, ledger_index?, limit?, marker? }) → the raw account_lines result with lines always present
+```
+
+### ledger.account.objects
+
+Read raw XRPL ledger objects owned by an account with filtering and pagination.
+
+```text
+ledger.account.objects({ network, account, deletion_blockers_only?, ledger_hash?, ledger_index?, limit?, marker?, sponsored?, type? }) → the raw account_objects result with account_objects always present
+```
+
+### ledger.account.tx
+
+Read validated XRPL transactions involving an account, with range filters and pagination.
+
+```text
+ledger.account.tx({ network, account, tx_type?, mpt_issuance_id?, ledger_index_min?, ledger_index_max?, binary?, forward?, limit?, marker?, delegate? }) → the raw account_tx result with transactions always present
+```
+
+### ledger.fee
+
+Read current XRPL open-ledger transaction fee and queue metrics.
+
+```text
+ledger.fee({ network }) → the raw fee result in drops and fee levels
+```
+
+## lending
+
+### lending.brokers
+
+List validated XRPL Lending Protocol loan brokers on Lending-Devnet.
+
+```text
+lending.brokers(args) → a validated page of LoanBroker ledger entries and its pagination marker
+```
+
+Catalog caveats: `devnet-only`, `amendment-pending`.
+
+## mandate
+
+### mandate.prepare
+
+Prepare an unsigned testnet AP4M mandate setup.
+
+```text
+mandate.prepare(args) → MandatePrepare
+```
+
+### mandate.register
+
+Verify VI authorization and a validated mandate setup.
+
+```text
+mandate.register(args) → Mandate
+```
+
+### mandate.revoke
+
+Revoke an AP4M mandate and request channel closure.
+
+```text
+mandate.revoke(args) → Mandate
+```
+
+### mandate.status
+
+Read AP4M mandate status.
+
+```text
+mandate.status(args) → Mandate
+```
+
+## mastercard
+
+### mastercard.docs
+
+List public documentation pages for a Mastercard service.
+
+```text
+mastercard.docs({ service_id }) → MastercardDocsResult
+```
+
+### mastercard.page
+
+Read one public Mastercard Developers documentation page.
+
+```text
+mastercard.page({ path }) → MastercardPageResult
+```
+
+### mastercard.search
+
+Search public Mastercard services and documentation titles.
+
+```text
+mastercard.search({ query }) → MastercardSearchResult
+```
+
+### mastercard.services
+
+List public services in Mastercard Developers.
+
+```text
+mastercard.services() → MastercardServicesResult
+```
+
+## merchants
+
+### merchants.get
+
+Get one allowlisted AP4M demo merchant with its products, prices, schemes, and required credential.
+
+```text
+merchants.get({ id }) → Merchant
+```
+
+### merchants.list
+
+List the allowlisted AP4M demo merchants, products, prices, settlement schemes, and credential requirements.
+
+```text
+merchants.list() → Merchant[]
+```
+
+## near
+
+### near.intents.executable-quote.review
+
+Create an explicitly enabled provider-signed quote for one reviewed owner-funded NEAR Intents route.
+
+```text
+near.intents.executable-quote.review(args) → an exact manual-funding review; Harbor never builds, signs, broadcasts, or funds the transfer
+```
+
+Catalog caveats: `off-ledger`.
+
+### near.intents.owner-funded.reconcile
+
+Verify and durably reconcile an owner-funded native NEAR attempt without constructing or submitting transactions.
+
+```text
+near.intents.owner-funded.reconcile(args) → source/provider/destination evidence state with safe_to_resubmit always false
+```
+
+Catalog caveats: `off-ledger`.
+
+### near.intents.owner-funded.reserve
+
+Durably reserve a reviewed, provider-verified native NEAR owner-funded attempt without executing it.
+
+```text
+near.intents.owner-funded.reserve(args) → a durable admission and manual owner-funding instructions; no transaction is built, signed, broadcast, or funded
+```
+
+Catalog caveats: `off-ledger`.
+
+### near.intents.quote
+
+Request and verify a dry EXACT_INPUT 1Click quote; this operation cannot create a deposit address.
+
+```text
+near.intents.quote(args) → provider-signed dry quote with canonical quote hash and no execution address
+```
+
+Catalog caveats: `off-ledger`.
+
+### near.intents.status
+
+Read 1Click settlement status using the exact deposit address and required memo.
+
+```text
+near.intents.status(args) → verified 1Click quote binding and current provider settlement state
+```
+
+Catalog caveats: `off-ledger`.
+
+### near.intents.tokens
+
+Read current 1Click-supported asset identifiers without assuming chain or token support.
+
+```text
+near.intents.tokens({ blockchain?, symbol?, include_ondo?, limit? }) → live 1Click token metadata with exact asset IDs
+```
+
+Catalog caveats: `off-ledger`.
+
+## onboarding
+
+### onboarding.readiness
+
+Attest whether the authenticated local Testnet onboarding state is safe to hand off.
+
+```text
+onboarding.readiness({ owner, network, expected_policy, trust_set_hash }) → OnboardingReadinessResult
+```
+
+## perps
+
+### perps.markets
+
+Read the XRP perpetual market on Hyperliquid; trading and order management are unavailable.
+
+```text
+perps.markets() → read-only Hyperliquid XRP market metadata, mark/oracle prices, funding, open interest, and 24-hour volume
+```
+
+Catalog caveats: `off-ledger`.
+
+## policy
+
+### policy.get
+
+Read the principal-scoped execution policy or the safe default.
+
+```text
+policy.get({ owner, network }) → Policy
+```
+
+### policy.set
+
+Validate and upsert the principal-scoped execution policy.
+
+```text
+policy.set({ owner, network, policy }) → Policy
+```
+
+## quicknode
+
+### quicknode.events
+
+Read recent principal-scoped QuickNode watchdog events.
+
+```text
+quicknode.events(args) → WatchdogEvent[]
+```
+
+### quicknode.kv.reconcile
+
+Rebuild the QuickNode KV registry from Harbor state and the catalog.
+
+```text
+quicknode.kv.reconcile({ network }) → QuickNodeKvReconcileResult
+```
+
+### quicknode.status
+
+Read structured QuickNode routing, confirmation, and watchdog counters.
+
+```text
+quicknode.status() → QuickNodeStatus
+```
+
+### quicknode.test.deleteLink
+
+Delete only a synthetic local watchdog test link.
+
+```text
+quicknode.test.deleteLink(args) → QuickNodeTestLinkCleanup
+```
+
+**Local registry only.** Not included in the production registry.
+
+### quicknode.test.registerLink
+
+Register a fail-closed local-only watchdog test link.
+
+```text
+quicknode.test.registerLink(args) → QuickNodeTestLink
+```
+
+**Local registry only.** Not included in the production registry.
+
+### quicknode.unfreeze
+
+Remove a Harbor-local freeze from an authorized account link.
+
+```text
+quicknode.unfreeze(args) → QuickNodeUnfreezeResult
+```
+
+### quicknode.webhookEvidence
+
+Read one principal-scoped fixed-field webhook confirmation proof.
+
+```text
+quicknode.webhookEvidence(args) → QuickNodeWebhookEvidence
+```
+
+## server
+
+### server.reserves
+
+Read the current XRP Ledger account reserve requirements.
+
+```text
+server.reserves({ network }) → validated-ledger base and owner reserves in XRP
+```
+
+## skill
+
+### skill.read
+
+Read a pinned XRPL skill or a local Harbor playbook.
+
+```text
+skill.read({ id }) → Skill | Playbook
+```
+
+## strategy
+
+### strategy.audit
+
+Read a bounded owner-scoped decision and transaction audit trail.
+
+```text
+strategy.audit(args) → StrategyAuditEvent records
+```
+
+### strategy.authorize
+
+Activate an exact immutable mandate using fresh owner-approved authorization.
+
+```text
+strategy.authorize(args) → an active Strategy
+```
+
+### strategy.create
+
+Create a non-authorizing Testnet rebalancer draft with immutable bounded limits.
+
+```text
+strategy.create(args) → a draft Strategy
+```
+
+### strategy.get
+
+Read one exact owner-scoped Testnet strategy.
+
+```text
+strategy.get(args) → a Strategy
+```
+
+### strategy.globalKill.get
+
+Read the fail-closed account-wide Testnet strategy kill switch under Harbor's enforced single-principal owner binding.
+
+```text
+strategy.globalKill.get(args) → StrategyKillSwitch
+```
+
+### strategy.globalKill.set
+
+Set the account-wide strategy kill switch under the single-principal owner binding; clearing requires fresh owner authorization.
+
+```text
+strategy.globalKill.set(args) → StrategyKillSwitch
+```
+
+### strategy.kill
+
+Kill new work for one strategy without promising cancellation of in-flight ledger work.
+
+```text
+strategy.kill(args) → a terminally stopped Strategy
+```
+
+### strategy.list
+
+List strategies for one exact owner and Testnet scope.
+
+```text
+strategy.list(args) → owner-scoped Strategy records
+```
+
+### strategy.pause
+
+Pause new strategy evaluations and submissions without cancelling in-flight work.
+
+```text
+strategy.pause(args) → a paused Strategy
+```
+
+### strategy.resume
+
+Resume an unchanged valid mandate using fresh owner authorization.
+
+```text
+strategy.resume(args) → an active Strategy
+```
+
+### strategy.simulate
+
+Evaluate one explicit observation as a deterministic paper-only preview; no build, signing, submission, or return claim.
+
+```text
+strategy.simulate(args) → a paper-only StrategyPlanPreview with ledger acceptance marked not tested
+```
+
+### strategy.stop
+
+Terminally stop this mandate version while preserving unresolved transaction state.
+
+```text
+strategy.stop(args) → a stopped Strategy
+```
+
+### strategy.validate
+
+Validate untrusted input against the finite Testnet declarative-strategy grammar without creating authority.
+
+```text
+strategy.validate(args) → a StrategyPlanValidationResult with exact diagnostics and capabilities
+```
+
+## tokens
+
+### tokens.flagged
+
+List issuer accounts on XRPL.to's verified scam blocklist.
+
+```text
+tokens.flagged({ limit }) → verified-blocklist issuer accounts with the indexer source
+```
+
+Catalog caveats: `off-ledger`.
+
+### tokens.lookup
+
+Look up token metadata and merge it with validated on-ledger issuer controls.
+
+```text
+tokens.lookup({ network, currency, issuer }) → indexer token metadata plus RequireAuth, freeze, clawback, and blackhole flags
+```
+
+Catalog caveats: `off-ledger`.
+
+### tokens.trending
+
+List provider-ranked XRPL tokens, preferring XRPL.to's trend score.
+
+```text
+tokens.trending({ limit }) → ranked normalized token metadata with the indexer source
+```
+
+Catalog caveats: `off-ledger`.
+
+## tx
+
+### tx.ammDeposit
+
+Build and simulate an unsigned AMM liquidity deposit.
+
+```text
+tx.ammDeposit(args) → a stored, unsigned TxBuild
+```
+
+### tx.ammWithdraw
+
+Build and simulate an unsigned AMM liquidity withdrawal.
+
+```text
+tx.ammWithdraw(args) → a stored, unsigned TxBuild
+```
+
+### tx.approvalPreflight
+
+Atomically preflight an exact v2 owner approval immediately before signing.
+
+```text
+tx.approvalPreflight(args) → v2 owner approval readiness
+```
+
+### tx.approvalReconcile
+
+Burn an expired unsigned v2 approval only after complete exact-ledger non-inclusion proof.
+
+```text
+tx.approvalReconcile(args) → terminal expired non-inclusion proof
+```
+
+### tx.checkCancel
+
+Build and simulate an unsigned XRPL Check cancellation.
+
+```text
+tx.checkCancel(args) → a stored, unsigned TxBuild
+```
+
+### tx.checkCash
+
+Build and simulate an unsigned XRPL Check redemption.
+
+```text
+tx.checkCash(args) → a stored, unsigned TxBuild
+```
+
+### tx.checkCreate
+
+Build and simulate an unsigned, owner-signed XRPL Check creation.
+
+```text
+tx.checkCreate(args) → a stored, unsigned non-delegable TxBuild
+```
+
+### tx.escrowCancel
+
+Build and simulate an unsigned escrow cancellation.
+
+```text
+tx.escrowCancel(args) → a stored, unsigned TxBuild
+```
+
+### tx.escrowCreate
+
+Build and simulate an unsigned, owner-signed XRPL escrow creation.
+
+```text
+tx.escrowCreate(args) → a stored, unsigned non-delegable TxBuild
+```
+
+### tx.escrowFinish
+
+Build and simulate an unsigned escrow finish.
+
+```text
+tx.escrowFinish(args) → a stored, unsigned TxBuild
+```
+
+### tx.execute
+
+Evaluate policy and idempotently execute or prepare owner approval for a stored build, with an explicit force-approval option.
+
+```text
+tx.execute(args) → ExecResult
+```
+
+### tx.offer
+
+Build and simulate an unsigned XRPL limit offer.
+
+```text
+tx.offer(args) → a stored, unsigned TxBuild
+```
+
+### tx.offerCancel
+
+Build and simulate an unsigned offer cancellation.
+
+```text
+tx.offerCancel(args) → a stored, unsigned TxBuild
+```
+
+### tx.payment
+
+Build and simulate an unsigned, always owner-signed payment.
+
+```text
+tx.payment(args) → a stored, unsigned non-delegable TxBuild
+```
+
+### tx.simulate
+
+Autofill, tag, preflight, simulate, and store a supported unsigned transaction.
+
+```text
+tx.simulate(args) → a stored, unsigned TxBuild
+```
+
+### tx.status
+
+Read the validated status of a submitted transaction hash.
+
+```text
+tx.status(args) → transaction validation status
+```
+
+### tx.submit
+
+Relay a signed test-network transaction, verifying an approval when supplied.
+
+```text
+tx.submit(args) → validated submission result
+```
+
+### tx.swap
+
+Build and simulate an unsigned IOC swap at a book-mid limit or an exact-output FOK swap from validated executable liquidity.
+
+```text
+tx.swap(args) → a stored, unsigned TxBuild
+```
+
+### tx.trustSet
+
+Build and simulate an unsigned trust-line update.
+
+```text
+tx.trustSet(args) → a stored, unsigned TxBuild
+```
+
+### tx.vaultDeposit
+
+Build and simulate an unsigned, owner-signed devnet vault deposit.
+
+```text
+tx.vaultDeposit(args) → a stored, unsigned non-delegable TxBuild
+```
+
+Catalog caveats: `devnet-only`.
+
+### tx.vaultWithdraw
+
+Build and simulate an unsigned, owner-signed devnet vault withdrawal.
+
+```text
+tx.vaultWithdraw(args) → a stored, unsigned non-delegable TxBuild
+```
+
+Catalog caveats: `devnet-only`.
+
+## vault
+
+### vault.info
+
+Read current Single Asset Vault state on Devnet or Lending-Devnet.
+
+```text
+vault.info(args) → VaultInfo
+```
+
+Catalog caveats: `devnet-only`, `amendment-pending`.
+
+### vault.positions
+
+Read nonzero Single Asset Vault share positions from one validated ledger.
+
+```text
+vault.positions({ network, account, ledger_index?, limit?, marker? }) → strict validated-ledger VaultPositionsResponse
+```
+
+Catalog caveats: `devnet-only`, `amendment-pending`.
+
+## venues
+
+### venues.compare
+
+Compare an exact-input pair and size across the XRPL order book, AMM, and payment paths.
+
+```text
+venues.compare(args) → three priced routes: order-book, AMM, and path
+```
+
+Catalog caveats: `unverified-match`.
+
+### venues.get
+
+Get one venue from the generated Harbor catalog by id.
+
+```text
+venues.get({ id }) → Venue
+```
+
+### venues.list
+
+List every venue in the generated Harbor catalog.
+
+```text
+venues.list() → Venue[]
+```
+
+## x402
+
+### x402.pay
+
+Pay the fixed local XRPL Testnet merchant and return its compare resource.
+
+```text
+x402.pay({ owner, network, resource, max_price_drops, idempotency_key, pay_to }) → a delivered local compare resource or an ambiguous-settlement recovery record
+```
+
+### x402.payIssuedFixture
+
+Run the default-off native XRPL issued-currency x402 offline fixture.
+
+```text
+x402.payIssuedFixture(args) → explicit deterministic offline fixture evidence, never a validated-ledger receipt
+```
+
+Catalog caveats: `off-ledger`.
+
+## yield
+
+### yield.options
+
+Compare AMM fee-return inputs, requested Devnet vaults, and catalogued off-ledger yield venues without inventing missing rates.
+
+```text
+yield.options(args) → YieldOptions
+```
+
+Catalog caveats: `devnet-only`, `off-ledger`, `amendment-pending`.
+
+Sources: [operation schemas](https://github.com/alycz/pilot/tree/main/services/harbor/src/ops), [runtime registry filtering](https://github.com/alycz/pilot/blob/main/services/harbor/src/server.ts), [catalog generator](https://github.com/alycz/pilot/blob/main/services/harbor/scripts/build-catalog.mjs).

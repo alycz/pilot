@@ -1,0 +1,61 @@
+# Develop Harbor locally
+
+The repository has three independent JavaScript packages: the Pilot pnpm workspace, Harbor's npm service, and this standalone npm Vocs site. Use each package's lockfile and working directory. Documentation work does not require a wallet, live provider credential, funded account, or deployed Worker.
+
+## Toolchain and integrity
+
+The repository pins Node **24.14.0**, root pnpm **10.32.1**, and Harbor npm **11.9.0**. Follow `AGENTS.md` and the checked-in version files.
+
+Before installing dependencies, run from the repository root:
+
+```bash
+node scripts/integrity/verify.mjs
+```
+
+An integrity failure must be investigated, not bypassed or hidden by regenerating a manifest before review.
+
+## Offline service checks
+
+```bash
+cd services/harbor
+npm ci
+npm run generate
+npm run typecheck
+npm test
+```
+
+Generation parses operation metadata and produces the catalog and registry index; it does not call operation handlers. Keep source metadata literal so this stays deterministic. The default test suite is offline. Smoke tests are separate and require an explicitly selected running Worker.
+
+## Optional read-only Worker
+
+```bash
+npm run dev:local
+```
+
+The fixed launcher binds `127.0.0.1:8791`, applies local migrations, uses `.wrangler/harbor-local`, excludes production secret files, disables cron, and rejects external mutation operations. Reads/builders/simulations can still call public Testnet endpoints when invoked: **local is not the same as offline**. Creating local D1 state is also a local filesystem mutation.
+
+Do not substitute `wrangler dev` with an arbitrary configuration when testing a documented safety profile. See [profiles](/harbor/profiles) before using trading, onboarding, autonomy, or x402 launchers. Those workflows are not part of this quickstart.
+
+## Work on these docs
+
+From the repository root:
+
+```bash
+cd docs-site
+npm ci
+npm run check
+npm run build
+npm run dev
+```
+
+Vocs uses the existing `/docs` base path. Open the development server's `/docs/harbor/overview` route. Production output is `docs-site/dist/public`; the build also fixes Vocs skip-link base paths. Building the site does not deploy it.
+
+To refresh the source-derived operation reference, first run `npm run generate` in `services/harbor`, then `npm run catalog` in `docs-site`. Commit the resulting MDX together with the source change. `npm run catalog:check` detects stale generated documentation.
+
+## Repository-wide verification
+
+For changes beyond prose, follow the full repository instructions: root and nested typechecks, offline unit suites, production build, fixture browser suite, generated-file checks, contract byte/hash parity, and migration inventory. Passing a docs build is not proof that these application checks passed.
+
+Never run remote migrations, deploy, fund accounts, or submit transactions as an incidental docs check. Do not commit secrets, runtime state, signed blobs, browser sessions, or acceptance evidence that was not actually observed.
+
+Source: [AGENTS.md](https://github.com/alycz/pilot/blob/main/AGENTS.md), [Harbor scripts](https://github.com/alycz/pilot/blob/main/services/harbor/package.json), [catalog generator](https://github.com/alycz/pilot/blob/main/services/harbor/scripts/build-catalog.mjs).

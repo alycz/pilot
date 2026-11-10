@@ -8,13 +8,14 @@ This package is standalone (npm, not part of the pnpm workspace) so it does not 
 
 ```bash
 cd docs-site
-npm install
+npm ci
 npm run dev        # http://localhost:5173
 ```
 
 ## Build
 
 ```bash
+npm run check
 npm run build      # static output in dist/public (renderStrategy: full-static)
 npm run preview
 ```
@@ -37,6 +38,7 @@ vocs.config.ts          sidebar, top nav, theme, banner
 public/icon.svg         favicon (same mark as the app)
 src/pages/
   index.mdx             landing
+  harbor/               platform, architecture, security, lifecycle, profiles, generated signatures
   introduction/         what Pilot is, how it works, security model
   quickstart/           app, MCP clients, REST, local
   mcp/                  MCP tools, REST, auth, envelope, transactions, policy, venues
@@ -58,3 +60,7 @@ Facts here are taken from the code. When you change any of these, update the mat
 | integration status in `apps/web/components/integrations/content/*.ts` | `integrations/*`, `reference/status.mdx` |
 
 Statuses are deliberately conservative: say *built*, *mock-first* or *stand-in* until a live acceptance lane has run.
+
+## Harbor catalog and verification
+
+Generate Harbor metadata with `npm run generate` in `services/harbor`, then run `npm run catalog` here. `npm run catalog:check` detects stale operation signatures and counts. `npm run check` typechecks Vocs configuration and verifies internal page/navigation links. The dedicated docs CI runs these and the static build. No live provider, wallet, signing, or deployment is part of these checks.

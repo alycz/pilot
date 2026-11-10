@@ -1,0 +1,69 @@
+# Harbor architecture
+
+Harbor is the execution and data-service layer behind Pilot. Pilot owns the application and wallet experience; Harbor owns operation discovery, guarded invocation, transaction construction, policy evaluation, and durable execution state.
+
+This page describes repository implementation, not a claim that every component is enabled in a hosted deployment. A deployment profile can expose a smaller registry and deny an operation that exists in source.
+
+## One registry, two public interfaces
+
+An operation definition contains its name, family, summary, Zod argument schema, return description, caveats, example, and handler. Catalog generation produces the registry input used by the Worker. MCP and REST share this operation model rather than maintaining independent execution implementations.
+
+| Entry point | Path through Harbor |
+| --- | --- |
+| MCP `search` | Searches operation and catalog metadata; returns signatures and examples. |
+| MCP `execute` | Runs a bounded script that calls the typed `harbor.*` namespace through the provider bridge. |
+| REST | `POST /api/ops/{operation}` calls one registered operation with a JSON argument object. |
+
+Read the [MCP tools guide](/mcp/tools), [REST guide](/mcp/rest), and [operation reference](/reference/operations) before integrating. Search discovers a capability; it does not grant the caller permission to use it.
+
+## Request path
+
+1. The Worker selects the runtime profile and validates request context.
+2. Authentication resolves a named principal. The narrow credential-free local mode is a separate, guarded case.
+3. The selected registry determines which operations exist for this request.
+4. Shared provider guards enforce profile, network, operation, and input boundaries.
+5. The operation calls bounded adapters or execution services and returns a response envelope.
+6. State-changing workflows retain principal-scoped records in D1 before advancing to consequential steps.
+
+For clients, `ok: true` in the envelope is distinct from an HTTP success code. The [response guide](/mcp/envelope) explains errors and explicit empty upstream results.
+
+## Script execution
+
+Harbor supports a Dynamic Worker runtime when the Loader binding is available and a QuickJS runtime for configurations without it. Both use the same Harbor provider boundary.
+
+The default execution limits are **30 operation calls**, **10 seconds**, and **24 KiB serialized output**. A script has no direct outbound network capability: upstream access must go through allowed Harbor operations. Parallel calls still count toward the same operation budget.
+
+REST has separate **1 MiB request and response limits**. The script limits are not permission to increase the limits of an individual upstream adapter or signing flow.
+
+## State and external adapters
+
+| Component | Responsibility |
+| --- | --- |
+| D1 | Links, policy, stored builds, approvals, execution records, durable claims, and feature-specific state. |
+| XRPL adapters | Bounded ledger reads, simulation, submission, and reconciliation within the relevant network rules. |
+| Catalog | Venues, merchants, playbooks, operation signatures, and discovery metadata. |
+| Key services | Wrapped operational signing material and narrowly scoped signing callbacks. Owner keys remain in the wallet. |
+| Optional adapters | QuickNode, AWS, payment, and other integrations with their own explicit gates and acceptance requirements. |
+
+Do not assume one migration directory fits all profiles. Canonical, isolated-trading, isolated-x402, and free-profile migration inventories intentionally differ. See [profiles and state isolation](/harbor/profiles).
+
+## Private application routes
+
+Harbor also implements non-public application plumbing. In particular, `/internal/pilot-state/v1/*` provides wallet-proof replay protection, encrypted personalization read/CAS/delete, and transactional Research quota under a dedicated principal. These routes are not registered as MCP tools or public REST operations, and the local auth bypass does not apply.
+
+A private route is not a shortcut around operation policy. Its dedicated credentials and feature configuration must be reviewed separately from an ordinary ops principal.
+
+## Scheduled work
+
+The scheduled handler runs the delegation watcher in eligible profiles. The watcher can record foreign delegated activity, suspend the local link, and prepare an unsigned revocation transaction. It cannot sign for the owner.
+
+Strategy scheduling additionally requires `AUTONOMOUS_STRATEGY_RUNNER=true`, `EXEC_NETWORK=testnet`, and `MAINNET_EXECUTION=false`. Read-only and reviewed trading profiles suppress the scheduled path. The separate local autonomy profile is not the same as the trading profile, and its runner is disabled in checked-in configuration.
+
+## Source map
+
+- [Worker routing and profile selection](https://github.com/alycz/pilot/blob/main/services/harbor/src/server.ts)
+- [Operation registry](https://github.com/alycz/pilot/blob/main/services/harbor/src/catalog/registry.ts)
+- [Shared provider guards](https://github.com/alycz/pilot/blob/main/services/harbor/src/executor/providers.ts)
+- [Dynamic execution](https://github.com/alycz/pilot/blob/main/services/harbor/src/executor/run.ts) and [QuickJS](https://github.com/alycz/pilot/blob/main/services/harbor/src/executor/quickjs.ts)
+- [REST transport](https://github.com/alycz/pilot/blob/main/services/harbor/src/rest.ts)
+- [Scheduler](https://github.com/alycz/pilot/blob/main/services/harbor/src/cron.ts)

@@ -12,7 +12,7 @@ Pilot exposes a single registry of typed operations through two interfaces:
 
 ## The registry
 
-**95 operations** are registered in production (103 including local-only test and capability ops), in these families:
+The current source-derived inventory is maintained in the [Harbor operation catalog](/harbor/operations). The table below groups the original XRPL and integration families; [NEAR Intents](/harbor/near-intents) adds a separately guarded family. These are registry entries, not a production-readiness claim.
 
 | Family | Count | Examples |
 | --- | --- | --- |
@@ -36,7 +36,7 @@ Being registered is not the same as being enabled. Many families (AP4M, QuickNod
 
 ## Why "code mode"
 
-Instead of exposing 95 separate tools (which floods a model's context), the MCP server exposes `search` to discover operations and `execute` to run a short script against them:
+Instead of exposing every operation as a separate tool (which floods a model's context), the MCP server exposes `search` to discover operations and `execute` to run a short script against them:
 
 ```js
 const book = await harbor.dex.depth({

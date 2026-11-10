@@ -4,7 +4,7 @@ export default defineConfig({
   title: 'Pilot',
   titleTemplate: '%s · Pilot Docs',
   description:
-    'Pilot is the agentic DeFi terminal for the XRP Ledger: one MCP server and REST API for every XRPL venue, plus a policy-bound trading harness that never holds your keys.',
+    'Pilot and Harbor documentation: the wallet-facing workspace, policy-gated execution service, MCP, REST API, and guarded integrations.',
   // iconUrl is not prefixed with basePath automatically.
   iconUrl: '/docs/icon.svg',
   head: {
@@ -27,6 +27,7 @@ export default defineConfig({
   },
   socials: [{ icon: 'github', link: 'https://github.com/alycz/pilot' }],
   topNav: [
+    { text: 'Harbor', link: '/harbor/overview', match: '/harbor' },
     { text: 'Guide', link: '/introduction/what-is-pilot', match: '/introduction' },
     { text: 'MCP & API', link: '/mcp/overview', match: '/mcp' },
     { text: 'Trading harness', link: '/harness/overview', match: '/harness' },
@@ -34,6 +35,21 @@ export default defineConfig({
     { text: 'Reference', link: '/reference/operations', match: '/reference' },
   ],
   sidebar: [
+    {
+      text: 'Harbor platform',
+      items: [
+        { text: 'Platform overview', link: '/harbor/overview' },
+        { text: 'First request', link: '/harbor/quickstart' },
+        { text: 'Architecture', link: '/harbor/architecture' },
+        { text: 'Security and key custody', link: '/harbor/security' },
+        { text: 'Transaction lifecycle', link: '/harbor/execution-lifecycle' },
+        { text: 'Runtime profiles', link: '/harbor/profiles' },
+        { text: 'Operation signatures', link: '/harbor/operations' },
+        { text: 'NEAR Intents', link: '/harbor/near-intents' },
+        { text: 'Local development', link: '/harbor/development' },
+        { text: 'Troubleshooting', link: '/harbor/troubleshooting' },
+      ],
+    },
     {
       text: 'Introduction',
       items: [

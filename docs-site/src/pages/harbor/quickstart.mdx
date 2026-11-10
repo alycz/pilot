@@ -1,0 +1,64 @@
+# First Harbor request
+
+Start with a read, not a transaction. You need a Harbor endpoint and, for authenticated deployments, a named bearer issued by your operator. No public endpoint or API-key signup service is assumed here.
+
+## 1. Select the endpoint
+
+For an existing deployment, use the URL supplied by its operator. For a credential-free local read-only service, follow [local development](/harbor/development). Do not use a signing profile just to try the API.
+
+## 2. Read the Testnet fee
+
+Keep the bearer server-side. Replace the URL and token placeholders; never commit the resulting values.
+
+```bash
+export HARBOR_URL='https://YOUR-HARBOR-WORKER'
+export HARBOR_API_KEY='YOUR-PRINCIPAL:YOUR-TOKEN'
+curl --fail-with-body "$HARBOR_URL/api/ops/ledger.fee" \
+  -H "Authorization: Bearer $HARBOR_API_KEY" \
+  -H 'Content-Type: application/json' \
+  --data '{"network":"testnet"}'
+```
+
+On the fixed credential-free read-only profile at `http://127.0.0.1:8791`, omit the Authorization header. That exception is narrow: it does not make remote requests or local signing profiles anonymous.
+
+## 3. Inspect the operation result
+
+HTTP success alone is insufficient. Read `data` only if `ok` is `true`; otherwise inspect the redacted `error` object. Treat a soft-empty upstream result as missing data, not proof of a successful mutation. See [response envelopes](/mcp/envelope).
+
+```js
+const response = await fetch(`${process.env.HARBOR_URL}/api/ops/ledger.fee`, {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${process.env.HARBOR_API_KEY}`,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({ network: 'testnet' }),
+})
+const result = await response.json()
+if (!response.ok || result.ok !== true) {
+  throw new Error('Harbor read failed; inspect the redacted result')
+}
+console.log(result.data)
+```
+
+This is server-side JavaScript. Never embed a Harbor credential in browser code.
+
+## Use MCP instead
+
+Configure a Streamable HTTP MCP client with the same bearer and `/mcp` endpoint. Call `search` with `{ "query": "ledger.fee" }` to discover the signature, then `execute` with:
+
+```json
+{
+  "code": "return await harbor.ledger.fee({ network: 'testnet' });"
+}
+```
+
+MCP `execute` runs a bounded script, not arbitrary network code. It is also not synonymous with signing: this example only reads. Profiles may make MCP search-only. See [MCP tools](/mcp/tools).
+
+## Next steps
+
+- [Browse operation signatures](/harbor/operations).
+- [Understand authorization and key custody](/harbor/security).
+- [Learn build, approval, and reconciliation](/harbor/execution-lifecycle).
+
+Source: [REST handler](https://github.com/alycz/pilot/blob/main/services/harbor/src/rest.ts), [MCP tools](https://github.com/alycz/pilot/blob/main/services/harbor/src/mcp/tools.ts).

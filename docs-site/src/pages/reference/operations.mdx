@@ -1,4 +1,6 @@
-# All operations [95 in production, 103 including local-only]
+# All operations
+
+For the current source-derived inventory and signatures, see the [Harbor operation catalog](/harbor/operations). Registration does not imply live availability or authorization.
 
 Call any of these as `harbor.<name>(args)` inside MCP `execute`, or `POST /api/ops/<name>` over REST. Use MCP `search` with the exact name to get its argument signature and a runnable example.
 
@@ -141,3 +143,7 @@ Each returns a `TxBuild` with `build_id`, `tx_json`, simulation and preflight.
 ## Local-only (not in production)
 
 `capability.prepare`, `capability.activate`, `capability.status`, `capability.prepareRevoke`, `capability.revoke`, `capability.invoke`, `quicknode.test.registerLink`, `quicknode.test.deleteLink`.
+
+## NEAR Intents
+
+See [NEAR Intents](/harbor/near-intents) for the six research, review, reservation, and reconciliation operations and their separate gates.

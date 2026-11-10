@@ -1,0 +1,72 @@
+# Security and trust boundaries
+
+Harbor's central boundary is **owner authorization versus operational execution**. The owner's XRPL seed never belongs in Harbor, an agent prompt, a configuration file, a log, or a support report. Owner authorization remains sign-only in the wallet.
+
+This is an implementation overview, not a security certification or a production-readiness claim.
+
+## Key custody is explicit
+
+Harbor does not custody the owner's key. It **does** custody certain Harbor-generated operational keys, including delegates and dedicated x402 payers. Their seeds are AES-256-GCM wrapped at rest, and guarded signing paths can unwrap them for their intended purpose.
+
+That distinction matters: “no owner-key custody” does not mean “Harbor has no signing keys.” A delegate remains constrained by both its on-ledger permissions and Harbor policy. The x402 payer is distinct from the owner and merchant receiver; the merchant's receiver private key does not enter Harbor.
+
+The delegate key wrapper binds identity to the principal, owner, and network. The signing callback exposes signing operations rather than returning a wallet or raw private key to the caller. A wrapping key is still a secret and must be managed separately from the encrypted database contents.
+
+## Authentication and tenancy
+
+Ordinary remote operations use a named bearer:
+
+```text
+Authorization: Bearer <principal>:<token>
+```
+
+The principal scopes links, policies, builds, approvals, executions, and event queries. A build ID is not a transferable capability between principals. Keep tokens server-side; do not embed them in browser bundles, screenshots, issue reports, or examples.
+
+The private hosted-state principal is dedicated to its internal routes. Duplicate token reuse between that principal and an ordinary principal fails authentication. Local signing profiles require credentials; the narrow local read-only bypass is not a general loopback exemption. See [authentication](/mcp/authentication).
+
+## Defense in depth
+
+| Boundary | What to preserve |
+| --- | --- |
+| Network | XRPL Mainnet execution is prohibited. Testnet/Devnet capability does not imply Mainnet capability. |
+| Profile | A registered operation can still be denied by the active profile's allowlist. |
+| Policy | Account/link state, transaction kind, assets, value, slippage, and daily allowance constrain execution. |
+| Owner choice | `require_owner_approval: true` cannot silently downgrade into delegated execution. |
+| Exact transaction | Stored build and approval evidence bind the transaction being authorized. |
+| Durable claims | Idempotency, quota reservations, signed hashes, and relay claims prevent unsafe replay. |
+| Outcome | A timeout or unknown result cannot be treated as proof of failure or permission to sign again. |
+
+A model-generated script cannot bypass these controls by choosing REST instead of MCP. Both paths invoke the guarded provider layer. Sandbox code cannot fetch arbitrary destinations directly.
+
+## Approval and replay safety
+
+A request uses one stable idempotency key for one intent. Retrying with a changed build, contract, revision, or execution mode is not the same intent. Do not split a blocked request, weaken policy, or route around the refusal.
+
+Delegated execution reserves daily allowance and an immutable execution snapshot before unwrapping the delegate for signing. Owner approvals require the exact approved transaction. The bounded local v2 flow adds immutable revisions, canonical digests, inclusion-window checks, preflight, and durable relay claims. See the [execution lifecycle](/harbor/execution-lifecycle).
+
+When an outcome is unknown, preserve the transaction hash and reconcile against validated ledger evidence. Neither a network timeout nor an empty partial lookup proves non-inclusion.
+
+## Revocation has two boundaries
+
+`account.revoke` suspends Harbor's local link and prepares an unsigned empty-permission `DelegateSet`. That stops the local link; it does **not** prove on-ledger revocation. The owner must sign, the transaction must validate on the intended network, and `account.status` must establish the revoked state.
+
+The watcher likewise cannot revoke with an owner key. It detects, records, suspends, and prepares the owner transaction. A local profile with scheduled work disabled has no active hosted watcher to rely on.
+
+## Operational checklist
+
+- Use disposable Testnet/Devnet budget accounts for authorized acceptance, never main-holdings accounts.
+- Keep signing profiles, credentials, state roots, and principals isolated exactly as the profile requires.
+- Never commit populated state, seeds, signed blobs, session material, credentials, or private evidence.
+- Treat health checks as process checks, not proof of delegation or signing readiness.
+- Keep optional execution, provider, model, and scheduling features disabled until separately configured and reviewed.
+- Require validated transaction evidence before saying execution or revocation completed.
+- Do not treat offline tests or a successful build as live acceptance.
+
+## Source map
+
+- [Repository safety boundaries](https://github.com/alycz/pilot/blob/main/AGENTS.md)
+- [Operational key wrapping](https://github.com/alycz/pilot/blob/main/services/harbor/src/exec/keys.ts)
+- [Provider enforcement](https://github.com/alycz/pilot/blob/main/services/harbor/src/executor/providers.ts)
+- [Policy evaluation](https://github.com/alycz/pilot/blob/main/services/harbor/src/exec/policy.ts)
+- [Signing](https://github.com/alycz/pilot/blob/main/services/harbor/src/exec/sign.ts) and [submission](https://github.com/alycz/pilot/blob/main/services/harbor/src/exec/submit.ts)
+- [Delegation watcher](https://github.com/alycz/pilot/blob/main/services/harbor/src/exec/watcher.ts)

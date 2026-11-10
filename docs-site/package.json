@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vocs dev",
     "build": "vocs build && node scripts/fix-base-path-html.mjs",
-    "preview": "vocs preview"
+    "preview": "vocs preview",
+    "check": "tsc --noEmit && node scripts/check-links.mjs",
+    "catalog": "node scripts/catalog.mjs",
+    "catalog:check": "node scripts/catalog.mjs --check"
   },
   "dependencies": {
     "react": "~19.3.0",

@@ -1,0 +1,30 @@
+# NEAR Intents integration
+
+Harbor has a separate 1Click adapter alongside its XRPL operations. It is not a general cross-chain execution permission, and it does not inherit authority from an XRPL delegate. Exact supported assets must be discovered from the provider rather than inferred from a chain name.
+
+| Operation | Purpose |
+| --- | --- |
+| `near.intents.tokens` | Read current supported asset identifiers and metadata. |
+| `near.intents.quote` | Request and verify a dry EXACT_INPUT quote; cannot create a deposit address. |
+| `near.intents.status` | Read provider status through its configured gate. |
+| `near.intents.executable-quote.review` | Produce a narrowly gated review package for a supported route, not fund it. |
+| `near.intents.owner-funded.reserve` | Durably reserve a reviewed, provider-verified owner-funded attempt. |
+| `near.intents.owner-funded.reconcile` | Verify and reconcile that attempt without constructing or submitting transactions. |
+
+## Keep research and execution separate
+
+Dry quote requests require distinct asset identifiers, a positive atomic-unit amount string, explicit slippage, recipient/refund destinations, and a future refund deadline. The adapter verifies provider signatures and quote hashes. Dry quotes carry no execution address.
+
+The reviewed routes are narrowly scoped: local manual Arbitrum USDC to NEAR wNEAR review, and the separately gated native NEAR to Arbitrum USDC owner-funded lifecycle. This does not advertise arbitrary route support. The native NEAR route uses the provider's canonical `wrap.near` asset identifier while the owner funds with native NEAR.
+
+Executable review, provider POST, status, reservation, and reconciliation have distinct environment gates. The hosted lifecycle also binds the gateway principal, tenant, approved quote, idempotency key, attempt, reservation, and revision. Provider credentials stay server-side. See the source for the complete conjunction of required flags; enabling one flag alone does not enable a route.
+
+## Transport and evidence
+
+The adapter pins the 1Click origin, bounds response bytes and JSON depth/node count, and applies a finite timeout. Reconciliation uses configured RPC ports and validated attempt transitions. A reserved attempt, provider-reported status, or review package is not a completed transfer.
+
+Use REST for operation names with hyphenated segments, or valid bracket notation in JavaScript. For example, a namespace segment such as `owner-funded` cannot appear as an unquoted JavaScript property expression. Discover the current argument signature before invoking any gated operation.
+
+These pages document implementation only. No live quote, deposit, funding, swap, or reconciliation is performed by the documentation build.
+
+Sources: [operation definitions](https://github.com/alycz/pilot/blob/main/services/harbor/src/ops/near-intents.ts), [1Click transport](https://github.com/alycz/pilot/blob/main/services/harbor/src/near/one-click.ts), [attempt store](https://github.com/alycz/pilot/blob/main/services/harbor/src/near/attempt-store.ts).

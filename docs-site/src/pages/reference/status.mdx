@@ -1,10 +1,12 @@
 # What is live [Claims we can stand behind]
 
-Pilot separates *built* from *live*. A fixture card is presentation evidence, a build is not a submission, and a requested revocation is not a validated revocation. This page reflects the repository as of **25 October 2026** (`alycz/pilot`).
+Pilot separates *built* from *live*. A fixture card is presentation evidence, a build is not a submission, and a requested revocation is not a validated revocation. The integration rows below are a historical **25 October 2026** baseline, not a current hosted-service audit. Harbor documentation was reviewed against the repository on **10 November 2026**; no live acceptance was run for this documentation update. Consult current operator evidence before relying on an integration status.
+
+For current implementation, see the [Harbor platform](/harbor/overview), [generated catalog](/harbor/operations), and separately gated [NEAR Intents lifecycle](/harbor/near-intents).
 
 | Area | Status | What that means |
 | --- | --- | --- |
-| MCP server and REST API (95 ops) | :badge[Built]{info} | Typechecked, unit-tested, golden eval harness ready. No public hosted URL is published. |
+| MCP server and REST API | :badge[Built]{info} | Typechecked, unit-tested, golden eval harness ready. No public hosted URL is published. |
 | Execution on Testnet / Devnet | :badge[Built]{info} | Build, simulate, policy, delegated signing, approval and relay implemented and tested offline. Live acceptance lanes are run separately. |
 | Mainnet | :badge[Reads only]{success} | Execution is refused in the builder, policy, signer and submit path. |
 | Pilot app (chat, markets, map, portfolio, memory, backtests) | :badge[Built]{info} | Runs fully in fixture mode with deterministic browser specs (22 today). |

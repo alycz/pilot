@@ -1,0 +1,37 @@
+# Harbor platform
+
+Harbor is the execution and integration service behind Pilot. It runs on Cloudflare Workers and gives applications and agents a shared, typed operation registry through **MCP** and **REST**. Pilot supplies the wallet-facing interface and trading harness; Harbor supplies discovery, bounded reads, transaction construction, policy enforcement, durable execution state, and guarded adapters.
+
+## Choose your path
+
+- **Integrate an agent:** [make your first read](/harbor/quickstart), then learn [MCP tools](/mcp/tools).
+- **Build an application:** use the [REST API](/mcp/rest), [authentication](/mcp/authentication), and [operation signatures](/harbor/operations).
+- **Understand execution:** read the [transaction lifecycle](/harbor/execution-lifecycle) and [security boundaries](/harbor/security) before enabling a signing profile.
+- **Operate or contribute:** start with [local development](/harbor/development), [runtime profiles](/harbor/profiles), and [troubleshooting](/harbor/troubleshooting).
+
+## What the platform contains
+
+| Layer | Responsibility |
+| --- | --- |
+| Discovery | Search typed operations, curated venues, merchants, and local playbooks. |
+| XRPL reads | Account and ledger state, order books, AMMs, token controls, vaults, and lending data. |
+| Transaction preparation | Build, preflight, simulate, and store unsigned transactions. |
+| Execution | Principal-scoped policy, idempotency, owner approval, guarded delegated signing, and reconciliation. |
+| Integrations | Separately gated strategy, commerce, QuickNode, Mastercard, x402, and NEAR Intents surfaces. |
+| Persistence | D1 records for links, policies, builds, approvals, execution attempts, and internal hosted Pilot state. |
+
+See [architecture](/harbor/architecture) for how these fit together and the [generated catalog](/harbor/operations) for the current operation inventory.
+
+:::warning[Registration is not authorization]
+An operation's presence in a catalog does not prove it is enabled in a selected profile, available on a particular network, or accepted live. Harbor's XRPL execution paths reject Mainnet; approved Testnet/Devnet execution still requires the appropriate policy and signing flow. NEAR integrations have separate, explicit gates and are not an extension of XRPL delegated authority.
+:::
+
+## Key custody, precisely
+
+Harbor does not accept the owner's XRPL seed. It **does** custody encrypted operational delegate and dedicated x402 payer seeds for bounded signing paths. The owner's wallet remains responsible for owner signing. “Owner-key noncustodial” must not be shortened to “Harbor holds no keys.”
+
+## Evidence and readiness
+
+This documentation describes implementation, not a live-service certification. A healthy process, successful simulation, passing offline suite, submitted hash, and validated transaction are different kinds of evidence. Keep them distinct. See [status](/reference/status).
+
+Source: [Harbor README](https://github.com/alycz/pilot/blob/main/services/harbor/README.md), [Worker routes](https://github.com/alycz/pilot/blob/main/services/harbor/src/server.ts).

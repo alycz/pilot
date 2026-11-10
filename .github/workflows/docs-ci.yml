@@ -1,0 +1,40 @@
+name: Documentation CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: |
+            services/harbor/package-lock.json
+            docs-site/package-lock.json
+      - name: Verify destination integrity
+        run: node scripts/integrity/verify.mjs
+      - name: Install Harbor catalog dependencies
+        working-directory: services/harbor
+        run: npm ci --ignore-scripts
+      - name: Generate source catalog
+        working-directory: services/harbor
+        run: npm run generate
+      - name: Install documentation dependencies
+        working-directory: docs-site
+        run: npm ci
+      - name: Check types, navigation, and catalog freshness
+        working-directory: docs-site
+        run: npm run check && npm run catalog:check
+      - name: Build static documentation
+        working-directory: docs-site
+        run: npm run build

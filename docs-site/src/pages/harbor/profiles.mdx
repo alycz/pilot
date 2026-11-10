@@ -1,0 +1,93 @@
+# Runtime profiles and state isolation
+
+Choose a Harbor profile by its security boundary, not just its port. Profiles differ in authentication, externally callable operations, signing authority, scheduled work, migration history, and persisted state.
+
+The configuration files and launchers are the contract. Do not turn a read-only profile into a signer by copying individual flags, reusing a credential, or pointing it at another profile's D1 directory.
+
+## Common local profiles
+
+Commands below are names for identifying profiles, not instructions to activate signing or provision credentials. Run package scripts from `services/harbor` only after reviewing the relevant contract and required authorization.
+
+| Profile / script | Address | External surface and state boundary |
+| --- | --- | --- |
+| `dev:local` | `127.0.0.1:8791` | Credential-free local mode with external ledger mutations denied; `.wrangler/harbor-local`. |
+| `dev:local:trading` | `127.0.0.1:8791` | Six trading operations; `.wrangler/harbor-local-trading`. |
+| `dev:local:trading:onboarding` | `127.0.0.1:8791` | Fourteen onboarding operations; shared legacy trading state. |
+| `dev:local:trading:isolated:v1` | `127.0.0.2:8791` | Six trading operations; `.wrangler/harbor-local-trading-isolated-v1`. |
+| `dev:local:trading:isolated:v1:onboarding` | `127.0.0.2:8791` | Fourteen onboarding operations; shared isolated trading state. |
+| `dev:local:x402` | `127.0.0.1:8791` | Legacy dedicated `x402.pay` signer; `.wrangler/harbor-local-x402`. |
+| `dev:local:x402:isolated:v1` | `127.0.0.2:8792` | Separate dedicated `x402.pay` signer; required credential-bound external state root, with no default. |
+
+The read-only launcher uses a sparse child environment, local D1, and no production `.dev.vars` loading. “Read-only” here means external ledger mutations are denied; builders and simulation can still write local build records and contact public Testnet endpoints. It is not a promise of zero network access or zero local writes.
+
+## Exact trading and onboarding surfaces
+
+The externally callable trading allowlist is:
+
+```text
+tx.swap
+tx.approvalPreflight
+tx.approvalReconcile
+tx.execute
+tx.submit
+tx.status
+```
+
+The onboarding allowlist is:
+
+```text
+onboarding.readiness
+account.link
+account.status
+account.revoke
+ledger.account.info
+ledger.account.lines
+ledger.account.tx
+policy.get
+policy.set
+tx.trustSet
+tx.approvalPreflight
+tx.execute
+tx.submit
+tx.status
+```
+
+Trading operations perform required internal reads without exposing every supporting operation to the caller. A new registry operation does not automatically become callable from a signing profile.
+
+Onboarding and trading are mutually exclusive. Stop onboarding before trading, and return to onboarding only for lifecycle work such as revocation. Their distinct origin markers, allowlists, logs, and build origins remain significant even where the pair deliberately shares its credential and D1 state.
+
+## Host and x402 isolation
+
+Isolated trading/onboarding require the exact raw `Host: 127.0.0.2:8791`. Isolated x402 requires `Host: 127.0.0.2:8792` and uses inspector `127.0.0.2:9232`. Do not substitute `localhost`, forwarded authority, or a tunnel and assume equivalent trust.
+
+Isolated x402 is a separate process and principal from trading, with a separate payer, credential, and state tree. The launcher is resume-only: it does not silently initialize a replacement database. Initialization and Testnet payer funding belong to a separately authorized provisioner flow.
+
+`GET /local/x402/probe` is a fixed-target, non-mutating connectivity probe. A reachable merchant returning HTTP 402 proves neither a payment nor settlement. See [x402 integration](/integrations/x402).
+
+## Local autonomy is a different acceptance lane
+
+The local autonomy Testnet profile uses `127.0.0.3:8793`, its own marked external state, required named authentication, canonical migrations, and no x402 capability. Its checked-in runner is disabled. The launcher requires its exact `--enable-runner` option to enable the controlled acceptance lane.
+
+It is not the six-operation trading profile. Do not extend statements such as “local trading has no cron” to every local configuration. Its scheduler test endpoint and evidence harness exist for bounded, separately authorized Testnet acceptance, not production rollout.
+
+See the [local autonomy contract](https://github.com/alycz/pilot/blob/main/services/harbor/docs/local-autonomy-testnet-v1.md) for credential prerequisites, evidence requirements, finite budgets, stop behavior, and cleanup proof. Offline harness readiness is not a completed ledger run.
+
+## Hosted deployment profiles
+
+The paid/dynamic architecture can use the Worker Loader. The `free-quickjs` profile deliberately removes Loader and cron and restricts the operation surface. Its rollout contract disables MCP execute, REST execution, autonomous execution, and other optional integrations; a discovered operation is not evidence that execution is enabled.
+
+The free profile uses a frozen migration inventory, not all canonical feature migrations. The checked-in D1 identifier is a placeholder and is not a ready-to-deploy production target. Creating resources, remote migrations, and deployment require separate operator review. This documentation does not deploy or activate anything.
+
+## Health is not readiness
+
+`GET /health` reports `health: "process"` and `handoff_readiness: "not_evaluated"`. It cannot establish that a delegate is active, an owner has approved anything, or that a profile is ready to sign. Use the relevant account/readiness operations and validated ledger evidence within the profile that permits them.
+
+Repository status notes can describe operator-specific holds or unresolved revocation evidence. Those notes are not runtime probes. Verify current operator state before activation rather than treating a historical documentation statement as live evidence.
+
+## Source contracts
+
+- [Shared allowlists](https://github.com/alycz/pilot/blob/main/services/harbor/src/executor/providers.ts)
+- [Isolated trading contract](https://github.com/alycz/pilot/blob/main/services/harbor/docs/local-trading-isolated-v1-contract.md)
+- [Isolated x402 contract](https://github.com/alycz/pilot/blob/main/services/harbor/docs/local-x402-isolated-v1-contract.md)
+- [Free/QuickJS rollout contract](https://github.com/alycz/pilot/blob/main/services/harbor/docs/free-quickjs-workers-dev.md)
+- [Profile launchers](https://github.com/alycz/pilot/tree/main/services/harbor/scripts)
